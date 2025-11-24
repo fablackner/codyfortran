@@ -15,7 +15,7 @@
   - [Building Third-Party Libraries Locally](#building-third-party-libraries-locally)
   - [Building CodyFortran with CMake](#building-codyfortran-with-cmake)
 - [Usage](#usage)
-  - [Example Programs](#example-programs)
+- [Example Programs](#example-programs)
 - [Capabilities](#capabilities)
   - [Simulation Methods](#simulation-methods)
 - [The CodyFortran Architecture: A Deep Dive into Modularity](#the-codyfortran-architecture-a-deep-dive-into-modularity)
@@ -30,6 +30,13 @@
   - [Step 4: Allocate Resources with `Setup` Calls](#step-4-allocate-resources-with-setup-calls)
   - [Step 5 & 6: Implement Logic and Output](#step-5--6-implement-logic-and-output)
 - [Extending CodyFortran](#extending-codyfortran)
+- [Contributing](#contributing)
+- [Coding Conventions](#coding-conventions)
+  - [Naming Conventions](#naming-conventions)
+  - [Function Signatures](#function-signatures)
+  - [Boolean Operators](#boolean-operators)
+- [Abbreviations](#abbreviations)
+- [License](#license)
 
 ## Installation
 
