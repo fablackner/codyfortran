@@ -1,0 +1,55 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "rmin": 0.0,
+            "rmax": 10.0,
+            "fedvr": {
+                "nElements": 10,
+                "nLocals": 11
+            }
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [ 1.0 ],
+                "fedvr": { }
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 1.0,
+                "stdImpl": { }
+            }
+        }
+    },
+    "method": {
+        "sb": { }
+    },
+    "orbsInit": {
+        "ylm": {
+            "hydrogenLike": {
+                "charge": 1.0,
+                "n": [ 1 ],
+                "l": [ 0 ],
+                "m": [ 0 ]
+            }
+        }
+    },
+    "integratorList": {
+        "rk": {
+            "o1Expl": { }
+        }
+    },
+    "propagator": {
+        "single": { }
+    },
+    "program": {
+        "convThresh": 1e-12,
+        "outputStep": 5e-1,
+        "nTimeSteps": 1000
+    }
+}

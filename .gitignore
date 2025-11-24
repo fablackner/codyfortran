@@ -1,0 +1,11 @@
+build/
+doc/
+lintbuild/
+*.dat
+*.exe
+*.save
+*~
+thirdPartySave*
+thirdParty/include/*
+thirdParty/installation/*
+thirdParty/sources/*

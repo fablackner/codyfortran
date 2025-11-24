@@ -1,0 +1,22 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "rmin": 0.0,
+            "rmax": 10.0,
+            "fedvr": {
+                "nElements": 50,
+                "nLocals": 7
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "softening": 0.0,
+                "stdImpl": { }
+            }
+        }
+    }
+}

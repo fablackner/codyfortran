@@ -1,0 +1,94 @@
+{
+    "grid": {
+        "linear": {
+            "xmin": -20,
+            "xmax": 20,
+            "const": {
+                "nPoints": 21
+            }
+        }
+    },
+    "sysKinetic": {
+        "linear": {
+            "laplacian": {
+                "bodyMass": [ 1.0, 1.0 ],
+                "finDiff": { }
+            }
+        }
+    },
+    "sysPotential": {
+        "linear": {
+            "softYukawa": {
+                "position": [ 0.0 ],
+                "charge": [ 2.0 ],
+                "softening1": [ 0.0 ],
+                "softening2": [ 1.0 ],
+                "dampening": [ 0.0 ],
+                "stdImpl": { }
+            }
+        }
+    },
+    "sysInteraction": {
+        "linear": {
+            "softYukawa": {
+                "strength": 1.0,
+                "softening1": 0.0,
+                "softening2": 1.0,
+                "dampening": 0.0,
+                "fftw": { }
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 1, 1 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 4, 4 ],
+                "tdhx": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": false
+    },
+    "orbsInit": {
+        "linear": {
+            "harmonic": { }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 1
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "integratorList": {
+        "rk": {
+            "o1Expl": { }
+        }
+    },
+    "propagator": {
+        "single": { }
+    },
+    "program": {
+        "convThresh": 1e-12,
+        "outputStep": 1.0,
+        "nTimeSteps": 200
+    }
+}

@@ -1,0 +1,98 @@
+{
+    "grid": {
+        "linear": {
+            "xmin": -20,
+            "xmax": 20,
+            "const": {
+                "nPoints": 21
+            }
+        }
+    },
+    "sysKinetic": {
+        "linear": {
+            "laplacian": {
+                "bodyMass": [ 1.0, 1.0 ],
+                "finDiff": { }
+            }
+        }
+    },
+    "sysPotential": {
+        "linear": {
+            "softYukawa": {
+                "position": [ 0.0 ],
+                "charge": [ 2.0 ],
+                "softening1": [ 0.0 ],
+                "softening2": [ 1.0 ],
+                "dampening": [ 0.0 ],
+                "stdImpl": { }
+            }
+        }
+    },
+    "sysInteraction": {
+        "linear": {
+            "softYukawa": {
+                "strength": 1.0,
+                "softening1": 0.0,
+                "softening2": 1.0,
+                "dampening": 0.0,
+                "fftw": { }
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 1, 1 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 4, 4 ],
+                "mctdhx": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": false
+    },
+    "orbsInit": {
+        "load": { }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 4
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 4
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "load": { }
+    },
+    "integratorList": {
+        "rk1": {
+            "o4Expl": { }
+        },
+        "rk2": {
+            "o4Expl": { }
+        }
+    },
+    "propagator": {
+        "splitStep": {
+            "order2": { }
+        }
+    },
+    "program": {
+        "startTime": 0.0,
+        "endTime": 0.001,
+        "outputStep": 0.00002,
+        "nTimeSteps": 2
+    }
+}

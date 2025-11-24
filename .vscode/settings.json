@@ -1,0 +1,23 @@
+{
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "fortran.formatting.formatter": "fprettify",
+    "fortran.formatting.fprettifyArgs": [
+        "-i 2",
+        "-l 600",
+        "-w 4"
+    ],
+    "fortran.linter.modOutput": "${workspaceFolder}/lintbuild",
+    "fortran.linter.extraArgs": [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pedantic",
+        "-Wconversion",
+        "-Wsurprising",
+        "-Walign-commons"
+    ],
+    "fortran.linter.includePaths": [
+        "${workspaceFolder}/build",
+        "${workspaceFolder}/thirdParty/installation/include"
+    ]
+}

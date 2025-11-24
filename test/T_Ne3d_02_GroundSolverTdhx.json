@@ -1,0 +1,101 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "rmin": 0.0,
+            "rmax": 5.0,
+            "fedvr": {
+                "nElements": 2,
+                "nLocals": 12
+            }
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [ 1.0, 1.0 ],
+                "fedvr": { }
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 10.0,
+                "stdImpl": { }
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "blockEq": { }
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 5, 5 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 5, 5 ],
+                "tdhx": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": false
+    },
+    "orbsInit": {
+        "ylm": {
+            "hydrogenLike": {
+                "charge": 10.0,
+                "n": [ 1, 2, 2, 2, 2 ],
+                "l": [ 0, 0, 1, 1, 1 ],
+                "m": [ 0, 0, -1, 0, 1 ]
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 1
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "diagonalizerList": {
+        "arpack": {
+            "nEvals": 5,
+            "which": "SR",
+            "bmat": "I",
+            "nKry": 15,
+            "checkConvergenceQ": false,
+            "printLevel": 0
+        }
+    },
+    "groundSolver": {
+        "tdhx": {
+            "stdImpl": { }
+        }
+    },
+    "program": {
+        "convThresh": 1e-12,
+        "outputStep": 0.002,
+        "nTimeSteps": 1
+    }
+}

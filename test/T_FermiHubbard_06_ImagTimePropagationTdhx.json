@@ -1,0 +1,79 @@
+{
+    "grid": {
+        "lattice": {
+            "xSize": 2,
+            "ySize": 2,
+            "xPeriodicQ": true,
+            "yPeriodicQ": true
+        }
+    },
+    "sysKinetic": {
+        "lattice": {
+            "nearestNeighbor": {
+                "hoppX": 1.0,
+                "hoppY": 1.0,
+                "hoppZ": 1.0
+            }
+        }
+    },
+    "sysInteraction": {
+        "lattice": {
+            "onSite": {
+                "strength": 1.0,
+                "stdImpl": { }
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 2, 2 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 4, 4 ],
+                "tdhx": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": false
+    },
+    "orbsInit": {
+        "lattice": {
+            "onSite": { }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 4
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 4
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "integratorList": {
+        "rk": {
+            "o1Expl": { }
+        }
+    },
+    "propagator": {
+        "single": { }
+    },
+    "program": {
+        "convThresh": 1e-12,
+        "outputStep": 1e-1,
+        "nTimeSteps": 10
+    }
+}
