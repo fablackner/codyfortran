@@ -83,7 +83,7 @@
             "nEvals": 2,
             "which": "SR",
             "bmat": "I",
-            "nKry": 50,
+            "nKry": 60,
             "checkConvergenceQ": false,
             "printLevel": 0
         },
@@ -91,7 +91,7 @@
             "nEvals": 1,
             "which": "SR",
             "bmat": "I",
-            "nKry": 20,
+            "nKry": 25,
             "checkConvergenceQ": false,
             "printLevel": 0
         }
