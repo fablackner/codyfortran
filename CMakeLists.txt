@@ -29,10 +29,9 @@ add_library(CodyFortran ${sources})
 # Define include paths
 set(CODY_INCLUDE_DIRS
     "${THIRD_PARTY_INCLUDE}"
-    "${THIRD_PARTY_INCLUDE}/fortran_stdlib/${FORTRAN_MODDIR}/fortran_stdlib"
-    "${THIRD_PARTY_INCLUDE}/fortran_stdlib/${FORTRAN_MODDIR}/blas"
-    "${THIRD_PARTY_INCLUDE}/fortran_stdlib/${FORTRAN_MODDIR}/lapack"
+    "${THIRD_PARTY_INCLUDE}/fortran_stdlib/${FORTRAN_MODDIR}"
     "${THIRD_PARTY_INCLUDE}/test-drive/${FORTRAN_MODDIR}"
+    #"${THIRD_PARTY_INCLUDE}/ftorch"
 )
 
 if(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
@@ -54,6 +53,18 @@ target_link_libraries(CodyFortran PRIVATE
     expokit
     jsonfortran
     fortran_stdlib
+    fortran_stdlib_quadrature
+    fortran_stdlib_sorting
+    fortran_stdlib_linalg
+    fortran_stdlib_stats
+    fortran_stdlib_io
+    fortran_stdlib_specialfunctions
+    fortran_stdlib_bitsets
+    fortran_stdlib_strings
+    fortran_stdlib_intrinsics
+    fortran_stdlib_math
+    fortran_stdlib_core
+    #ftorch
 )
 
 # Conditionally link compiler-specific libraries
@@ -65,15 +76,29 @@ endif()
 function(create_executables_from_dir dir extra_libs)
     file(GLOB_RECURSE programs CONFIGURE_DEPENDS "${dir}/*.f90")
     foreach(file ${programs})
+        # Generate unique target name based on relative path
+        file(RELATIVE_PATH rel_path "${CMAKE_SOURCE_DIR}" "${file}")
+        string(REPLACE "/" "_" target_name "${rel_path}")
+        string(REPLACE ".f90" "" target_name "${target_name}")
+
         get_filename_component(exe_name "${file}" NAME_WE)
         get_filename_component(src_dir "${file}" DIRECTORY)
         
-        add_executable("${exe_name}.exe" "${file}")
+        # Calculate output directory to mirror source structure in build dir
+        file(RELATIVE_PATH rel_dir "${CMAKE_SOURCE_DIR}" "${src_dir}")
+        set(output_dir "${CMAKE_BINARY_DIR}/${rel_dir}")
+
+        add_executable("${target_name}" "${file}")
+        set_target_properties("${target_name}" PROPERTIES 
+            OUTPUT_NAME "${exe_name}.exe"
+            RUNTIME_OUTPUT_DIRECTORY "${output_dir}"
+        )
+        
         # Link CodyFortran and any extra libraries (like test-drive)
-        target_link_libraries("${exe_name}.exe" PRIVATE CodyFortran ${extra_libs})
+        target_link_libraries("${target_name}" PRIVATE CodyFortran ${extra_libs})
         
         # Install to the source directory (preserving original behavior)
-        install(TARGETS "${exe_name}.exe" DESTINATION "${src_dir}")
+        install(TARGETS "${target_name}" DESTINATION "${src_dir}")
     endforeach()
 endfunction()
 
@@ -86,8 +111,14 @@ create_executables_from_dir(test "test-drive")
 # === Define CTest tests ===
 function(add_fortran_test file)
     get_filename_component(test_name "${file}" NAME_WE)
+    
+    # Reconstruct target name
+    file(RELATIVE_PATH rel_path "${CMAKE_SOURCE_DIR}" "${file}")
+    string(REPLACE "/" "_" target_name "${rel_path}")
+    string(REPLACE ".f90" "" target_name "${target_name}")
+
     add_test(NAME "${test_name}"
-             COMMAND "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${test_name}.exe")
+             COMMAND "${target_name}")
 endfunction()
 
 file(GLOB_RECURSE test_sources CONFIGURE_DEPENDS "test/*.f90")

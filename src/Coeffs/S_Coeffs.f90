@@ -112,7 +112,7 @@ contains
 
     complex(R64), intent(in), contiguous  :: coeffs(:)
 
-    call SaveData(coeffs, 'coeffs.dat', storage_size(coeffs))
+    call SaveData(coeffs, 'coeffs.in', storage_size(coeffs))
 
   end subroutine
 
@@ -134,7 +134,7 @@ contains
     do ibt1 = 1, Method_Mb_nBodyTypes
       do ibt2 = 1, Method_Mb_nBodyTypes
 
-        write (filename, '("rdm2Bt",I2.2,"_",I2.2,".dat")') ibt1, ibt2
+        write (filename, '("rdm2Bt",I2.2,"_",I2.2,".in")') ibt1, ibt2
 
         rdm2Bt = rdm2(Method_Mb_OrbBased_nOrbsStart(ibt1):Method_Mb_OrbBased_nOrbsEnd(ibt1), &
                       Method_Mb_OrbBased_nOrbsStart(ibt2):Method_Mb_OrbBased_nOrbsEnd(ibt2), &

@@ -93,7 +93,7 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   function GetEnergy(time) result(res)
-    use M_Utils_RdmBasics
+    use M_Utils_RdmObservables
     use M_Method
     use M_Orbs
 
@@ -105,10 +105,10 @@ contains
     call Method_Mb_OrbBased_FillH1(Method_Mb_OrbBased_h1, Orbs_orbs, time)
     call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, Orbs_orbs, time)
 
-    res = RdmBasics_CalculateEnergy(Method_Mb_OrbBased_rdm1, &
-                                    Method_Mb_OrbBased_h1, &
-                                    Method_Mb_OrbBased_rdm2, &
-                                    Method_Mb_OrbBased_h2)
+    res = RdmObservables_Energy(Method_Mb_OrbBased_rdm1, &
+                                Method_Mb_OrbBased_h1, &
+                                Method_Mb_OrbBased_rdm2, &
+                                Method_Mb_OrbBased_h2)
 
   end function
 
@@ -345,7 +345,7 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyCorrelationOp(dOrbs, orbs, rdm1, rdm2, time, h2_)
-    use M_Utils_RdmBasics
+    use M_Utils_RdmDiagonalize
     use M_Method
     use M_Grid
     use M_SysInteraction
@@ -397,7 +397,7 @@ contains
       error stop "invalid nO to nOS relation in ApplyCorrelationOp"
     end if
 
-    call RdmBasics_DiagonalizeRdm1(natocc, natorb, rdm1spatial)
+    call RdmDiagonalize_Rdm1(natocc, natorb, rdm1spatial)
 
     reg = Method_Mb_OrbBased_regularizationParameter
 

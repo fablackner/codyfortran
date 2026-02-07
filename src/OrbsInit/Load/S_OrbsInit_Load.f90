@@ -38,7 +38,7 @@ contains
     if (.not. present(bt_)) bt = 1
     if (present(bt_)) bt = bt_
 
-    write (filename, '("orb",I2.2,"_",I2.2,".dat")') bt_, ind
+    write (filename, '("orb",I2.2,"_",I2.2,".in")') bt_, ind
 
     call LoadData(orb, trim(filename), storage_size(orb))
 

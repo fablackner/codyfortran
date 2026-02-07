@@ -122,4 +122,71 @@ contains
 
   end subroutine
 
+  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Calculates and dumps the particle density on the lattice sites.
+  !> @details The output format is: time, density(1), density(2), ... density(N)
+  !>
+  !> @param[in] rdm1 One-body reduced density matrix in orbital representation.
+  !> @param[in] orbs Orbital coefficients on the grid.
+  !> @param[in] filename Output filename. If empty, no file output is produced.
+  !> @param[in] toScreenQ Flag controlling whether to print output to screen.
+  !> @param[in] time Current time value to be written with the data.
+  subroutine PrinterObservableLattice_DumpDensityOnSite(rdm1, orbs, filename, toScreenQ, time)
+    use M_Orbs
+
+    complex(R64), intent(in), contiguous :: rdm1(:, :)
+    complex(R64), intent(in), contiguous :: orbs(:, :)
+    character(len=*), intent(in) :: filename
+    logical, intent(in) :: toScreenQ
+    real(R64), intent(in) :: time
+
+    integer(I32) :: iSite
+    integer(I32) :: j1, j2
+    integer(I32) :: occupation
+    integer(I32) :: io, istat, nO, nOS, nSites
+    complex(R64), allocatable :: c_density(:)
+    complex(R64) :: weight
+    logical :: needsOutput
+    character(256) :: msg
+
+    nO = size(rdm1, 1)
+    nOS = Orbs_nOrbsInState
+    occupation = nO / nOS
+
+    needsOutput = (filename .ne. "")
+    if (.not. needsOutput) return
+
+    nSites = size(orbs, 1)
+    allocate (c_density(nSites))
+    c_density = 0.0_R64
+
+    do j2 = 1, nOS
+      do j1 = 1, nOS
+        weight = occupation * rdm1(j1, j2)
+        do iSite = 1, nSites
+          c_density(iSite) = c_density(iSite) + weight * conjg(orbs(iSite, j2)) * orbs(iSite, j1)
+        end do
+      end do
+    end do
+
+    !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ! Print to file
+    !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    open (newunit=io, file=filename, status="unknown", position="append", iostat=istat, iomsg=msg)
+    if (istat .ne. 0) then
+      print *, "Failed to open ", trim(filename), "! iomsg = "//trim(msg)
+      error stop
+    end if
+
+    write (io, '(E20.10E3)', advance='no') time
+    do iSite = 1, nSites
+      write (io, '(1X, E20.10E3)', advance='no') real(c_density(iSite), kind=R64)
+    end do
+    write (io, *)
+
+    close (io)
+
+  end subroutine
+
 end module

@@ -10,6 +10,8 @@ submodule(M_Coeffs_Generic) S_Coeffs_Generic
 ! local procedures kinds
 !=============================================================================
 
+  complex(R64), allocatable, save :: coeffsBuffer(:)
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -450,28 +452,49 @@ contains
     integer(I32), intent(in), contiguous  :: destroys(:)
     integer(I32), intent(in) :: bt
 
-    complex(R64), allocatable  :: coeffsTmp(:)
-
-    integer(I32) :: iCoeff, iCoeffNew, configurationBtNew
+    ! New variables for optimization
+    integer(I32) :: strideBt, nConfigsBt, nUpper, stepSize
+    integer(I32) :: c, cNew, k, ibt_loop
+    integer(I32) :: offsetOld, offsetNew, loopIndex
     real(R64)  :: factor
-    integer(I32) :: configurations(Method_Mb_nBodyTypes)
 
-    allocate (coeffsTmp, source=coeffs)
+    ! Reuse buffer to avoid reallocation
+    if (.not. allocated(coeffsBuffer)) allocate (coeffsBuffer(size(coeffs)))
+    if (size(coeffsBuffer) .ne. size(coeffs)) then
+      deallocate (coeffsBuffer)
+      allocate (coeffsBuffer(size(coeffs)))
+    end if
+
+    coeffsBuffer = coeffs
 
     coeffs(:) = 0.0_R64
 
-    do iCoeff = 1, Coeffs_nCoeffs
+    ! Compute strides for tensor product structure
+    strideBt = 1
+    do ibt_loop = 1, bt - 1
+      strideBt = strideBt * configList(ibt_loop) % e % nConfigurations
+    end do
 
-      call Coeffs_ConfigurationsFromIndex(configurations, iCoeff)
+    nConfigsBt = configList(bt) % e % nConfigurations
+    stepSize = strideBt * nConfigsBt
+    nUpper = Coeffs_nCoeffs / stepSize
 
-      call configList(bt) % e % ExciteConfiguration(configurationBtNew, factor, creates, destroys, configurations(bt))
-      if (configurationBtNew .eq. 0) cycle
+    ! Iterate only over the relevant body type configurations
+    do c = 1, nConfigsBt
 
-      configurations(bt) = configurationBtNew
+      ! Excite only the configuration for body type bt
+      call configList(bt) % e % ExciteConfiguration(cNew, factor, creates, destroys, c)
+      if (cNew .eq. 0) cycle
 
-      call Coeffs_IndexFromConfigurations(iCoeffNew, configurations)
+      offsetOld = (c - 1) * strideBt
+      offsetNew = (cNew - 1) * strideBt
 
-      coeffs(iCoeffNew) = factor * coeffsTmp(iCoeff)
+      ! Apply to all tensor blocks (vectorized copy)
+      do k = 0, nUpper - 1
+        loopIndex = k * stepSize
+        coeffs(loopIndex + offsetNew + 1:loopIndex + offsetNew + strideBt) = &
+          factor * coeffsBuffer(loopIndex + offsetOld + 1:loopIndex + offsetOld + strideBt)
+      end do
 
     end do
 

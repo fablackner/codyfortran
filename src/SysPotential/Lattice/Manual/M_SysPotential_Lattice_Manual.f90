@@ -2,12 +2,12 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> RandomUniform potential on lattice grids.
+!> Manual potential on lattice grids.
 !>
 !> Behaviour:
-!> - Time-independent: V(i) = fixed randomUniform values drawn once from the chosen
+!> - Time-independent: V(i) = fixed manual values drawn once from the chosen
 !>   distribution during setup and cached for all subsequent calls
-module M_SysPotential_Lattice_RandomUniform
+module M_SysPotential_Lattice_Manual
   use M_Utils_Types
 
   implicit none
@@ -17,12 +17,12 @@ module M_SysPotential_Lattice_RandomUniform
   !=============================================================================
 
   interface
-    !> Parse parameters and wire the lattice randomUniform implementation.
+    !> Parse parameters and wire the lattice manual implementation.
     !>
     !> Reads the configuration (typically from JSON), initializes the module
     !> data (distribution parameters), and connects the implementation into
     !> the lattice backend and grid-agnostic pointers.
-    module subroutine SysPotential_Lattice_RandomUniform_Fabricate
+    module subroutine SysPotential_Lattice_Manual_Fabricate
     end subroutine
   end interface
 
@@ -30,16 +30,12 @@ module M_SysPotential_Lattice_RandomUniform
   ! module data
   !=============================================================================
 
-  !> Uniform distribution minimum value (inclusive).
-  real(R64) :: SysPotential_Lattice_RandomUniform_minValue = -1.0_R64
-  !> Uniform distribution maximum value (inclusive).
-  real(R64) :: SysPotential_Lattice_RandomUniform_maxValue = 1.0_R64
-  !> Seed for the random number generator. If -1, the seed is generated from the system clock.
-  integer(I32) :: SysPotential_Lattice_RandomUniform_seed = -1
-  !> List of sites to apply random values to. If empty, apply to all sites.
-  integer(I32), allocatable :: SysPotential_Lattice_RandomUniform_sites(:)
-  !> Cached random site values generated in Setup
-  real(R64), allocatable :: SysPotential_Lattice_RandomUniform_randomUniformValues(:)
+  !> List of sites to apply values to. If empty, apply to all sites in order.
+  integer(I32), allocatable :: SysPotential_Lattice_Manual_sites(:)
+  !> List of manual values to apply. Must match the size of sites if provided, or the grid size otherwise.
+  real(R64), allocatable :: SysPotential_Lattice_Manual_values(:)
+  !> Cached site values generated in Setup
+  real(R64), allocatable :: SysPotential_Lattice_Manual_manualValues(:)
 
   !=============================================================================
   ! module procedures pointers

@@ -25,7 +25,7 @@ contains
 !> \]
 !> where \(n_i\) are the natural orbital occupation numbers.
   subroutine PrinterNatOrb_DumpNatOrbOccupation(rdm1, filename, toScreenQ, time)
-    use M_Utils_RdmBasics
+    use M_Utils_RdmDiagonalize
 
     !> One-body reduced density matrix in orbital representation.
     complex(R64), intent(in), contiguous :: rdm1(:, :)
@@ -44,7 +44,7 @@ contains
 
     nO = size(rdm1, 1)
 
-    call RdmBasics_DiagonalizeRdm1(natocc, natorbs, rdm1)
+    call RdmDiagonalize_Rdm1(natocc, natorbs, rdm1)
 
     !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     ! Print to Screen

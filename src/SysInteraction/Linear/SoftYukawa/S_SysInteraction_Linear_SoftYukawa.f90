@@ -41,7 +41,7 @@ contains
       call SysInteraction_Linear_SoftYukawa_Fftw_Fabricate
 
     else
-      error stop "sysInteraction.linear.softYukawa is missing one of: stdImpl, optIntegral"
+      error stop "sysInteraction.linear.softYukawa is missing one of: stdImpl, fftw"
     end if
 
   end subroutine

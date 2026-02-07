@@ -36,7 +36,7 @@ contains
     complex(R64), intent(out), contiguous :: coeffs(:)
     character(len=256) :: filename
 
-    write (filename, '("coeffs.dat")')
+    write (filename, '("coeffs.in")')
 
     call LoadData(coeffs, filename, storage_size(coeffs))
 

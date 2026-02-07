@@ -2,9 +2,16 @@ build/
 doc/
 lintbuild/
 *.dat
+*.in
 *.exe
 *.save
+*.zip
+*.pt
+*.log
+*.png
+!assets/*.png
 *~
+temp_*
 thirdPartySave*
 thirdParty/include/*
 thirdParty/installation/*

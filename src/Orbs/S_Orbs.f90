@@ -94,7 +94,7 @@ contains
       do index = 1, Method_Mb_OrbBased_nOrbs(ibt)
         i1 = i1 + 1
 
-        write (filename, '("orb",I2.2,"_",I2.2,".dat")') ibt, index
+        write (filename, '("orb",I2.2,"_",I2.2,".in")') ibt, index
         call SaveData(orbs(:, i1), trim(filename), storage_size(orbs(:, i1)))
 
       end do

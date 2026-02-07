@@ -17,6 +17,7 @@ contains
     use M_SysPotential_Lattice_RandomUniform
     use M_SysPotential_Lattice_RandomGauss
     use M_SysPotential_Lattice_Seesaw
+    use M_SysPotential_Lattice_Manual
 
     call Say_Fabricate("sysPotential.lattice")
 
@@ -42,8 +43,11 @@ contains
     else if (Json_GetExistence("sysPotential.lattice.seesaw")) then
       call SysPotential_Lattice_Seesaw_Fabricate
 
+    else if (Json_GetExistence("sysPotential.lattice.manual")) then
+      call SysPotential_Lattice_Manual_Fabricate
+
     else
-      error stop "sysPotential.lattice is missing one of: harmonic, randomUniform, randomGauss, seesaw"
+      error stop "sysPotential.lattice is missing one of: harmonic, randomUniform, randomGauss, seesaw, manual"
     end if
 
   end subroutine

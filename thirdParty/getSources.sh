@@ -12,6 +12,8 @@ DOWNLOAD_ARPACK="true"
 # these are not needed when building with intel compilers and MKL
 DOWNLOAD_FFTW3="true"
 DOWNLOAD_OPENBLAS="true"
+# these are not needed with out ml extensions
+DOWNLOAD_FTORCH="false"
 
 # Create sources and installation folders
 mkdir -p sources
@@ -82,6 +84,12 @@ if [ "$DOWNLOAD_GSL" = "true" ] && [ ! -d "gsl" ]; then
     mkdir -p gsl
     tar -xzf gsl.tar.gz --strip-components=1 -C gsl
     rm -f gsl.tar.gz
+fi
+
+# FTorch
+if [ "$DOWNLOAD_FTORCH" = "true" ] && [ ! -d "FTorch" ]; then
+    echo "Downloading FTorch..."
+    git clone https://github.com/Cambridge-ICCS/FTorch.git
 fi
 
 echo "All requested libraries fetched into sources/"

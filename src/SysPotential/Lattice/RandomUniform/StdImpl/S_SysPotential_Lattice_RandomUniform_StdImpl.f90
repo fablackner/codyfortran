@@ -34,7 +34,7 @@ contains
     real(R64) :: minV, maxV
     integer(I32) :: seedValue
     real(R64) :: u1
-    integer(I32) :: nG, i
+    integer(I32) :: nG, i, iSite
     integer :: seedSize, seedClock
     integer, allocatable :: seed(:)
 
@@ -59,12 +59,23 @@ contains
     deallocate (seed)
 
     allocate (SysPotential_Lattice_RandomUniform_randomUniformValues(nG))
+    SysPotential_Lattice_RandomUniform_randomUniformValues = 0.0_R64
 
     if (maxV < minV) error stop 'randomUniform: maxValue must be >= minValue'
-    do i = 1, nG
-      call random_number(u1)
-      SysPotential_Lattice_RandomUniform_randomUniformValues(i) = minV + (maxV - minV) * u1
-    end do
+
+    if (allocated(SysPotential_Lattice_RandomUniform_sites)) then
+      do i = 1, size(SysPotential_Lattice_RandomUniform_sites)
+        iSite = SysPotential_Lattice_RandomUniform_sites(i)
+        if (iSite < 1 .or. iSite > nG) error stop "randomUniform: site index out of bounds"
+        call random_number(u1)
+        SysPotential_Lattice_RandomUniform_randomUniformValues(iSite) = minV + (maxV - minV) * u1
+      end do
+    else
+      do i = 1, nG
+        call random_number(u1)
+        SysPotential_Lattice_RandomUniform_randomUniformValues(i) = minV + (maxV - minV) * u1
+      end do
+    end if
 
   end subroutine
 

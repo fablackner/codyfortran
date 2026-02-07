@@ -33,6 +33,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/sources/stdlib")
             -DCMAKE_BUILD_TYPE=$ENV{CMAKE_BUILD_TYPE}
             -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
             -DBUILD_TESTING=OFF
+            "-DCMAKE_Fortran_FLAGS=$ENV{FFLAGS} -DSTDLIB_EXTERNAL_BLAS -DSTDLIB_EXTERNAL_LAPACK"
         INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
         BUILD_ALWAYS OFF
     )
@@ -46,6 +47,23 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/sources/test-drive")
         CMAKE_ARGS
             -DCMAKE_BUILD_TYPE=$ENV{CMAKE_BUILD_TYPE}
             -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+        INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
+        BUILD_ALWAYS OFF
+    )
+endif()
+
+#============================================================================
+if(EXISTS "${CMAKE_SOURCE_DIR}/sources/FTorch")
+    ExternalProject_Add(
+        FTorch
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/sources/FTorch"
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=$ENV{CMAKE_BUILD_TYPE}
+            -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+            -DBUILD_SHARED_LIBS=ON
+            -DCMAKE_PREFIX_PATH=$ENV{HOME}/miniforge3/envs/torch/lib/python3.12/site-packages/torch
+            -DTorch_DIR=$ENV{HOME}/miniforge3/envs/torch/lib/python3.12/site-packages/torch/share/cmake/Torch
+            -DGPU_DEVICE=NONE
         INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
         BUILD_ALWAYS OFF
     )

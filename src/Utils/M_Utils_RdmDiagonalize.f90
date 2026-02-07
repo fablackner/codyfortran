@@ -6,7 +6,7 @@
 !>
 !> Provides 1/2/3-body RDM construction, projections, contractions, and
 !> normalization/trace utilities used throughout the analysis pipeline.
-module M_Utils_RdmBasics
+module M_Utils_RdmDiagonalize
   use M_Utils_Types
 
   implicit none
@@ -14,105 +14,7 @@ module M_Utils_RdmBasics
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  function RdmBasics_CalculateEnergy(rdm1, h1, rdm2, h2) result(res)
-
-    real(R64)                :: res
-    complex(R64), intent(in), contiguous  :: rdm1(:, :)
-    complex(R64), intent(in), contiguous  :: h1(:, :)
-    complex(R64), intent(in), contiguous  :: rdm2(:, :, :, :)
-    complex(R64), intent(in), contiguous  :: h2(:, :, :, :)
-
-    complex(R64) :: cTmp
-
-    integer(I32) :: k1, l1, k2, l2, nO
-
-    nO = size(h1, 1)
-
-    cTmp = 0.0_R64
-    do k1 = 1, nO
-      do l1 = 1, nO
-        cTmp = cTmp + h1(k1, l1) * rdm1(l1, k1)
-      end do
-    end do
-
-    do k1 = 1, nO
-      do k2 = 1, nO
-        do l1 = 1, nO
-          do l2 = 1, nO
-
-            cTmp = cTmp + h2(k1, k2, l1, l2) * rdm2(l1, l2, k1, k2)
-
-          end do
-        end do
-      end do
-    end do
-
-    res = real(cTmp, kind=R64)
-
-  end function
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmBasics_Antisymmetrize(A2)
-
-    complex(R64), intent(inout), contiguous :: A2(:, :, :, :)
-
-    integer(I32) :: nO
-    integer(I32) :: i1, i2, j1, j2
-    complex(R64), allocatable :: A2Tmp(:, :, :, :)
-
-    nO = size(A2, 1)
-    allocate (A2Tmp, source=A2)
-
-    do j2 = 1, nO
-      do j1 = 1, nO
-
-        do i2 = 1, nO
-          do i1 = 1, nO
-
-            A2(i1, i2, j1, j2) = 0.25_R64 * (A2Tmp(i1, i2, j1, j2) - &
-                                             A2Tmp(i2, i1, j1, j2) - &
-                                             A2Tmp(i1, i2, j2, j1) + &
-                                             A2Tmp(i2, i1, j2, j1))
-
-          end do
-        end do
-      end do
-    end do
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmBasics_Symmetrize(A2)
-
-    complex(R64), intent(inout), contiguous :: A2(:, :, :, :)
-
-    integer(I32) :: nO
-    integer(I32) :: i1, i2, j1, j2
-    complex(R64), allocatable :: A2Tmp(:, :, :, :)
-
-    nO = size(A2, 1)
-    allocate (A2Tmp, source=A2)
-
-    do j2 = 1, nO
-      do j1 = 1, nO
-
-        do i2 = 1, nO
-          do i1 = 1, nO
-
-            A2(i1, i2, j1, j2) = 0.25_R64 * (A2Tmp(i1, i2, j1, j2) + &
-                                             A2Tmp(i2, i1, j1, j2) + &
-                                             A2Tmp(i1, i2, j2, j1) + &
-                                             A2Tmp(i2, i1, j2, j1))
-
-          end do
-        end do
-      end do
-    end do
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmBasics_DiagonalizeRdm1(natocc, natorbs, rdm1)
+  subroutine RdmDiagonalize_Rdm1(natocc, natorbs, rdm1)
     use M_Utils_LapackLib
 
     real(R64), intent(out), allocatable    :: natocc(:)
@@ -134,7 +36,7 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmBasics_DiagonalizeRdm2(gemocc, gems, rdm2)
+  subroutine RdmDiagonalize_Rdm2(gemocc, gems, rdm2)
     use M_Utils_LapackLib
 
     real(R64), intent(out), allocatable          :: gemocc(:)
@@ -178,7 +80,7 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmBasics_DiagonalizeRdm2sym(gemocc, gems, rdm2)
+  subroutine RdmDiagonalize_Rdm2sym(gemocc, gems, rdm2)
     use M_Utils_LapackLib
 
     real(R64), intent(out), allocatable    :: gemocc(:)
@@ -258,7 +160,7 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmBasics_DiagonalizeRdm2antisym(gemocc, gems, rdm2)
+  subroutine RdmDiagonalize_Rdm2antisym(gemocc, gems, rdm2)
     use M_Utils_LapackLib
 
     real(R64), intent(out), allocatable    :: gemocc(:)
@@ -325,102 +227,6 @@ contains
         end do
       end do
     end do
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmBasics_FillDefectiveRdm2sym(rdm2Defective, minEval, nFound, rdm2, threshhold)
-
-    complex(R64), intent(out), allocatable :: rdm2Defective(:, :, :, :)
-    real(R64), intent(out)                 :: minEval
-    integer(I32), intent(out)              :: nFound
-    complex(R64), intent(in), contiguous                :: rdm2(:, :, :, :)
-    real(R64), intent(in)                  :: threshhold
-
-    integer(I32) :: nO
-    integer(I32) :: i1, i2, j1, j2, i
-
-    real(R64), allocatable :: gemocc(:)
-    complex(R64), allocatable :: gems(:, :, :)
-
-    nO = size(rdm2, 1)
-
-    if (.not. allocated(rdm2Defective)) allocate (rdm2Defective, mold=rdm2)
-    rdm2Defective(:, :, :, :) = 0.0_R64
-
-    call RdmBasics_DiagonalizeRdm2sym(gemocc, gems, rdm2)
-
-    nFound = 0
-
-    do i = 1, size(gemocc)
-      if (gemocc(i) > threshhold) cycle
-
-      nFound = nFound + 1
-
-      do j2 = 1, nO
-        do j1 = 1, nO
-          do i2 = 1, nO
-            do i1 = 1, nO
-
-              rdm2Defective(i1, i2, j1, j2) = rdm2Defective(i1, i2, j1, j2) + &
-                                              gemocc(i) * gems(i1, i2, i) * conjg(gems(j1, j2, i))
-
-            end do
-          end do
-        end do
-      end do
-
-    end do
-
-    minEval = gemocc(size(gemocc))
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmBasics_FillDefectiveRdm2antisym(rdm2Defective, minEval, nFound, rdm2, threshhold)
-
-    complex(R64), intent(out), allocatable :: rdm2Defective(:, :, :, :)
-    real(R64), intent(out)                 :: minEval
-    integer(I32), intent(out)              :: nFound
-    complex(R64), intent(in), contiguous                :: rdm2(:, :, :, :)
-    real(R64), intent(in)                  :: threshhold
-
-    integer(I32) :: nO
-    integer(I32) :: i1, i2, j1, j2, i
-
-    real(R64), allocatable :: gemocc(:)
-    complex(R64), allocatable :: gems(:, :, :)
-
-    nO = size(rdm2, 1)
-
-    if (.not. allocated(rdm2Defective)) allocate (rdm2Defective, mold=rdm2)
-    rdm2Defective(:, :, :, :) = 0.0_R64
-
-    call RdmBasics_DiagonalizeRdm2antisym(gemocc, gems, rdm2)
-
-    nFound = 0
-
-    do i = 1, size(gemocc)
-      if (gemocc(i) > threshhold) cycle
-
-      nFound = nFound + 1
-
-      do j2 = 1, nO
-        do j1 = 1, nO
-          do i2 = 1, nO
-            do i1 = 1, nO
-
-              rdm2Defective(i1, i2, j1, j2) = rdm2Defective(i1, i2, j1, j2) + &
-                                              gemocc(i) * gems(i1, i2, i) * conjg(gems(j1, j2, i))
-
-            end do
-          end do
-        end do
-      end do
-
-    end do
-
-    minEval = gemocc(size(gemocc))
 
   end subroutine
 

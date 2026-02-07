@@ -28,7 +28,7 @@ contains
 
     meanValue = Json_Get("sysPotential.lattice.randomGauss.meanValue", 0.0_R64)
     stdValue = Json_Get("sysPotential.lattice.randomGauss.stdImplValue", 1.0_R64)
-    seed = Json_Get("sysPotential.lattice.randomGauss.seed", -1_I32)
+    seed = Json_Get("sysPotential.lattice.randomGauss.seed", -1)
 
     SysPotential_Lattice_RandomGauss_meanValue = meanValue
     SysPotential_Lattice_RandomGauss_stdValue = stdValue

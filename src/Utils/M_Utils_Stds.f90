@@ -61,14 +61,15 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine NoOpProcedures_PurifyTwoRdmState(twoRdmState)
+  subroutine NoOpProcedures_PurifyTwoRdmState(twoRdmState, h2)
     use M_Utils_UnusedVariables
 
     complex(R64), intent(inout), contiguous  :: twoRdmState(:)
+    complex(R64), intent(in), contiguous     :: h2(:, :, :, :)
 
     ! do NoPurification!
 
-    if (.false.) call UnusedVariables_Mark(twoRdmState)
+    if (.false.) call UnusedVariables_Mark(twoRdmState, h2)
 
   end subroutine
 

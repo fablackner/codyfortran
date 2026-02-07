@@ -19,6 +19,7 @@ contains
 
     real(R64) :: minValue, maxValue
     integer(I32) :: seed
+    integer(I32), allocatable :: sites(:)
 
     call Say_Fabricate("sysPotential.lattice.randomUniform")
 
@@ -28,7 +29,12 @@ contains
 
     minValue = Json_Get("sysPotential.lattice.randomUniform.minValue", -1.0_R64)
     maxValue = Json_Get("sysPotential.lattice.randomUniform.maxValue", 1.0_R64)
-    seed = Json_Get("sysPotential.lattice.randomUniform.seed", -1_I32)
+    seed = Json_Get("sysPotential.lattice.randomUniform.seed", -1)
+
+    if (Json_GetExistence("sysPotential.lattice.randomUniform.sites")) then
+      sites = Json_Get("sysPotential.lattice.randomUniform.sites", [1])
+      SysPotential_Lattice_RandomUniform_sites = sites
+    end if
 
     SysPotential_Lattice_RandomUniform_minValue = minValue
     SysPotential_Lattice_RandomUniform_maxValue = maxValue
