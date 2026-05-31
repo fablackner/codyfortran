@@ -2,12 +2,16 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Seesaw potential on lattice grids.
+!> Seesaw (time-dependent linear tilt) potential on lattice grids.
 !>
-!> Implements a separable 3D linear potential on a lattice grid.
-!> The slope of the potential oscillates in time between a minimum and maximum
-!> value with a given frequency. The concrete procedures are wired by
-!> `SysPotential_Lattice_Seesaw_Fabricate`.
+!> Implements a separable 3D linear potential whose slope oscillates in time:
+!>   V(r,t) = sₓ(t)(x-cₓ) + sᵧ(t)(y-cᵧ) + s_z(t)(z-c_z)
+!>
+!> where the slope along each axis varies sinusoidally:
+!>   s(t) = (s_max + s_min)/2 + (s_max - s_min)/2 × sin(2πft)
+!>
+!> This potential is useful for studying transport phenomena, Bloch oscillations,
+!> and non-equilibrium dynamics in optical lattice systems.
 module M_SysPotential_Lattice_Seesaw
   use M_Utils_Types
 
@@ -18,10 +22,10 @@ module M_SysPotential_Lattice_Seesaw
   !=============================================================================
 
   interface
-    !> Parse parameters and wire the lattice harmonic implementation.
+    !> Parse parameters and wire the lattice seesaw implementation.
     !>
     !> Reads the configuration (typically from JSON), initializes the module
-    !> data (trap center and frequencies), and connects the implementation into
+    !> data (slope bounds and frequencies), and connects the implementation into
     !> the lattice backend and grid-agnostic pointers.
     module subroutine SysPotential_Lattice_Seesaw_Fabricate
     end subroutine
@@ -45,11 +49,11 @@ module M_SysPotential_Lattice_Seesaw
   !> Maximum slope of the seesaw potential along Z.
   real(R64) :: SysPotential_Lattice_Seesaw_slopeMaxZ
 
-  !> Frequency of the seesaw potential along X.
+  !> Oscillation frequency of the seesaw potential along X (Hz).
   real(R64) :: SysPotential_Lattice_Seesaw_frequencyX
-  !> Frequency of the seesaw potential along Y.
+  !> Oscillation frequency of the seesaw potential along Y (Hz).
   real(R64) :: SysPotential_Lattice_Seesaw_frequencyY
-  !> Frequency of the seesaw potential along Z.
+  !> Oscillation frequency of the seesaw potential along Z (Hz).
   real(R64) :: SysPotential_Lattice_Seesaw_frequencyZ
 
   !=============================================================================

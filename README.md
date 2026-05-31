@@ -160,6 +160,33 @@ source setBuildVars.sh -c gnu -t release
 # Example: Run the executable with input file myProg.json in current directory
 ./myProg.exe
 ```
+
+### Build Shortcuts
+
+When you source `setBuildVars.sh`, it also defines a convenient `cody` bash function that provides shortcuts for building and running tests:
+
+```bash
+# Build the entire project
+cody build
+
+# Build only the applications in the app/ folder
+cody build app
+
+# Build only the tests in the test/ folder
+cody build test
+
+# Build a specific app or test (e.g., app/hubbard/main.f90)
+cody build app/hubbard/main
+
+# Clean the build directory
+cody clean
+
+# Run tests
+cody run test
+
+# Run tests with coverage (requires source setBuildVars.sh -c gnu -t debug)
+cody run cov
+```
 ## Example Programs
 
 The \`test/\` folder contains several runnable programs together with a matching JSON configuration that shares the same base name. For example:

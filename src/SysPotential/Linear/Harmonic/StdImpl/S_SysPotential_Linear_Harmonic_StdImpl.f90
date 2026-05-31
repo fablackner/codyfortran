@@ -2,6 +2,14 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Default numerical implementation for linear harmonic potential.
+!>
+!> Evaluates a multi-dimensional separable harmonic trap on a 1D grid:
+!>   V(x) = Σₙ ½ωₙ²(x - xₙ)²
+!>
+!> Each term represents a harmonic oscillator centered at `position[n]` with
+!> angular frequency `omega[n]`. Multiple terms can be combined to create
+!> double-well or more complex trapping geometries.
 submodule(M_SysPotential_Linear_Harmonic_StdImpl) S_SysPotential_Linear_Harmonic_StdImpl
 
   implicit none
@@ -15,7 +23,7 @@ contains
     use M_SysPotential
     use M_SysPotential_Linear
 
-    call Say_Fabricate("cosinusLinear")
+    call Say_Fabricate("sysPotential.linear.harmonic.stdImpl")
 
     !------------------------------------
     ! set values and procedure pointers
@@ -25,9 +33,12 @@ contains
 
   end subroutine
 
-  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Fill the external potential array with harmonic trap values.
+  !>
+  !> Sums contributions from all harmonic oscillator centers defined in the
+  !> configuration. Uses vectorized array operations for efficiency.
   subroutine FillExternalPotential(externalPotential, time, bt_)
-    ! array-filling implementation of harmonic potential
     use M_Utils_UnusedVariables
     use M_SysPotential_Linear_Harmonic
     use M_Grid
@@ -48,7 +59,6 @@ contains
     if (.not. allocated(externalPotential)) allocate (externalPotential(Grid_nPoints))
     externalPotential(:) = 0.0_R64
 
-    ! Sum contributions from all harmonic oscillators
     do i = 1, size(position)
       externalPotential(:) = externalPotential(:) + 0.5_R64 * omega(i)**2 * (Grid_Linear_xCoord(:) - position(i))**2
     end do

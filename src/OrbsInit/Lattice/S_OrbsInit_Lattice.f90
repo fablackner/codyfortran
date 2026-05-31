@@ -2,6 +2,7 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Implementation submodule for M_OrbsInit_Lattice.
 submodule(M_OrbsInit_Lattice) S_OrbsInit_Lattice
 
   implicit none
@@ -9,6 +10,7 @@ submodule(M_OrbsInit_Lattice) S_OrbsInit_Lattice
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Select and wire the lattice initialization sub-backend from JSON.
   module subroutine OrbsInit_Lattice_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -24,7 +26,7 @@ contains
     OrbsInit_InitializeOrb => InitializeOrb
 
     !------------------------------------
-    ! branch
+    ! branch based on JSON configuration
     !------------------------------------
 
     if (Json_GetExistence("orbsInit.lattice.onSite")) then
@@ -37,6 +39,15 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Initialize a single orbital on the 3D lattice grid.
+!>
+!> @details
+!> Loops over all lattice sites (ix, iy, iz) and samples the backend-specific
+!> InitFunction, then normalizes using Grid_InnerProduct.
+!>
+!> @param[out] orb  Complex orbital vector of length nSites, filled and normalized.
+!> @param[in]  ind  Orbital index (1-based; maps to target site in OnSite backend).
+!> @param[in]  bt_  Optional body type for species-dependent initialization.
   subroutine InitializeOrb(orb, ind, bt_)
     use M_Grid
     use M_Grid_Lattice
@@ -45,14 +56,12 @@ contains
     integer(I32), intent(in)              :: ind
     integer(I32), intent(in), optional    :: bt_
 
-    integer(I32) :: iGrid
+    integer(I32) :: iGrid, ix, iy, iz
     real(R64)    :: norm
-    integer(I32) :: ix, iy, iz
 
-    ! Initialize to zero
     orb(:) = 0.0_R64
 
-    ! Calculate orbital values for each grid point
+    ! Sample the initialization function at each lattice site
     do iz = 1, Grid_Lattice_zSize
       do iy = 1, Grid_Lattice_ySize
         do ix = 1, Grid_Lattice_xSize
@@ -62,10 +71,8 @@ contains
       end do
     end do
 
-    ! Now verify normalization directly with Grid_InnerProduct
+    ! Normalize using grid-aware inner product
     norm = real(Grid_InnerProduct(orb, orb), kind=R64)
-
-    ! Apply normalization correction
     orb(:) = orb(:) / sqrt(norm)
 
   end subroutine

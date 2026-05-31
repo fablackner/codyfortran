@@ -2,6 +2,16 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Default numerical implementation for lattice seesaw (time-dependent tilt) potential.
+!>
+!> Evaluates a time-dependent linear potential on a discrete lattice:
+!>   V(i,j,k,t) = sₓ(t)(i-cₓ) + sᵧ(t)(j-cᵧ) + s_z(t)(k-c_z)
+!>
+!> where the slopes oscillate sinusoidally:
+!>   s(t) = (s_max + s_min)/2 + (s_max - s_min)/2 × sin(2π × f × t)
+!>
+!> This creates a "rocking" or "tilting" effect useful for studying transport
+!> and non-equilibrium dynamics in lattice systems.
 submodule(M_SysPotential_Lattice_Seesaw_StdImpl) S_SysPotential_Lattice_Seesaw_StdImpl
 
   implicit none
@@ -15,7 +25,7 @@ contains
     use M_SysPotential
     use M_SysPotential_Lattice
 
-    call Say_Fabricate("cosinusLattice")
+    call Say_Fabricate("sysPotential.lattice.seesaw.stdImpl")
 
     !------------------------------------
     ! set values and procedure pointers
@@ -25,7 +35,11 @@ contains
 
   end subroutine
 
-  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Fill the external potential array with time-dependent seesaw values.
+  !>
+  !> Computes the oscillating slopes at the given time, then iterates over all
+  !> lattice sites to build the linear tilt potential centered at the lattice midpoint.
   subroutine FillExternalPotential(externalPotential, time, bt_)
     use M_Utils_UnusedVariables
     use M_SysPotential_Lattice_Seesaw

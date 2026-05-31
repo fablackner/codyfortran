@@ -2,12 +2,28 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Linear-grid kinetic operators and setup glue.
+!> @file M_SysKinetic_Linear.f90
+!> @brief Linear-grid kinetic operators T̂ = −(1/2m)∇² on Cartesian grids.
 !>
-!> This module represents the linear (Cartesian, uniform 1D/ND) grid branch of
-!> the kinetic subsystem. It exposes a `SysKinetic_Setup` pointer and a
-!> `SysKinetic_Linear_Fabricate` entry point that chooses a concrete Laplacian
-!> backend (e.g., finite-difference or Fourier/spectral) and binds the pointers.
+!> @details
+!> This module represents the **linear (Cartesian, uniform 1D)** grid branch of
+!> the kinetic subsystem. It provides the Laplacian operator ∇² on uniform grids
+!> using either finite-difference stencils or FFT-based spectral methods.
+!>
+!> Physics
+!> -------
+!> For a particle of mass m on a uniform grid, the kinetic energy operator is:
+!>
+!>     T̂ψ(x) = −(1/2m) d²ψ/dx²
+!>
+!> This is discretized either by:
+!>   - **FinDiff**: Central finite-difference stencil (O(h²) or higher)
+!>   - **Fourier**: FFT → multiply by −k² → IFFT (spectral accuracy)
+!>
+!> The Fourier method assumes periodic boundary conditions; the FinDiff method
+!> uses zero (Dirichlet) boundary conditions at the grid ends.
+!>
+!> @see M_SysKinetic_Linear_Laplacian for backend selection
 module M_SysKinetic_Linear
   use M_Utils_Types
   use M_Utils_NoOpProcedures
@@ -19,11 +35,10 @@ module M_SysKinetic_Linear
   !=============================================================================
 
   interface
-    !> Fabricate the linear-grid kinetic backend.
+    !> @brief Fabricate the linear-grid kinetic backend.
     !>
-    !> Reads configuration (grid spacing, boundary conditions, mass model, and
-    !> method selection like FD/Fourier) and assigns the setup pointer and the
-    !> operator application routines in the parent facade.
+    !> Reads configuration and assigns the setup pointer and operator routines.
+    !> Currently supports: `laplacian` (FinDiff or Fourier).
     module subroutine SysKinetic_Linear_Fabricate
     end subroutine
   end interface
@@ -36,7 +51,7 @@ module M_SysKinetic_Linear
   ! module procedures pointers
   !=============================================================================
 
-  !> Pointer to the setup procedure for initializing the linear-grid backend.
+  !> @brief Pointer to setup for the linear-grid kinetic backend.
   !>
   !> Precomputes FD stencils or spectral k-vectors, allocates workspace, and
   !> validates alignment/contiguity assumptions for the selected method.

@@ -2,12 +2,58 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Hubbard-model coefficient backend.
+!> Hubbard-model coefficient backend with bit-encoded Fock states.
 !>
-!> This module provides data and runtime wiring for CI coefficients tailored to
-!> the Hubbard model. It uses compact bit encodings for spin-resolved
-!> configurations and precomputes connectivity and weights for efficient
-!> application of the kinetic (hopping) and interaction terms.
+!> # Purpose
+!>
+!> This module provides an optimized CI representation for the Fermi-Hubbard model
+!> on lattice grids. Instead of the general tensor-product enumeration used by
+!> Generic, configurations are encoded as bit patterns where bit j=1 indicates
+!> site j is occupied.
+!>
+!> # Bit Encoding
+!>
+!> For N_orb lattice sites and N_up (N_dn) up-spin (down-spin) electrons:
+!> - Each spin-up config is a 64-bit integer with exactly N_up bits set
+!> - Total up-configs: C(N_orb, N_up) stored in `bitcodesUP(:)`
+!> - Total down-configs: C(N_orb, N_dn) stored in `bitcodesDN(:)`
+!>
+!> # Hopping Graphs
+!>
+!> Single-electron hops (kinetic term) are precomputed during `Setup`:
+!> - `hoppUP(k, i)`: Target config index when applying k-th hop to config i
+!> - `weightUP(k, i)`: Matrix element including fermionic sign from bit counting
+!> - `nConnectedUP(i)`: Number of valid hops from config i
+!>
+!> # Spin Symmetry Variants
+!>
+!> Three sub-backends exploit spin exchange symmetry:
+!>
+!> | Backend        | State space dimension | Physical interpretation          |
+!> |----------------|----------------------|----------------------------------|
+!> | `noSpinSym`    | n_up × n_dn          | Full product space               |
+!> | `plusSpinSym`  | n(n+1)/2             | Symmetric (triplet-like) sector  |
+!> | `minusSpinSym` | n(n-1)/2             | Antisymmetric (singlet-like)     |
+!>
+!> # JSON Configuration
+!>
+!> ```json
+!> "coeffs": {
+!>   "hubbard": {
+!>     "noSpinSym": { }     // or "plusSpinSym": { } or "minusSpinSym": { }
+!>   }
+!> }
+!> ```
+!>
+!> # Performance Notes
+!>
+!> - Bit operations (`popcnt`, `btest`, `ibset`, `ibclr`) enable O(1) sign computation
+!> - Hopping graph is sparse: only ~2×nDim hops per config (nDim = lattice dimensions)
+!> - Interaction is diagonal: on-site U·n↑n↓ via `interactionValues` lookup
+!>
+!> @see M_Coeffs_Generic     Alternative for non-Hubbard models
+!> @see M_Grid_Lattice       Lattice geometry definitions
+!> @see M_SysKinetic_Lattice Hopping matrix construction
 module M_Coeffs_Hubbard
   use M_Utils_Types
 

@@ -2,12 +2,30 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Ylm (spherical-harmonics) TDHx hooks for the ground-state solver.
+!> @brief Ylm-optimized TDHx implementation interface module.
 !>
-!> This variant exposes interfaces specialized for a radial representation
-!> labelled by the angular momentum quantum number `l`. It provides a factory
-!> to bind a concrete backend and the signature of the Hartree–Fock radial
-!> action applied during one iteration.
+!> @details
+!> Provides the factory routine and interface for a spherical-harmonics (Ylm)
+!> optimized TDHx ground-state solver. This variant exploits angular momentum
+!> symmetry to reduce computational cost:
+!>
+!> **Key Optimization**: Instead of diagonalizing a single Grid_nPoints×Grid_nPoints
+!> Fock matrix, this backend diagonalizes (lmax+1) smaller nRadial×nRadial matrices,
+!> one per angular momentum channel l. This is valid for spherically symmetric
+!> Hamiltonians (e.g., atoms) where orbitals factorize as φ_{nlm}(r) = R_nl(r)·Y_lm(θ,φ).
+!>
+!> ## Usage
+!>
+!> Requires a DiagonalizerList with (lmax+1) entries, one per l-channel. The user
+!> must provide wrapper callbacks that fix the l-value for each diagonalizer:
+!>
+!> ```fortran
+!> DiagonalizerListInput(1) % ApplyMatOnVec => ApplyMatOnVecL0  ! l=0
+!> DiagonalizerListInput(2) % ApplyMatOnVec => ApplyMatOnVecL1  ! l=1
+!> ! ...
+!> ```
+!>
+!> @see M_GroundSolver_Tdhx_StdImpl for the general-grid alternative
 module M_GroundSolver_Tdhx_YlmOpt
   use M_Utils_Types
 
@@ -18,10 +36,16 @@ module M_GroundSolver_Tdhx_YlmOpt
   !=============================================================================
 
   interface
-    !> Bind Ylm-specific TDHx callbacks for the ground-state solver.
+    !> @brief Bind Ylm-optimized TDHx callbacks for the ground-state solver.
     !>
-    !> Implementations assign the radial Hartree–Fock action pointer below to a
-    !> backend routine operating on a single `(l)` channel.
+    !> @details
+    !> Assigns the following procedure pointers:
+    !>   - `GroundSolver_Setup` → local `Setup`
+    !>   - `GroundSolver_Approach` → local `Approach`
+    !>   - `GroundSolver_Tdhx_YlmOpt_HartreeFockAction` → local `HartreeFockAction`
+    !>
+    !> @pre JSON key `groundSolver.tdhx.ylmOpt` exists
+    !> @pre Grid is configured as Ylm (spherical harmonics)
     module subroutine GroundSolver_Tdhx_YlmOpt_Fabricate
     end subroutine
   end interface
@@ -30,23 +54,35 @@ module M_GroundSolver_Tdhx_YlmOpt
   ! module procedures pointers
   !=============================================================================
 
-  !> Pointer to the Ylm TDHx Hartree–Fock radial action used per `(l)` channel.
+  !> @brief Pointer to the Ylm radial Fock operator action for a single l-channel.
+  !>
+  !> Used as the matvec callback for per-l diagonalizers. The caller must wrap
+  !> this in l-specific callbacks (one per diagonalizer).
   procedure(I_GroundSolver_Tdhx_YlmOpt_HartreeFockRadialAction), pointer :: GroundSolver_Tdhx_YlmOpt_HartreeFockAction
   abstract interface
-    !> Compute the TDHx Hartree–Fock radial action for a given `l`.
+    !> @brief Apply the radial Fock operator for angular momentum channel l.
     !>
-    !> Given an input radial orbital `orbLm` for angular momentum `l`, compute
-    !> `dOrbLm = A_TDHx^l(orbLm, time)`, where the operator is defined by the
-    !> selected backend and boundary conditions.
+    !> @details
+    !> Computes dOrbLm = F̂_l · orbLm where F̂_l is the radial Fock operator
+    !> projected onto channel l. This includes:
+    !>   - Radial kinetic: T̂_l = -½d²/dr² + l(l+1)/(2r²)
+    !>   - Radial external potential: V̂_ext(r)
+    !>   - Radial mean-field potential: precomputed monopole (l=0) projection
+    !>   - Exchange: computed on-the-fly with full angular coupling
+    !>
+    !> @param[out] dOrbLm  Result of F̂_l applied to orbLm, dimension(nRadial)
+    !> @param[in]  orbLm   Input radial orbital for channel l
+    !> @param[in]  l       Angular momentum quantum number
+    !> @param[in]  time    Time parameter (typically 0 for ground state)
     subroutine I_GroundSolver_Tdhx_YlmOpt_HartreeFockRadialAction(dOrbLm, orbLm, l, time)
       import :: I32, R64
-      !> Output radial action applied to the orbital for channel `l`.
+      !> Output: radial Fock operator applied to the orbital, F̂_l·orbLm
       complex(R64), intent(out), contiguous, target :: dOrbLm(:)
-      !> Input radial orbital/state for channel `l`.
+      !> Input radial orbital for channel l
       complex(R64), intent(in), contiguous, target :: orbLm(:)
-      !> Angular momentum quantum number (channel index).
+      !> Angular momentum quantum number (l = 0, 1, ..., lmax)
       integer(I32), intent(in) :: l
-      !> Backend-defined step parameter (physical or imaginary time).
+      !> Time parameter (passed through to potential routines)
       real(R64), intent(in) :: time
     end subroutine
   end interface

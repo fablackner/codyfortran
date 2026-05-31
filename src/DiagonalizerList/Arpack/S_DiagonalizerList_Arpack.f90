@@ -2,14 +2,21 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @file S_DiagonalizerList_Arpack.f90
+!> @brief Implementation of ARPACK iterative eigensolver backend.
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 submodule(M_DiagonalizerList_Arpack) S_DiagonalizerList_Arpack
 
   implicit none
 
+  !> @brief Module-level counter for matrix–vector products (debugging).
+  !> @details Reset to 0 at start of each Diagonalize call when printLevel > 0.
   integer(I32), save :: count = 0
 
 contains
 
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Allocate a new ARPACK diagonalizer instance.
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine DiagonalizerList_Arpack_Allocate(e, path)
     use M_Utils_UnusedVariables
@@ -23,6 +30,17 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Read configuration parameters for ARPACK backend.
+!>
+!> @details
+!> Reads from JSON at `this%path`:
+!> - `nEvals`: Number of eigenvalues (-1 = all, but defeats purpose of ARPACK)
+!> - `which`: Spectrum region selector
+!> - `bmat`: Problem type ('I' or 'G')
+!> - `nKry`: Krylov dimension (default: min(2*nEvals+1, dim))
+!> - `checkConvergenceQ`: Post-solve residual verification
+!> - `printLevel`: Verbosity level
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Fabricate(this)
     use M_Utils_Json
     use M_Utils_Say
@@ -32,12 +50,12 @@ contains
     call Say_Fabricate(this % path)
 
     !------------------------------------
-    ! set values and procedure pointers
+    ! Read configuration parameters
     !------------------------------------
 
     this % nEvals = Json_Get("nEvals", 1, path_=this % path)
     if (this % nEvals < 0) then
-      this % nEvals = this % dim
+      this % nEvals = this % dim  ! -1 means all (not recommended for ARPACK)
     end if
 
     this % which = Json_Get("which", "SR", path_=this % path)
@@ -49,6 +67,12 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Setup for ARPACK backend (currently minimal).
+!>
+!> @details
+!> ARPACK's internal workspace is managed by ArpackLib. This routine logs
+!> the setup call but does not pre-allocate resources.
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Setup(this)
     use M_Utils_Say
     use M_Utils_UnusedVariables
@@ -59,6 +83,19 @@ contains
 
   end subroutine
 
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Run ARPACK iteration to compute eigenpairs.
+!>
+!> @details
+!> **Algorithm:**
+!> 1. Call `ArpackLib_Diagonalize` with wrapper callback
+!> 2. Verify all requested eigenvalues converged
+!> 3. Optionally verify residuals: ||Ax - λx||₂ for each eigenpair
+!> 4. Print summary if printLevel > 0
+!>
+!> The wrapper callback `ApplyMatOnVec` (internal procedure) adapts the
+!> 3-argument interface of `T_DiagonalizerList_E` to ARPACK's 2-argument
+!> interface by capturing `time` from the enclosing scope.
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Diagonalize(this, time, evecsQ)
     use M_Utils_ArpackLib
@@ -78,6 +115,7 @@ contains
       count = 0
     end if
 
+    ! Call ARPACK library wrapper
     call ArpackLib_Diagonalize(this % evals, &
                                this % evecs, &
                                this % nFound, &
@@ -89,11 +127,13 @@ contains
                                this % bmat, &
                                this % nKry)
 
+    ! Verify convergence
     if (this % nFound .ne. this % nEvals) then
       write (*, *) "Warning not all eigenvalues are converged"
       error stop
     end if
 
+    ! Optional residual check: ||H·ψ - E·ψ||
     if (evecsQ .and. this % checkConvergenceQ) then
       write (*, *)
       write (*, *) "checkConvergenceQ:"
@@ -107,6 +147,7 @@ contains
       write (*, *)
     end if
 
+    ! Summary output
     if (this % printLevel > 0) then
       write (*, *)
       write (*, *) "Summary ARPACK:"
@@ -122,6 +163,10 @@ contains
 
   contains
 
+    !--------------------------------------------------------------------------
+    !> @brief Internal callback adapting 3-arg interface to ARPACK's 2-arg.
+    !> @details Captures `time` from enclosing Diagonalize scope.
+    !--------------------------------------------------------------------------
     subroutine ApplyMatOnVec(dState, state)
 
       complex(R64), intent(out), contiguous, target :: dState(:)

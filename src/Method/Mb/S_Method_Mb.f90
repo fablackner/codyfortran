@@ -3,6 +3,14 @@
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 submodule(M_Method_Mb) S_Method_Mb
+  !-----------------------------------------------------------------------------
+  ! Many-body (Mb) method dispatcher and metadata initialization.
+  !
+  ! This submodule:
+  !   1. Parses body-type configuration (species, particle counts, statistics)
+  !   2. Builds index mappings for packed storage layouts
+  !   3. Dispatches to the selected representation: OrbBased, GridBased, or GemBased
+  !-----------------------------------------------------------------------------
 
   implicit none
 
@@ -14,6 +22,18 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_Fabricate
+    !---------------------------------------------------------------------------
+    ! Initializes many-body metadata from JSON and branches to representation.
+    !
+    ! JSON keys read:
+    !   - method.mb.nBodyTypes:     Number of distinct particle species/spins
+    !   - method.mb.nBodies:        Array of particle counts per body type
+    !   - method.mb.bodyStatistics: Array of 'f' (fermion) or 'b' (boson)
+    !
+    ! Computed arrays:
+    !   - bodyTypeOfBody(1:nBodiesSum): Maps global body index → body type
+    !   - nBodiesStart/End(bt):         Index range for body type bt
+    !---------------------------------------------------------------------------
     use M_Utils_Json
     use M_Utils_Say
     use M_Method_Mb_OrbBased
@@ -25,7 +45,7 @@ contains
     call Say_Fabricate("method.mb")
 
     !------------------------------------
-    ! set values and procedure pointers
+    ! parse body-type configuration
     !------------------------------------
 
     Method_Mb_nBodyTypes = Json_Get("method.mb.nBodyTypes", 1)
@@ -40,6 +60,10 @@ contains
 
     Method_Mb_bodyStatistics = Json_Get("method.mb.bodyStatistics", [('f', i=1, Method_Mb_nBodyTypes)])
 
+    !------------------------------------
+    ! build body-type index mappings
+    !------------------------------------
+
     allocate (Method_Mb_bodyTypeOfBody(Method_Mb_nBodiesSum))
 
     counter = 0
@@ -53,7 +77,7 @@ contains
     end do
 
     !------------------------------------
-    ! branch
+    ! branch: representation selection
     !------------------------------------
 
     if (Json_GetExistence("method.mb.orbBased")) then

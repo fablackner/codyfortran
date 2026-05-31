@@ -2,6 +2,7 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Full FEDVR implementation of radial Poisson solver.
 submodule(M_SysInteraction_Ylm_Coulomb_FullEq) S_SysInteraction_Ylm_Coulomb_FullEq
 
   implicit none
@@ -9,6 +10,7 @@ submodule(M_SysInteraction_Ylm_Coulomb_FullEq) S_SysInteraction_Ylm_Coulomb_Full
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Bind the full-equation FEDVR Coulomb solver.
   module subroutine SysInteraction_Ylm_Coulomb_FullEq_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -25,8 +27,23 @@ contains
 
   end subroutine
 
-  !> Solves the radial Poisson equation using the FEDVR approach
-  !> Uses differential equation solver directly implemented
+  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Solve radial Poisson equation via FEDVR weak-form discretization.
+  !>
+  !> Assembles the full FEDVR matrix for the operator (d²/dr² - l(l+1)/r²) in
+  !> weak form, applies boundary conditions, and solves via LU decomposition.
+  !>
+  !> **Boundary conditions:**
+  !>   - r = 0: Dirichlet u(0) = 0 (regularity)
+  !>   - r = r_max: Robin du/dr + (l+1)/r × u = 0 (asymptotic decay ~ r^-(l+1))
+  !>
+  !> @param[out] potLm   Radial potential component Vₗₘ(r)
+  !> @param[in]  srcLm   Radial density component ρₗₘ(r) (includes weights)
+  !> @param[in]  l       Angular momentum quantum number
+  !> @param[in]  m       Magnetic quantum number (unused)
+  !> @param[in]  time    Physical time (unused)
+  !> @param[in]  bt1_    Target body type (unused)
+  !> @param[in]  bt2_    Source body type (unused)
   subroutine FillInteractionPotentialRadial(potLm, srcLm, l, m, time, bt1_, bt2_)
     use M_Utils_Constants, only: PI
     use M_Utils_UnusedVariables
@@ -45,7 +62,6 @@ contains
     integer(I32), intent(in), optional  :: bt2_
 
     integer(I32) :: iRad
-    ! Real operator path (always used)
     real(R64), allocatable :: poissonMatrix(:, :), rhsInSolOut(:, :)
     integer(I32), allocatable :: ipiv(:)
     integer(I32) :: nRad, iE
@@ -58,7 +74,7 @@ contains
     if (.false.) call UnusedVariables_Mark(m, time, bt1_, bt2_)
 
     nE = Grid_Ylm_Fedvr_nElements
-    nRad = Grid_Ylm_nRadial ! does not include boundary points
+    nRad = Grid_Ylm_nRadial
     nLoc = Grid_Ylm_Fedvr_nLocals
     strength = SysInteraction_Ylm_Coulomb_Strength
 
@@ -68,7 +84,7 @@ contains
 
     poissonMatrix = 0.0_R64
 
-    ! Assemble weak-form operator using derivativeCtx (second derivative part)
+    ! Assemble weak-form Laplacian from element matrices
     do iE = 1, nE
       associate (element => fedvrCtx % elements(iE))
         dx = element % size
@@ -85,25 +101,26 @@ contains
       end associate
     end do
 
+    ! Apply r-weighting for spherical coordinates
     do iRad = 1, nRad
       r = Grid_Ylm_radialPoints(iRad)
       poissonMatrix(:, iRad) = poissonMatrix(:, iRad) * r
       poissonMatrix(iRad, :) = poissonMatrix(iRad, :) * r
     end do
 
-    ! Add diagonal l(l+1)/r^2 contribution in weak form (mass-weighted)
+    ! Add centrifugal term -l(l+1)/r² in weak form
     if (l > 0) then
-      lTerm = real(-l * (l + 1), kind=R64) ! the devision by / (r * r) is removed by multiplication with r
+      lTerm = real(-l * (l + 1), kind=R64)
       do iRad = 1, nRad
         poissonMatrix(iRad, iRad) = poissonMatrix(iRad, iRad) + lTerm * fedvrCtx % weights(iRad)
       end do
     end if
 
-    ! RHS columns: real and imaginary parts (weak form: multiply by weights)
+    ! Set up RHS: -4π ρ (real and imaginary parts separately)
     rhsInSolOut(:, 1) = real(-4.0_R64 * PI * srcLm(:))
     rhsInSolOut(:, 2) = aimag(-4.0_R64 * PI * srcLm(:))
 
-    ! Impose Robin boundary condition at r = rmax for asymptotic decay
+    ! Apply Robin BC at r_max: du/dr + (l+1)/r × u = 0
     associate (element => fedvrCtx % elements(nE))
       dx = element % size
       iStart = element % iStart
@@ -123,11 +140,10 @@ contains
       poissonMatrix(iEnd, iEnd) = poissonMatrix(iEnd, iEnd) + (l + 1) / rEnd
     end associate
 
-    ! Solve A u = b via LU
+    ! Solve via LU factorization
     call LapackLib_FactorizeLU(poissonMatrix, ipiv)
     call LapackLib_SolveFactorized(poissonMatrix, ipiv, rhsInSolOut, 'N')
 
-    ! Convert solution to potential V(r) = u(r)/r
     potLm(:) = strength * cmplx(rhsInSolOut(:, 1), rhsInSolOut(:, 2), kind=R64)
 
     deallocate (poissonMatrix, rhsInSolOut, ipiv)

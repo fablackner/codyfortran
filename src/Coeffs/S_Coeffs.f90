@@ -2,17 +2,44 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Implementation submodule for M_Coeffs.
+!>
+!> Contains:
+!> - `Coeffs_Fabricate`: JSON-driven backend selection (generic vs. Hubbard)
+!> - Shared utility routines used by all backends:
+!>   - `Normalize`:           L² normalization using BLAS
+!>   - `ProjectOnSubspace`:   Gram-Schmidt projection onto orthogonal complement
+!>   - `SaveCoeffs`:          Binary checkpoint output
+!>   - `SaveTwoRdm`:          Compute and persist 2-RDM per body-type block
+!>   - `FillRdm{1,2,3}Bt`:    Generic RDM construction via excitation application
+!>   - `ApplyGroupedExcitations`: Helper to batch excitations by body type
+!>
+!> The body-type-resolved RDM routines (`FillRdm1Bt`, `FillRdm2Bt`, `FillRdm3Bt`)
+!> use a brute-force loop over all orbital indices, applying ladder operators
+!> via `Coeffs_ApplyExcitation` and computing expectation values. These are
+!> primarily useful for diagnostics and validation; optimized backends may
+!> provide direct implementations.
 submodule(M_Coeffs) S_Coeffs
 
   implicit none
 
 !=============================================================================
-! local procedures kinds
+! local procedures
 !=============================================================================
 
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Bind procedure pointers to the appropriate backend based on JSON config.
+!>
+!> Reads the `"coeffs"` section from global JSON and dispatches to either
+!> `Coeffs_Generic_Fabricate` or `Coeffs_Hubbard_Fabricate`. Common routines
+!> (normalization, projection, RDM fills, I/O) are assigned unconditionally
+!> as they are backend-independent.
+!>
+!> **JSON keys:**
+!> - `coeffs.generic` → M_Coeffs_Generic (tensor-product via ConfigList)
+!> - `coeffs.hubbard` → M_Coeffs_Hubbard (bit-encoded lattice model)
   module subroutine Coeffs_Fabricate
     use M_Utils_Say
     use M_Utils_Json
@@ -22,7 +49,7 @@ contains
     call Say_Fabricate("coeffs")
 
     !------------------------------------
-    ! set values and procedure pointers
+    ! Assign backend-independent shared procedures
     !------------------------------------
 
     Coeffs_Normalize => Normalize
@@ -34,7 +61,7 @@ contains
     Coeffs_FillRdm1Bt => FillRdm1Bt
 
     !------------------------------------
-    ! branch
+    ! Select backend from JSON
     !------------------------------------
 
     if (Json_GetExistence("coeffs.generic")) then
@@ -50,6 +77,10 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Normalize CI vector to unit L² norm.
+!>
+!> Uses BLAS `dznrm2` (via BlasLib wrapper) for numerical stability on large
+!> vectors. Modifies `coeffs` in-place.
   subroutine Normalize(coeffs)
     use M_Utils_BlasLib
 
@@ -63,6 +94,14 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Gram-Schmidt projection: orthogonalize `dCoeffs` against `coeffs`.
+!>
+!> Computes:
+!>   dCoeffs ← dCoeffs - ⟨coeffs|dCoeffs⟩ · coeffs
+!>
+!> This removes the component of `dCoeffs` parallel to `coeffs`, leaving only
+!> the orthogonal complement. Assumes `coeffs` is normalized (or caller
+!> accepts scaling).
   subroutine ProjectOnSubspace(dCoeffs, coeffs)
     complex(R64), intent(inout), contiguous  :: dCoeffs(:)
     complex(R64), intent(in), contiguous     :: coeffs(:)
@@ -72,7 +111,19 @@ contains
   end subroutine
 
 !------------------------------------------------------------------------------
-! Helper: group excitations by body type and apply per body type in one call
+!> Group excitations by body type and apply sequentially.
+!>
+!> When computing RDM elements involving multiple body types (e.g., ⟨a†_α a†_β a_β a_α⟩),
+!> excitations must be applied per body type. This helper:
+!> 1. Finds unique body types in the excitation list
+!> 2. Groups creation/annihilation indices by body type
+!> 3. Calls `Coeffs_ApplyExcitation` once per group
+!>
+!> @param[inout] coeffsTmp  Working copy of CI vector (modified in-place)
+!> @param[in]    iExc       Creation orbital indices (1..nExc)
+!> @param[in]    jExc       Annihilation orbital indices (1..nExc)
+!> @param[in]    btExc      Body type for each excitation (1..nExc)
+!> @param[in]    nExc       Number of excitations
 !------------------------------------------------------------------------------
   subroutine ApplyGroupedExcitations(coeffsTmp, iExc, jExc, btExc, nExc)
     complex(R64), intent(inout), contiguous :: coeffsTmp(:)
@@ -85,6 +136,7 @@ contains
     integer(I32) :: iBuf(nExc), jBuf(nExc)
     integer      :: nGroups, g, k, cnt
 
+    ! Collect unique body types
     nGroups = 0
     do k = 1, nExc
       if (.not. any(uniqBts(1:nGroups) .eq. btExc(k))) then
@@ -93,6 +145,7 @@ contains
       end if
     end do
 
+    ! Apply excitations grouped by body type
     do g = 1, nGroups
       cnt = 0
       do k = 1, nExc
@@ -107,6 +160,10 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Save CI coefficients to binary file for checkpoint/restart.
+!>
+!> Writes to `coeffs.in` using the DataStorage module's raw binary format.
+!> File can be loaded via CoeffsInit with `"load": {}` configuration.
   subroutine SaveCoeffs(coeffs)
     use M_Utils_DataStorage
 
@@ -117,6 +174,14 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Compute full 2-RDM and save per body-type block.
+!>
+!> Produces files `rdm2BtXX_YY.in` for each body-type pair (XX, YY), where
+!> the indices are zero-padded to 2 digits. These files can be loaded by
+!> TwoRdmInit or used for external analysis.
+!>
+!> The 2-RDM is extracted from the full combined orbital space into blocks:
+!>   rdm2Bt(i1, i2, j1, j2) with i1,j1 ∈ orbitals(bt1) and i2,j2 ∈ orbitals(bt2)
   subroutine SaveTwoRdm(coeffs)
     use M_Utils_DataStorage
     use M_Method_Mb
@@ -149,6 +214,19 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Compute 3-body RDM for specified body-type triplet.
+!>
+!> Computes:
+!>   ρ(i1,i2,i3,j1,j2,j3) = ⟨Ψ| a†_{i1,bt1} a†_{i2,bt2} a†_{i3,bt3}
+!>                                a_{j3,bt3} a_{j2,bt2} a_{j1,bt1} |Ψ⟩
+!>
+!> where orbital indices i,j run over the orbitals of the respective body type.
+!>
+!> **Complexity:** O(n₁² n₂² n₃² · nCoeffs) — use for small systems only.
+!>
+!> @param[out] rdm3Bt  6D array (n1×n2×n3×n1×n2×n3) allocated on output
+!> @param[in]  coeffs  CI coefficient vector
+!> @param[in]  bt1,bt2,bt3  Body type indices (1..nBodyTypes)
   subroutine FillRdm3Bt(rdm3Bt, coeffs, bt1, bt2, bt3)
     use M_Method_Mb_OrbBased
 
@@ -193,6 +271,19 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Compute 2-body RDM for specified body-type pair.
+!>
+!> Computes:
+!>   ρ(i1,i2,j1,j2) = ⟨Ψ| a†_{i1,bt1} a†_{i2,bt2} a_{j2,bt2} a_{j1,bt1} |Ψ⟩
+!>
+!> For same body type (bt1 == bt2), this gives the intra-species 2-RDM.
+!> For different body types, this gives the inter-species correlation matrix.
+!>
+!> **Complexity:** O(n₁² n₂² · nCoeffs)
+!>
+!> @param[out] rdm2Bt  4D array (n1×n2×n1×n2) allocated on output
+!> @param[in]  coeffs  CI coefficient vector
+!> @param[in]  bt1,bt2 Body type indices (1..nBodyTypes)
   subroutine FillRdm2Bt(rdm2Bt, coeffs, bt1, bt2)
     use M_Method_Mb_OrbBased
 
@@ -230,6 +321,19 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Compute 1-body RDM for a single body type.
+!>
+!> Computes:
+!>   ρ(i,j) = ⟨Ψ| a†_{i,bt} a_{j,bt} |Ψ⟩
+!>
+!> The diagonal elements ρ(i,i) give orbital occupations; eigenvalues are
+!> natural occupation numbers and eigenvectors are natural orbitals.
+!>
+!> **Complexity:** O(n² · nCoeffs)
+!>
+!> @param[out] rdm1Bt  2D array (n×n) allocated on output
+!> @param[in]  coeffs  CI coefficient vector
+!> @param[in]  bt1     Body type index (1..nBodyTypes)
   subroutine FillRdm1Bt(rdm1Bt, coeffs, bt1)
     use M_Method_Mb_OrbBased
 

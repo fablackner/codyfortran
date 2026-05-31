@@ -2,12 +2,26 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Grid-point orbital initialization backend.
+!> @brief Grid-point (Kronecker δ) orbital initialization backend.
 !>
-!> This module fabricates a backend that initializes orbitals defined directly
-!> on a discrete grid of points (no special structure assumed). Its fabricate
-!> routine configures and connects the generic `M_OrbsInit` procedure pointers
-!> to grid-point specific implementations.
+!> @details
+!> Initializes orbitals as Kronecker δ functions on a generic discrete grid:
+!>
+!>   φ_i(j) = δ_{ij}
+!>
+!> Each orbital is localized at exactly one grid point, with the orbital index
+!> directly mapping to the grid point index.
+!>
+!> This backend is useful for:
+!> - Debugging and testing grid infrastructure
+!> - Building custom localized basis sets
+!> - Direct grid-point representation without physical interpretation
+!>
+!> JSON Configuration
+!> ------------------
+!>   {"orbsInit": {"gridPoint": {}}}
+!>
+!> @note Unlike Lattice/OnSite, this backend does not impose any spatial structure.
 module M_OrbsInit_GridPoint
   use M_Utils_Types
   use M_Utils_NoOpProcedures

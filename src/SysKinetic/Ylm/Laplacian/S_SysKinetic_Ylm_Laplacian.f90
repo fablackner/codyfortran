@@ -2,6 +2,8 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @file S_SysKinetic_Ylm_Laplacian.f90
+!> @brief Implementation submodule for Ylm radial Laplacian fabrication.
 submodule(M_SysKinetic_Ylm_Laplacian) S_SysKinetic_Ylm_Laplacian
 
   implicit none
@@ -9,6 +11,7 @@ submodule(M_SysKinetic_Ylm_Laplacian) S_SysKinetic_Ylm_Laplacian
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Read mass array and dispatch to FinDiff or FEDVR backend.
   module subroutine SysKinetic_Ylm_Laplacian_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -19,7 +22,7 @@ contains
     call Say_Fabricate("sysKinetic.ylm.laplacian")
 
     !------------------------------------
-    ! set values and procedure pointers
+    ! read shared configuration
     !------------------------------------
 
     SysKinetic_Ylm_Laplacian_bodyMass = Json_Get("sysKinetic.ylm.laplacian.bodyMass", [1.0_R64])
@@ -28,7 +31,7 @@ contains
     SysKinetic_bodyTypeIndependentQ = .true.
 
     !------------------------------------
-    ! branch
+    ! dispatch to numerical method
     !------------------------------------
 
     if (Json_GetExistence("sysKinetic.ylm.laplacian.finDiff")) then

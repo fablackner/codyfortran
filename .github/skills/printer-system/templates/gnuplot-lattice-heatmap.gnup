@@ -1,0 +1,25 @@
+# Template: heatmap for lattice density files
+# Expected input layout: time density(site1) density(site2) ... density(siteN)
+
+set terminal pngcairo size 1200,1200 enhanced font ",20"
+set output "plot_lattice_heatmap.png"
+
+set title "Lattice Density Heatmap"
+set xlabel "Time"
+set ylabel "Site"
+set view map
+set ytics 1
+set grid
+
+# Tune these values for your dataset
+nSites = 6
+center = 1.0
+limit  = 0.05
+set cbrange [center-limit:center+limit]
+set palette defined (0 "blue", 1 "white", 2 "red")
+set yrange [0.5:nSites+0.5]
+
+# Flatten columns 2..nSites+1 into triplets: time site value
+parse_cmd(file) = sprintf("< awk '{ for(i=2;i<=%d;i++) print $1, i-1, $i; print \"\"; }' %s", nSites + 1, file)
+
+plot parse_cmd('density.dat') using 1:2:3 with image notitle

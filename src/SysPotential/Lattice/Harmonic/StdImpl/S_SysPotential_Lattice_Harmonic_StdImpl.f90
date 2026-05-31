@@ -2,6 +2,13 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Default numerical implementation for lattice harmonic potential.
+!>
+!> Evaluates a separable 3D harmonic trap on a discrete lattice:
+!>   V(i,j,k) = ½ωₓ(i-x₀)² + ½ωᵧ(j-y₀)² + ½ω_z(k-z₀)²
+!>
+!> The trap center (x₀,y₀,z₀) and frequencies (ωₓ,ωᵧ,ω_z) are read from the
+!> parent module `M_SysPotential_Lattice_Harmonic`.
 submodule(M_SysPotential_Lattice_Harmonic_StdImpl) S_SysPotential_Lattice_Harmonic_StdImpl
 
   implicit none
@@ -15,7 +22,7 @@ contains
     use M_SysPotential
     use M_SysPotential_Lattice
 
-    call Say_Fabricate("cosinusLattice")
+    call Say_Fabricate("sysPotential.lattice.harmonic.stdImpl")
 
     !------------------------------------
     ! set values and procedure pointers
@@ -25,7 +32,11 @@ contains
 
   end subroutine
 
-  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Fill the external potential array with harmonic trap values.
+  !>
+  !> Iterates over all lattice sites and computes V = ½ω²(r-r₀)² for each axis.
+  !> The time and body-type arguments are unused (time-independent, body-type-independent).
   subroutine FillExternalPotential(externalPotential, time, bt_)
     use M_Utils_UnusedVariables
     use M_SysPotential_Lattice_Harmonic

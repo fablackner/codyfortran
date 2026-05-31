@@ -2,10 +2,35 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Softened, damped Yukawa interaction on a linear grid.
+!> @brief Softened Yukawa/screened-Coulomb interaction on linear grids.
 !>
-!> Parameterization of a screened Coulomb/Yukawa-like kernel with optional
-!> softening near the origin and exponential damping at large distances.
+!> @details Implements a flexible interaction kernel of the form:
+!>    w(r) = strength * exp(-dampening * r) / (sqrt(r² + softening1²) + softening2)
+!>
+!> This kernel interpolates between several physically relevant limits:
+!>   - Pure Coulomb: dampening=0, softening1→0, softening2=0 gives 1/r
+!>   - Yukawa: dampening>0, softening→0 gives exp(-κr)/r (screened)
+!>   - Soft-core: softening1>0 regularizes the r→0 singularity
+!>   - Contact: large dampening localizes interaction to small r
+!>
+!> **JSON configuration:**
+!> ```json
+!> "sysInteraction": {
+!>   "linear": {
+!>     "softYukawa": {
+!>       "strength": 1.0,
+!>       "softening1": 1.0,
+!>       "softening2": 0.0,
+!>       "dampening": 0.0,
+!>       "stdImpl": {}
+!>     }
+!>   }
+!> }
+!> ```
+!>
+!> **Implementations:**
+!>   - `stdImpl`: Direct convolution O(N²), exact but slow for large grids
+!>   - `fftw`: FFT-based convolution O(N log N), requires FFTW3
 module M_SysInteraction_Linear_SoftYukawa
   use M_Utils_Types
 

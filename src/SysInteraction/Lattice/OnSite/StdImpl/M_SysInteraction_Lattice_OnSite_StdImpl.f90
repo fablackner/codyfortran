@@ -2,10 +2,11 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Reference implementation for the lattice on-site interaction.
+!> @brief Reference implementation for on-site lattice interaction.
 !>
-!> Provides a straightforward, portable realization of the on-site model. More
-!> optimized or specialized variants can coexist alongside this default.
+!> @details Provides the straightforward realization: V(i) = U * ρ(i).
+!> The potential at each site is simply the coupling strength times the
+!> local density, implementing the Hubbard-U term directly.
 module M_SysInteraction_Lattice_OnSite_StdImpl
   use M_Utils_Types
 

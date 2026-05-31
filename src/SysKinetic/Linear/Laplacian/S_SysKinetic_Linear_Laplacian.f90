@@ -2,6 +2,8 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @file S_SysKinetic_Linear_Laplacian.f90
+!> @brief Implementation submodule for linear Laplacian fabrication.
 submodule(M_SysKinetic_Linear_Laplacian) S_SysKinetic_Linear_Laplacian
 
   implicit none
@@ -9,6 +11,7 @@ submodule(M_SysKinetic_Linear_Laplacian) S_SysKinetic_Linear_Laplacian
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Read mass array and dispatch to FinDiff or Fourier backend.
   module subroutine SysKinetic_Linear_Laplacian_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -19,7 +22,7 @@ contains
     call Say_Fabricate("sysKinetic.linear.laplacian")
 
     !------------------------------------
-    ! set values and procedure pointers
+    ! read shared configuration
     !------------------------------------
 
     SysKinetic_Linear_Laplacian_bodyMass = Json_Get("sysKinetic.linear.laplacian.bodyMass", [1.0_R64])
@@ -28,7 +31,7 @@ contains
     SysKinetic_bodyTypeIndependentQ = .true.
 
     !------------------------------------
-    ! branch
+    ! branch to numerical method
     !------------------------------------
 
     if (Json_GetExistence("sysKinetic.linear.laplacian.finDiff")) then
@@ -38,7 +41,7 @@ contains
       call SysKinetic_Linear_Laplacian_Fourier_Fabricate
 
     else
-      error stop "sysKinetic.linear.laplacian is missing one of: finDiff"
+      error stop "sysKinetic.linear.laplacian is missing one of: finDiff, fourier"
     end if
   end subroutine
 

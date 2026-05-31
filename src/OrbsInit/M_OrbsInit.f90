@@ -2,24 +2,57 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Central API for orbital initialization.
+!> @brief Central API for orbital initialization in the CodyFortranRDM framework.
 !>
+!> @details
 !> This module exposes procedure pointers that higher-level components use to
 !> initialize single orbitals or full orbital sets on a chosen grid/representation
 !> (linear, lattice, grid-point, Ylm, file-load, ...). The concrete procedures
 !> are selected and wired at runtime by `OrbsInit_Fabricate`, typically based on
 !> user configuration (e.g., JSON input) and problem geometry.
 !>
-!> Contract
-!> - `OrbsInit_Setup()` prepares module-local state (parameters, masks, buffers).
-!> - `OrbsInit_Initialize(orbs)` fills a 2D array of orbitals in-place.
-!> - `OrbsInit_InitializeOrb(orb, ind, bt_)` initializes one orbital vector by index
-!>   and optional body-type/species.
+!> Architecture
+!> ------------
+!> The module follows the Interface/Implementation split pattern used throughout
+!> CodyFortranRDM. This file (M_OrbsInit.f90) defines the public interface via
+!> abstract interfaces and procedure pointers. The companion submodule
+!> (S_OrbsInit.f90) implements the branching logic in `OrbsInit_Fabricate`.
+!>
+!> Available Backends
+!> ------------------
+!> - **Linear**    : 1D continuous grids (harmonic oscillator eigenstates, etc.)
+!> - **Lattice**   : Discrete 3D lattice sites (on-site δ-orbitals for Hubbard models)
+!> - **GridPoint** : Generic discrete grid (Kronecker δ basis)
+!> - **Ylm**       : Spherical harmonics basis (hydrogen-like radial functions)
+!> - **Load**      : File-based initialization from binary orbital data
+!>
+!> Contract (Public API)
+!> ---------------------
+!> - `OrbsInit_Fabricate()` : Reads JSON config, selects backend, binds pointers.
+!> - `OrbsInit_Setup()`     : Prepares module-local state (parameters, buffers).
+!> - `OrbsInit_Initialize(orbs)` : Fills a 2D array of orbitals (nGrid × nOrbs).
+!> - `OrbsInit_InitializeOrb(orb, ind, bt_)` : Initializes a single orbital vector.
+!>
+!> Typical Usage Sequence
+!> ----------------------
+!> 1. call OrbsInit_Fabricate   ! JSON-driven backend selection
+!> 2. call OrbsInit_Setup       ! Allocate buffers, precompute constants
+!> 3. call OrbsInit_Initialize(orbs)  ! Fill orbital array
+!>
+!> JSON Configuration Examples
+!> ---------------------------
+!> Linear/Harmonic:    {"orbsInit": {"linear": {"harmonic": {"omega": 1.0}}}}
+!> Lattice/OnSite:     {"orbsInit": {"lattice": {"onSite": {}}}}
+!> Ylm/HydrogenLike:   {"orbsInit": {"ylm": {"hydrogenLike": {"charge": 1.0,
+!>                                    "n": [1,2], "l": [0,0], "m": [0,0]}}}}
+!> Load from file:     {"orbsInit": {"load": {}}}
 !>
 !> Notes
+!> -----
 !> - All arrays are assumed contiguous and column-major (Fortran default).
-!> - Normalization and phase conventions are backend-specific but should be
-!>   consistent across a single run once fabricated.
+!> - Normalization is performed via Grid_InnerProduct after raw initialization.
+!> - Phase conventions are backend-specific but consistent within a single run.
+!> - Body types (bt_) enable species-dependent initialization (e.g., spin-up/down).
 module M_OrbsInit
   use M_Utils_Types
   use M_Utils_NoOpProcedures

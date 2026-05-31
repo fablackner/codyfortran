@@ -2,22 +2,51 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Cosine-profile absorber for a linear grid.
+!> @brief Cosine-profile absorber for a 1D linear grid.
 !>
-!> This module implements a smooth, reflection-minimizing mask based on a
-!> cosine profile for both ends of a 1D linear grid. The mask is unity in the
-!> interior region and decays smoothly to zero inside boundary layers of a
-!> configurable thickness, thereby absorbing wavefunctions and reducing
-!> spurious reflections.
+!> @details
+!> Implements a smooth, reflection-minimizing mask function based on a cosine
+!> profile for both ends of a 1D linear grid. The mask is unity in the interior
+!> region and decays smoothly to zero inside boundary layers of configurable
+!> thickness, thereby absorbing wavefunctions and reducing spurious reflections.
 !>
-!> Conceptually, the mask can be expressed as
-!> $M(x) = \cos^n\!\left(\tfrac{\pi}{2}\,\xi(x)\right)$ for $0\le \xi \le 1$,
-!> with $\xi(x)$ a linear mapping from the start of the absorbing layer to the
-!> boundary, and $n$ an integer order controlling the taper steepness. Outside
-!> the absorbing layers $M(x)=1$ and at the boundaries $M(x)=0$.
+!> @par Mathematical Form
+!> The mask function is defined as:
 !>
-!> This module only installs the implementation by wiring procedure pointers in
-!> the parent `M_Absorber` module; it does not expose a new public API.
+!>   M(x) = cos^(1/n)(π/2 · ξ(x))   for  |x| ≥ onset
+!>        = 1                        for  |x| < onset
+!>
+!> where:
+!> - `onset` is the coordinate where absorption begins
+!> - `n` is the "order" parameter controlling taper steepness (larger n = sharper)
+!> - ξ(x) = (|x| - onset) / (x_max - onset) is the normalized position within
+!>   the absorbing layer, mapping [onset, x_max] → [0, 1]
+!>
+!> At the boundaries (ξ=1), M → 0. In the interior (|x| < onset), M = 1.
+!>
+!> @note The exponent 1/n (not n) is used, so **larger order values produce
+!>       sharper transitions** (less gradual). Order 1 gives pure cos(πξ/2).
+!>
+!> @par JSON Configuration
+!> @code{.json}
+!> {
+!>   "absorber": {
+!>     "linear": {
+!>       "cosinus": {
+!>         "onset": 80.0,
+!>         "order": 6
+!>       }
+!>     }
+!>   }
+!> }
+!> @endcode
+!>
+!> | Parameter | Type    | Default | Description                                   |
+!> |-----------|---------|---------|-----------------------------------------------|
+!> | onset     | real    | 100.0   | Coordinate where absorption begins (|x| ≥ onset) |
+!> | order     | integer | 6       | Exponent denominator (larger = sharper taper) |
+!>
+!> @see M_Absorber, M_Absorber_Linear
 module M_Absorber_Linear_Cosinus
   use M_Utils_Types
 
@@ -28,11 +57,13 @@ module M_Absorber_Linear_Cosinus
   !=============================================================================
 
   interface
-    !> Install the cosine-profile linear absorber and read its configuration.
+    !> @brief Install the cosine-profile linear absorber.
     !>
-    !> Binds `M_Absorber`'s procedure pointers to this cosine implementation and
-    !> reads user-provided parameters such as the absorbing-layer thickness and
-    !> the power/order of the cosine taper (n).
+    !> @details
+    !> Binds `M_Absorber`'s procedure pointers to this implementation and reads
+    !> configuration parameters (onset, order) from JSON.
+    !>
+    !> @post `Absorber_Setup` → `Setup`, `Absorber_ApplyAbsorber` → `ApplyAbsorber`
     module subroutine Absorber_Linear_Cosinus_Fabricate
     end subroutine
   end interface

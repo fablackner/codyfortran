@@ -2,12 +2,35 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> TDHx backend hooks for the ground-state solver.
+!> @brief TDHx (Time-Dependent Hartree–Exchange) backend interface module.
 !>
-!> This module declares the TDHx-specific procedure pointers and factory
-!> routine used to wire a concrete implementation. It does not contain
-!> numerical kernels; those live in implementation modules that call the
-!> corresponding `..._Fabricate` routine to bind the pointers exported here.
+!> @details
+!> Provides TDHx-specific procedure pointers for the ground-state solver. TDHx
+!> is a mean-field method that constructs an effective single-particle Fock
+!> operator from the Hartree (direct) and Fock (exchange) potentials.
+!>
+!> This module declares the interface; concrete implementations (StdImpl, YlmOpt)
+!> bind the pointers via their `_Fabricate` routines.
+!>
+!> ## SCF Iteration (TDHx)
+!>
+!> Each iteration builds and diagonalizes the Fock operator:
+!>
+!>   F̂ = T̂ + V̂_ext + Ĵ − K̂
+!>
+!> where:
+!>   - T̂ = kinetic energy operator
+!>   - V̂_ext = external potential (e.g., nuclear Coulomb)
+!>   - Ĵ = Hartree (direct) potential: Ĵφ_i = (∑_j ∫|φ_j|²/|r-r'|) φ_i
+!>   - K̂ = Fock (exchange) operator: K̂φ_i = ∑_j (∫φ_j*(r')φ_i(r')/|r-r'|) φ_j(r)
+!>
+!> ## Available Implementations
+!>
+!> - **stdImpl**: General grid; diagonalizes full nPoints×nPoints Fock matrix
+!> - **ylmOpt**: Spherical harmonics; exploits angular symmetry to diagonalize
+!>               smaller nRadial×nRadial matrices per l-channel
+!>
+!> @see M_GroundSolver, M_DiagonalizerList
 module M_GroundSolver_Tdhx
   use M_Utils_Types
 
@@ -18,10 +41,18 @@ module M_GroundSolver_Tdhx
   !=============================================================================
 
   interface
-    !> Bind TDHx-specific callbacks used by the ground-state solver.
+    !> @brief Bind TDHx-specific callbacks for the ground-state solver.
     !>
-    !> Implementations of this routine assign `GroundSolver_Tdhx_HartreeFockAction`
-    !> to the backend function
+    !> @details
+    !> Reads `groundSolver.tdhx.*` from JSON and dispatches to either:
+    !>   - `stdImpl`: Standard implementation for general grids
+    !>   - `ylmOpt`: Optimized implementation for Ylm (spherical) grids
+    !>
+    !> Assigns `GroundSolver_Tdhx_HartreeFockAction` to the selected backend's
+    !> Fock operator application routine.
+    !>
+    !> @pre JSON configuration loaded; `groundSolver.tdhx` key exists
+    !> @post `GroundSolver_Tdhx_HartreeFockAction` is bound
     module subroutine GroundSolver_Tdhx_Fabricate
     end subroutine
   end interface
@@ -30,22 +61,30 @@ module M_GroundSolver_Tdhx
   ! module procedures pointers
   !=============================================================================
 
-  !> Pointer to the TDHx Hartree–Fock action used in one iteration.
+  !> @brief Pointer to the TDHx Fock operator action (matrix-vector product).
+  !>
+  !> This callback computes F̂·φ for the iterative diagonalizer (e.g., ARPACK).
   procedure(I_GroundSolver_Tdhx_HartreeFockAction), pointer :: GroundSolver_Tdhx_HartreeFockAction
   abstract interface
-    !> Compute the TDHx Hartree–Fock action on an orbital.
+    !> @brief Apply the TDHx Fock operator to an orbital.
     !>
-    !> Given an input orbital `orb`, compute `dOrb = A_TDHx(orb, time)`, where
-    !> `A_TDHx` denotes the effective (model-dependent) action used by the
-    !> ground-state iteration. The exact form (e.g., potentials, exchange) is
-    !> provided by the backend.
+    !> @details
+    !> Computes dOrb = F̂ · orb = (T̂ + V̂_ext + Ĵ − K̂) · orb
+    !>
+    !> This is used as the `ApplyMatOnVec` callback for iterative eigensolvers
+    !> (DiagonalizerList). The Hartree potential Ĵ is precomputed and stored;
+    !> the exchange term K̂ is computed on-the-fly for each orbital.
+    !>
+    !> @param[out] dOrb  Result of F̂ applied to orb (same dimension as orb)
+    !> @param[in]  orb   Input orbital/trial vector
+    !> @param[in]  time  Time parameter (typically 0 for ground state)
     subroutine I_GroundSolver_Tdhx_HartreeFockAction(dOrb, orb, time)
       import :: R64
-      !> Output action applied to the orbital.
+      !> Output: Fock operator applied to the orbital, F̂·orb
       complex(R64), intent(out), contiguous, target :: dOrb(:)
-      !> Input orbital/state vector.
+      !> Input orbital/trial vector
       complex(R64), intent(in), contiguous, target :: orb(:)
-      !> Backend-defined step parameter (physical or imaginary time).
+      !> Time parameter (passed through to potential routines)
       real(R64), intent(in) :: time
     end subroutine
   end interface

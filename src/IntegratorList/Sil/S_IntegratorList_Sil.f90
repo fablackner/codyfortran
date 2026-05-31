@@ -2,6 +2,35 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @file S_IntegratorList_Sil.f90
+!> @brief Short Iterative Lanczos (SIL) propagator implementation.
+!>
+!> @details
+!> Approximates exp(−i Δt Ĥ) |ψ⟩ using a short Krylov subspace built via
+!> the symmetric Lanczos process. The method is memory-efficient and well-
+!> suited for Hermitian generators.
+!>
+!> ## Algorithm Outline
+!>
+!> 1. Build a small orthonormal Lanczos basis {v₁, v₂, …, v_m} with
+!>    tridiagonal projection T_m.
+!> 2. Diagonalize T_m → eigenvalues λ_j, eigenvectors U.
+!> 3. Compute exp(−i Δt T_m) via exp(−i Δt λ_j) on the diagonal.
+!> 4. Map back: ψ_new = ||ψ|| · V_m · U · exp(−i Δt Λ) · U^† · e₁.
+!>
+!> ## Adaptive Sub-Stepping
+!>
+!> If the error estimate (based on the last Lanczos coefficient) exceeds
+!> `tolerance`, the step is halved and retried up to `maxRestarts` times.
+!>
+!> ## Properties
+!>
+!> - **Accuracy**: Controlled by Krylov dimension and adaptive restarts.
+!> - **Stability**: Exact for time-independent Hermitian Hamiltonians.
+!> - **Cost**: O(m) matrix-vector products; m typically 16–32.
+!>
+!> @note Debug output is controlled by the `debugMode` parameter. Set to
+!>   `.false.` for production runs.
 submodule(M_IntegratorList_Sil) S_IntegratorList_Sil
 
   implicit none
@@ -47,20 +76,31 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Advance the state using the Short Iterative Lanczos method.
+  !>
+  !> Builds a Krylov subspace via symmetric Lanczos, diagonalizes the
+  !> tridiagonal projection, and applies the exponential in the reduced basis.
+  !> Automatically sub-steps if the error estimate exceeds tolerance.
+  !>
+  !> @param[inout] this   The SIL integrator instance.
+  !> @param[inout] state  Complex state vector (modified in-place).
+  !> @param[in]    t0     Starting time.
+  !> @param[in]    t1     Target ending time.
   module subroutine Integrate(this, state, t0, t1)
     use M_Utils_LapackLib, only: LapackLib_DiagonalizeGeneric
     use M_Utils_UnusedVariables
 
     class(T_IntegratorList_E_Sil), intent(inout) :: this
     complex(R64), intent(inout), contiguous :: state(:)
-    real(R64), intent(in) :: t0       ! Starting time
-    real(R64), intent(in) :: t1       ! Target ending time
+    real(R64), intent(in) :: t0
+    real(R64), intent(in) :: t1
 
+    ! Algorithm parameters
     real(R64), parameter :: tolerance = 1.0e-10_R64
     real(R64), parameter :: zeroThreshold = 1.0e-14_R64
     integer, parameter :: maxKrylovDimDefault = 32
     integer, parameter :: maxRestarts = 8
-    logical, parameter :: debugMode = .true.
+    logical, parameter :: debugMode = .false.  ! Set .true. for verbose output
 
     complex(R64), allocatable :: workState(:), trialState(:)
     real(R64) :: dtTotal, dtRemaining, dtStep, tCurrent, errorEstimate
@@ -145,6 +185,14 @@ contains
 
   contains
 
+    !> Perform one Lanczos step: build Krylov basis, diagonalize, apply exp.
+    !>
+    !> @param[in]  stateIn   Input state vector.
+    !> @param[in]  tBase     Base time for derivative evaluation.
+    !> @param[in]  dt        Time step to propagate.
+    !> @param[out] stateOut  Output state after propagation.
+    !> @param[out] err_est   Estimated truncation error.
+    !> @param[out] converged True if error is below tolerance.
     subroutine PerformLanczosStep(stateIn, tBase, dt, stateOut, err_est, converged)
       complex(R64), intent(in), contiguous :: stateIn(:)
       real(R64), intent(in) :: tBase

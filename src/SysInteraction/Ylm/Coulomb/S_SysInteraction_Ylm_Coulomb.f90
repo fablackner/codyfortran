@@ -2,6 +2,11 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Implementation submodule for Ylm Coulomb interaction.
+!>
+!> @details Reads the coupling strength and dispatches to the selected radial
+!> Poisson solver. Sets `mIndependentQ = .true.` since 1/r is spherically
+!> symmetric (the Vₗₘ depends only on l, not m).
 submodule(M_SysInteraction_Ylm_Coulomb) S_SysInteraction_Ylm_Coulomb
 
   implicit none
@@ -9,6 +14,9 @@ submodule(M_SysInteraction_Ylm_Coulomb) S_SysInteraction_Ylm_Coulomb
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Fabricate the Coulomb interaction for Ylm grids.
+  !>
+  !> Reads `strength` parameter (default 1.0) and selects the radial solver.
   module subroutine SysInteraction_Ylm_Coulomb_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -28,7 +36,7 @@ contains
     SysInteraction_Ylm_mIndependentQ = .true.
 
     !------------------------------------
-    ! branch
+    ! branch: select radial Poisson solver
     !------------------------------------
 
     if (Json_GetExistence("sysInteraction.ylm.coulomb.stdImpl")) then
@@ -44,7 +52,7 @@ contains
       call SysInteraction_Ylm_Coulomb_TwoScan_Fabricate
 
     else
-      error stop "sysInteraction.ylm.coulomb is missing one of: stdImpl, fullEq, blockEq"
+      error stop "sysInteraction.ylm.coulomb is missing one of: stdImpl, fullEq, blockEq, twoScan"
     end if
 
   end subroutine

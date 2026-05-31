@@ -2,6 +2,16 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Dispatch submodule for ground-state solver backend selection.
+!>
+!> @details
+!> Reads the JSON configuration under `groundSolver.*` and dispatches to the
+!> appropriate backend. Currently supported:
+!>
+!>   - `groundSolver.tdhx`: Time-Dependent Hartree–Exchange (TDHx) method
+!>
+!> This is the only file that needs modification when adding new top-level
+!> ground-state solver backends.
 submodule(M_GroundSolver) S_GroundSolver
 
   implicit none

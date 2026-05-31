@@ -2,20 +2,54 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Implementation submodule for the Hubbard coefficient backend.
+!>
+!> This submodule contains:
+!> - `Coeffs_Hubbard_Fabricate`: Backend selection and pointer binding
+!> - `Setup`: Build bit-encoded configurations and hopping graphs
+!> - `SetupConfigurations`: Enumerate configs via GSL combination generator
+!> - `SetupHamiltonian`: Precompute hopping connectivity and interaction values
+!> - `ExciteBits`: Apply creation/annihilation to bit pattern with sign tracking
+!> - `ApplyExcitation`: Transform CI vector via ladder operators
+!>
+!> # Implementation Details
+!>
+!> **Configuration enumeration:** Uses GSL's combination iterator to generate
+!> all C(n,k) ways to place k particles in n sites. Each combination is
+!> converted to a bit pattern for O(1) operations.
+!>
+!> **Hopping graph construction:** For each (source, target) site pair with
+!> nonzero h1 matrix element, check if the hop is valid (source occupied,
+!> target empty). If so, store target config index and weight (including
+!> fermionic sign from bit counting).
+!>
+!> **Fermionic sign:** When moving particle from site i to site j, count
+!> occupied sites between i and j. Sign = (-1)^count. Implemented via
+!> sequential bit testing in `ExciteBits`.
 submodule(M_Coeffs_Hubbard) S_Coeffs_Hubbard
 
   implicit none
 
   !=============================================================================
-  ! local data
+  ! local data: inverse lookup tables for bit patterns
   !=============================================================================
 
+  !> Inverse lookup: bit pattern → config index (spin up)
   integer(I32), allocatable :: ConfigurationsFromIndexUP(:)
+
+  !> Inverse lookup: bit pattern → config index (spin down)
   integer(I32), allocatable :: ConfigurationsFromIndexDN(:)
 
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Bind Hubbard backend procedures and select spin-symmetry variant.
+!>
+!> Computes per-spin configuration counts via binomial coefficients:
+!>   nCoeffsUP = C(nOrbs, nBodiesUp)
+!>   nCoeffsDN = C(nOrbs, nBodiesDn)
+!>
+!> Then delegates to one of the spin-symmetry sub-backends based on JSON.
   module subroutine Coeffs_Hubbard_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -30,17 +64,21 @@ contains
     call Say_Fabricate("coeffs.hubbard")
 
     !------------------------------------
-    ! set values and procedure pointers
+    ! Compute per-spin configuration counts
     !------------------------------------
 
     Coeffs_Hubbard_nCoeffsUP = SfGslLib_Binomial(Method_Mb_OrbBased_nOrbs(1), Method_Mb_nBodies(1))
     Coeffs_Hubbard_nCoeffsDN = SfGslLib_Binomial(Method_Mb_OrbBased_nOrbs(2), Method_Mb_nBodies(2))
 
+    !------------------------------------
+    ! Common procedure pointers
+    !------------------------------------
+
     Coeffs_Setup => Setup
     Coeffs_ApplyExcitation => ApplyExcitation
 
     !------------------------------------
-    ! branch
+    ! Select spin-symmetry variant from JSON
     !------------------------------------
 
     if (Json_GetExistence("coeffs.hubbard.noSpinSym")) then
@@ -59,6 +97,13 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Initialize Hubbard backend data structures.
+!>
+!> Must be called after Fabricate. Builds:
+!> 1. Bit-encoded configuration arrays
+!> 2. Inverse lookup tables (bit pattern → index)
+!> 3. Hopping connectivity graphs
+!> 4. Precomputed interaction values
   subroutine Setup
     use M_Utils_Say
 
@@ -70,6 +115,13 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Enumerate all configurations and build bit patterns + inverse lookup.
+!>
+!> Uses GSL combination generator to enumerate all ways to place N particles
+!> in M sites. Each combination is converted to a bit pattern where bit j=1
+!> means site j is occupied.
+!>
+!> Inverse lookup tables allow O(1) conversion: bit pattern → config index.
   subroutine SetupConfigurations
     use M_Utils_CombinationGslLib
     use M_Grid
@@ -81,22 +133,20 @@ contains
     allocate (Coeffs_Hubbard_bitcodesUP(Coeffs_Hubbard_nCoeffsUP))
     allocate (Coeffs_Hubbard_bitcodesDN(Coeffs_Hubbard_nCoeffsDN))
 
+    ! Inverse lookup: bit pattern → config index (needs 2^nSites entries)
     allocate (ConfigurationsFromIndexUP(0:2**(Grid_nPoints)))
     allocate (ConfigurationsFromIndexDN(0:2**(Grid_nPoints)))
 
+    !-------------------------------------------------------------------------------------
+    ! Spin-up configurations
+    !-------------------------------------------------------------------------------------
+
     allocate (collect(Method_Mb_nBodies(1), Coeffs_Hubbard_nCoeffsUP))
 
-    !-------------------------------------------------------------------------------------
-    ! collect(i, iCoeff) is the position of the i-th particle in configuration iCoeff
-    !-------------------------------------------------------------------------------------
-
+    ! collect(i, iCoeff) = position of i-th particle in configuration iCoeff
     call CombinationGslLib_CombiNoRepeat(collect, Grid_nPoints)
 
-    !-------------------------------------------------------------------------------------
-    ! Coeffs_Hubbard_bitcodesUP(iCoeff) IndexFromConfigurationss the distribution of particles in configuration iCoeff
-    ! the binary digit of Coeffs_Hubbard_bitcodesUP(iCoeff) is equal 1 for particles and 0 for holes
-    !-------------------------------------------------------------------------------------
-
+    ! Convert particle positions to bit patterns
     Coeffs_Hubbard_bitcodesUP(:) = 0
     do j = 1, Method_Mb_nBodies(1)
       do iCoeff = 1, Coeffs_Hubbard_nCoeffsUP
@@ -104,11 +154,7 @@ contains
       end do
     end do
 
-    !-------------------------------------------------------------------------------------
-    ! ConfigurationsFromIndexUP allows to calculate the configuration index iCoeff associated
-    ! with a particluar distribution    ...see function inverse
-    !-------------------------------------------------------------------------------------
-
+    ! Build inverse lookup table
     ConfigurationsFromIndexUP(:) = 0
     do iCoeff = 1, Coeffs_Hubbard_nCoeffsUP
       ConfigurationsFromIndexUP(Coeffs_Hubbard_bitcodesUP(iCoeff)) = iCoeff
@@ -117,7 +163,7 @@ contains
     deallocate (collect)
 
     !-------------------------------------------------------------------------------------
-    ! repeat for spin down
+    ! Spin-down configurations (same procedure)
     !-------------------------------------------------------------------------------------
 
     allocate (collect(Method_Mb_nBodies(2), Coeffs_Hubbard_nCoeffsDN))
@@ -140,6 +186,16 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Build hopping connectivity graphs and precompute interaction values.
+!>
+!> For each source configuration i and target site pair (i1,j1) with h1(i1,j1)≠0:
+!> - Check if hop is valid: site i1 occupied and site j1 empty
+!> - If valid, compute target config via `ExciteBits` (handles fermionic sign)
+!> - Store in sparse format: hoppUP(k,i), weightUP(k,i), nConnectedUP(i)
+!>
+!> Interaction values are precomputed for all (up,dn) config pairs:
+!>   interactionValues(bits) = U × (number of doubly occupied sites)
+!> where bits = bitcodesUP(i) AND bitcodesDN(j).
   subroutine SetupHamiltonian
     use M_Grid
     use M_Grid_Lattice
@@ -156,12 +212,11 @@ contains
     real(R64), allocatable :: dnTmp(:)
     real(R64) :: interactionStrength, onSite
 
-    ! Make sure Method_Mb_OrbBased_h1 is filled
+    ! Validate prerequisites
     if (.not. allocated(Method_Mb_OrbBased_h1)) then
       error stop "Method_Mb_OrbBased_h1 is not allocated, please call Method_Mb_OrbBased_FillH1 first"
     end if
 
-    ! Make sure Method_Mb_OrbBased_h2 is filled
     if (.not. allocated(Method_Mb_OrbBased_h2)) then
       error stop "Method_Mb_OrbBased_h2 is not allocated, please call Method_Mb_OrbBased_FillH2 first"
     end if
@@ -169,44 +224,38 @@ contains
     allocate (Coeffs_Hubbard_nConnectedUP(Coeffs_Hubbard_nCoeffsUP))
     allocate (Coeffs_Hubbard_NConnectedDN(Coeffs_Hubbard_nCoeffsDN))
 
+    ! Count active dimensions for array sizing
     nDim = 0
     if (Grid_Lattice_xSize > 1) nDim = nDim + 1
     if (Grid_Lattice_ySize > 1) nDim = nDim + 1
     if (Grid_Lattice_zSize > 1) nDim = nDim + 1
 
+    ! Max hops per config: nParticles × nDimensions × 2 (forward/backward)
     allocate (Coeffs_Hubbard_hoppUP(Method_Mb_nBodies(1) * nDim * 2, Coeffs_Hubbard_nCoeffsUP))
     allocate (Coeffs_Hubbard_hoppDN(Method_Mb_nBodies(2) * nDim * 2, Coeffs_Hubbard_nCoeffsDN))
 
     allocate (Coeffs_Hubbard_weightUP(Method_Mb_nBodies(1) * nDim * 2, Coeffs_Hubbard_nCoeffsUP))
     allocate (Coeffs_Hubbard_weightDN(Method_Mb_nBodies(2) * nDim * 2, Coeffs_Hubbard_nCoeffsDN))
 
-    ! Allocate arrays for onsite interaction
     allocate (Coeffs_Hubbard_interactionValues(2**Grid_nPoints))
 
     allocate (upTmp(Method_Mb_nBodies(1) * nDim * 2))
     allocate (dnTmp(Method_Mb_nBodies(1) * nDim * 2))
 
     !-------------------------------------------------------------------------------------
-    ! calculate the configurations that are connected by hopping of one of the particles
-    ! this allows for an efficient calculation of the kinetic part in the hamiltonian
+    ! Build hopping connectivity for each (source, target) pair with nonzero h1
     !-------------------------------------------------------------------------------------
 
     Coeffs_Hubbard_nConnectedUP(:) = 0
     Coeffs_Hubbard_nConnectedDN(:) = 0
 
-    ! This assumes the orbs are in position states!
     Do i1 = 1, Grid_nPoints
       Do j1 = 1, Grid_nPoints
-        ! Skip if there's no hopping between these sites.
         if (abs(Method_Mb_OrbBased_h1(i1, j1)) < 1e-15_R64) cycle
 
-        !-------------------------------------------------------------------------------------
-        ! calculate number of possible hoppings for each spin UP configuration
-        ! Coeffs_Hubbard_nConnectedUP(i1) = number of configurations that can be reached by hoping
-        ! Coeffs_Hubbard_hoppUP(i1,i) = configurations that can be reached from configuration i1 (index i)
-        ! Coeffs_Hubbard_weightUP(i1,i) = matrix element for the hopping
-        !-------------------------------------------------------------------------------------
-
+        !---------------------------------------------------------------------------
+        ! Spin-up hopping
+        !---------------------------------------------------------------------------
         do iCoeff = 1, Coeffs_Hubbard_nCoeffsUP
           bits = Coeffs_Hubbard_bitcodesUP(iCoeff)
 
@@ -216,17 +265,13 @@ contains
           Coeffs_Hubbard_nConnectedUP(iCoeff) = Coeffs_Hubbard_nConnectedUP(iCoeff) + 1
           count = Coeffs_Hubbard_nConnectedUP(iCoeff)
 
-          ! save the configuration that can be reached
           Coeffs_Hubbard_hoppUP(count, iCoeff) = ConfigurationsFromIndexUP(abs(tbits))
-          ! Use the precalculated one-body Hamiltonian matrix element
           Coeffs_Hubbard_weightUP(count, iCoeff) = real(Method_Mb_OrbBased_h1(i1, j1) * sign(1_I64, tbits), kind=R64)
-
         end do
 
-        !-------------------------------------------------------------------------------------
-        ! repeat for spin down
-        !-------------------------------------------------------------------------------------
-
+        !---------------------------------------------------------------------------
+        ! Spin-down hopping (same procedure)
+        !---------------------------------------------------------------------------
         do iCoeff = 1, Coeffs_Hubbard_nCoeffsDN
           bits = Coeffs_Hubbard_bitcodesDN(iCoeff)
 
@@ -236,75 +281,73 @@ contains
           Coeffs_Hubbard_NConnectedDN(iCoeff) = Coeffs_Hubbard_NConnectedDN(iCoeff) + 1
           count = Coeffs_Hubbard_NConnectedDN(iCoeff)
 
-          ! save the configuration that can be reached
           Coeffs_Hubbard_hoppDN(count, iCoeff) = ConfigurationsFromIndexDN(abs(tbits))
-          ! Use the precalculated one-body Hamiltonian matrix element
           Coeffs_Hubbard_weightDN(count, iCoeff) = real(Method_Mb_OrbBased_h1(i1, j1) * sign(1_I64, tbits), kind=R64)
-
         end do
       end do
     end do
 
+    ! Sort hopping arrays for cache-friendly access during Hamiltonian application
     do iCoeff = 1, Coeffs_Hubbard_nCoeffsUP
-
       call Combinatorics_sortintegerarray(Coeffs_Hubbard_hoppUP(:, iCoeff), Coeffs_Hubbard_nConnectedUP(iCoeff), permut_=permut)
-
       upTmp(:) = Coeffs_Hubbard_weightUP(:, iCoeff)
-
       do k = 1, Coeffs_Hubbard_nConnectedUP(iCoeff)
         Coeffs_Hubbard_weightUP(k, iCoeff) = upTmp(permut(k))
       end do
-
     end do
 
     do iCoeff = 1, Coeffs_Hubbard_nCoeffsDN
-
       call Combinatorics_sortintegerarray(Coeffs_Hubbard_hoppDN(:, iCoeff), Coeffs_Hubbard_NConnectedDN(iCoeff), permut_=permut)
-
       dnTmp(:) = Coeffs_Hubbard_weightDN(:, iCoeff)
-
       do k = 1, Coeffs_Hubbard_NConnectedDN(iCoeff)
         Coeffs_Hubbard_weightDN(k, iCoeff) = dnTmp(permut(k))
       end do
-
     end do
 
     !-------------------------------------------------------------------------------------
-    ! Calculate the onsite interaction for each pair of up/down configurations
-    ! by finding doubly occupied sites (bitwise AND of up and down configurations)
+    ! Precompute on-site interaction for all (up,dn) configuration pairs
     !-------------------------------------------------------------------------------------
 
     do iUp = 1, Coeffs_Hubbard_nCoeffsUP
       do iDn = 1, Coeffs_Hubbard_nCoeffsDN
-        ! Perform bitwise AND to find doubly occupied sites
+        ! Doubly occupied sites = bitwise AND of up and down patterns
         interactionBits = iand(Coeffs_Hubbard_bitcodesUP(iUp), Coeffs_Hubbard_bitcodesDN(iDn))
 
-        ! Calculate interaction value based on the doubly occupied sites
         interactionStrength = 0.0_R64
-
-        ! For each bit position (site), check if it's doubly occupied
         do iSite = 1, Grid_nPoints
           bitpos = iSite - 1
-
-          ! If the bit is set (site is doubly occupied)
           if (btest(interactionBits, bitpos)) then
-            ! Add the onsite interaction from h2 matrix for this site
             onSite = 2.0_R64 * real(Method_Mb_OrbBased_h2(iSite, iSite + Grid_nPoints, iSite, iSite + Grid_nPoints), kind=R64)
             interactionStrength = interactionStrength + onSite
           end if
         end do
 
-        ! Store the interaction strength for this pair of configurations
         Coeffs_Hubbard_interactionValues(interactionBits) = interactionStrength
-
       end do
-
     end do
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+!> Apply ladder operators to a bit pattern, computing fermionic sign.
+!>
+!> Transforms `bits` by:
+!> 1. Annihilating particles at sites in `destroys` (right to left order)
+!> 2. Creating particles at sites in `creates` (left to right order)
+!>
+!> Returns 0 if any annihilation targets an empty site or creation targets
+!> an occupied site (Pauli exclusion violation).
+!>
+!> The result encodes the fermionic sign in its sign: abs(result) is the
+!> new bit pattern, sign(result) is ±1.
+!>
+!> **Sign calculation:** For each operator, count occupied sites to the left
+!> (i.e., with smaller index). Each occupied site contributes a factor of -1.
+!>
+!> @param[in]  creates   Sites to create particles on (1-based)
+!> @param[in]  destroys  Sites to annihilate particles from (1-based)
+!> @param[in]  bits      Input bit pattern
+!> @return     Signed result: |res| = new pattern, sign(res) = phase
   function ExciteBits(creates, destroys, bits) result(res)
 
     integer(I64)              :: res
@@ -316,36 +359,40 @@ contains
     res = bits
     sgn = 1
 
+    ! Apply annihilation operators (right to left)
     do i = 1, size(destroys)
       iDestroy = destroys(i)
 
+      ! Check if site is occupied
       if (.not. btest(res, iDestroy - 1)) then
         res = 0
         return
       end if
 
+      ! Count occupied sites to the left for fermionic sign
       do j = 1, iDestroy - 1
         if (btest(res, j - 1)) sgn = (-1) * sgn
       end do
 
       res = ibclr(res, iDestroy - 1)
-
     end do
 
+    ! Apply creation operators (left to right, reverse order)
     do i = 1, size(creates)
       iCreate = creates(size(creates) - i + 1)
 
+      ! Check if site is empty (Pauli exclusion)
       if (btest(res, iCreate - 1)) then
         res = 0
         return
       end if
 
+      ! Count occupied sites to the left for fermionic sign
       do j = 1, iCreate - 1
         if (btest(res, j - 1)) sgn = (-1) * sgn
       end do
 
       res = ibset(res, iCreate - 1)
-
     end do
 
     res = sgn * res
@@ -353,6 +400,23 @@ contains
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Apply ladder operators to CI vector for a specific body type.
+!>
+!> Transforms all CI coefficients by applying the operator sequence:
+!>   a†_{creates(1)} a†_{creates(2)} ... a_{destroys(n)} ... a_{destroys(1)}
+!> to the `bt`-th spin sector.
+!>
+!> Uses `ExciteBits` to compute target configuration and phase for each
+!> source configuration, then scatters the result.
+!>
+!> @note Currently uses the spin-up inverse lookup table for all body types,
+!>       which assumes equal numbers of up and down configurations. This is
+!>       valid for half-filling but may need generalization for other cases.
+!>
+!> @param[inout] coeffs   CI coefficients (modified in-place)
+!> @param[in]    creates  Orbital indices for creation operators
+!> @param[in]    destroys Orbital indices for annihilation operators
+!> @param[in]    bt       Body type index (1=up, 2=down)
   subroutine ApplyExcitation(coeffs, creates, destroys, bt)
     use M_Coeffs
     use M_Method_Mb

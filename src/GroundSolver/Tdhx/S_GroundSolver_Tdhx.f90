@@ -2,6 +2,12 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Dispatch submodule for TDHx implementation selection.
+!>
+!> @details
+!> Reads `groundSolver.tdhx.*` and dispatches to:
+!>   - `stdImpl`: Standard implementation (general grids)
+!>   - `ylmOpt`: Ylm-optimized implementation (spherical grids)
 submodule(M_GroundSolver_Tdhx) S_GroundSolver_Tdhx
 
   implicit none

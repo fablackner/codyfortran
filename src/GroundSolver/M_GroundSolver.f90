@@ -2,16 +2,38 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Ground-state solver scaffolding and public interfaces.
+!> @brief Ground-state solver interface module.
 !>
-!> This module does not contain the numerical algorithms itself. Instead, it
-!> declares procedure pointers that are bound at runtime by a corresponding
+!> @details
+!> Provides the top-level contract for self-consistent-field (SCF) ground-state
+!> solvers. This module does not contain numerical algorithms itself. Instead,
+!> it declares procedure pointers that are bound at runtime by a corresponding
 !> `GroundSolver_Fabricate` routine (provided by a backend/implementation).
 !>
-!> The bound procedures typically implement one SCF/relaxation iteration that
-!> drives an input state towards a stationary (ground) state. Backends may use
-!> different physical models or discretizations (e.g. TDHx, Ylm radial grids),
-!> but they all conform to the same small interface declared here.
+!> The bound procedures implement a single SCF/relaxation iteration that drives
+!> an input quantum state towards a stationary (ground) state. Backends may use
+!> different physical models or discretizations (e.g., TDHx Hartree–Fock, Ylm
+!> radial grids), but they all conform to the same small interface declared here.
+!>
+!> ## Architecture
+!>
+!> The module follows the CodyFortranRDM fabrication pattern:
+!>   - **Interface Module** (`M_GroundSolver.f90`): Declares procedure pointers
+!>   - **Dispatch Submodule** (`S_GroundSolver.f90`): Routes JSON to backends
+!>   - **Implementation Submodules**: Provide concrete algorithms
+!>
+!> ## Usage
+!>
+!> 1. Call `GroundSolver_Fabricate()` to bind JSON-selected backend
+!> 2. Call `GroundSolver_Setup()` to allocate backend resources
+!> 3. Loop: Call `GroundSolver_Approach(state, alpha, time)` until convergence
+!>
+!> ## Available Backends
+!>
+!> - **tdhx.stdImpl**: Standard TDHx Hartree–Fock (general grids)
+!> - **tdhx.ylmOpt**: TDHx optimized for spherical-harmonics (per-l channels)
+!>
+!> @see M_GroundSolver_Tdhx, M_DiagonalizerList
 module M_GroundSolver
   use M_Utils_Types
   use M_Utils_NoOpProcedures
@@ -23,13 +45,18 @@ module M_GroundSolver
   !=============================================================================
 
   interface GroundSolver_Fabricate
-    !> Bind concrete implementations to the procedure pointers exported by
-    !> `M_GroundSolver`.
+    !> @brief Bind concrete implementations to the module's procedure pointers.
     !>
-    !> Implementations of this routine are responsible for wiring
-    !> `GroundSolver_Setup` and `GroundSolver_Approach` to backend
-    !> specific procedures (for example a TDHx or Ylm variant). No state is
-    !> created here beyond assigning the procedure pointers.
+    !> @details
+    !> Reads the JSON configuration key `groundSolver.*` and dispatches to the
+    !> appropriate backend's `_Fabricate` routine. This assigns the procedure
+    !> pointers `GroundSolver_Setup` and `GroundSolver_Approach` to backend-
+    !> specific procedures (for example a TDHx or Ylm variant).
+    !>
+    !> No allocations or state creation occur here—only pointer assignment.
+    !>
+    !> @pre JSON configuration loaded via `Json_LoadJsonFile`
+    !> @post `GroundSolver_Setup` and `GroundSolver_Approach` are bound
     module subroutine GroundSolver_Fabricate()
     end subroutine
   end interface
@@ -38,33 +65,53 @@ module M_GroundSolver
   ! module procedures pointers
   !=============================================================================
 
-  !> Pointer to the setup routine for the ground-state solver backend.
+  !> @brief Pointer to the setup routine for the ground-state solver backend.
+  !>
+  !> Initialized to a no-op; bound to a real implementation by `_Fabricate`.
   procedure(I_GroundSolver_Setup), pointer :: GroundSolver_Setup => NoOpProcedures_Setup
   abstract interface
-    !> Initialize the ground-state solver backend.
+    !> @brief Initialize the ground-state solver backend.
     !>
-    !> Typical responsibilities include allocating working buffers, reading
-    !> configuration, binding model-specific callbacks, and validating input
-    !> dimensions. This routine performs no iterations by itself.
+    !> @details
+    !> Allocates working buffers (potentials, orbital temporaries), reads any
+    !> backend-specific JSON configuration, and validates input dimensions
+    !> against the configured grid. This routine performs no SCF iterations.
+    !>
+    !> @pre All required modules (Grid, SysKinetic, etc.) must be set up.
+    !> @post Backend is ready for calls to `GroundSolver_Approach`.
     subroutine I_GroundSolver_Setup
     end subroutine
   end interface
 
-  !> Pointer to one ground-state approach/relaxation step.
+  !> @brief Pointer to one ground-state approach/relaxation step.
+  !>
+  !> This is the main workhorse—call repeatedly until energy convergence.
   procedure(I_GroundSolver_Approach), pointer :: GroundSolver_Approach
   abstract interface
-    !> Perform a single approach/relaxation iteration on the state.
+    !> @brief Perform a single SCF approach/relaxation iteration on the state.
     !>
-    !> Implementations update the input state in place, typically using a
-    !> residual and a mixing scheme to approach a self-consistent solution.
-    !> The meaning of the `time` argument is backend-defined: some backends use
-    !> it as a physical time parameter, others as an iteration/imaginary-time
-    !> step used in the relaxation.
+    !> @details
+    !> Implements one iteration of the self-consistent-field cycle:
+    !>   1. Build mean-field potentials (Hartree + external) from current orbitals
+    !>   2. Diagonalize the effective Fock operator
+    !>   3. Mix new eigenvectors with old orbitals: orbs_new = (1-α)·orbs_old + α·evecs
+    !>   4. Orthonormalize the mixed orbitals
+    !>
+    !> The caller is responsible for the convergence loop (checking energy change).
+    !>
+    !> @param[inout] state   Packed state vector (orbitals). Updated in place.
+    !> @param[in]    alpha   Mixing parameter (0 < α ≤ 1). α=1 is pure replacement,
+    !>                       α<1 damps oscillations for difficult convergence.
+    !> @param[in]    time    Backend-defined parameter. Typically 0 for ground state;
+    !>                       some backends may use it for time-dependent potentials.
+    !>
+    !> @note For spin-restricted calculations, the spin-up block is copied to
+    !>       spin-down after mixing, ensuring identical spatial orbitals.
     subroutine I_GroundSolver_Approach(state, alpha, time)
       import :: R64
-      !> Input/output state vector. Updated in place by the iteration.
+      !> Packed state vector containing orbital coefficients. Updated in place.
       complex(R64), intent(inout), contiguous, target :: state(:)
-      !> Linear/nonlinear mixing parameter used by the backend (0 < alpha <= 1).
+      !> Mixing parameter (0 < alpha <= 1). Use alpha < 1 to improve convergence.
       real(R64), intent(in) :: alpha
       !> Backend-defined step parameter (e.g., physical or imaginary time).
       real(R64), intent(in) :: time

@@ -2,6 +2,11 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Implementation submodule for M_OrbsInit_Linear.
+!>
+!> @details
+!> Provides the fabrication logic and the generic InitializeOrb routine that
+!> samples the backend-specific InitFunction over the 1D grid and normalizes.
 submodule(M_OrbsInit_Linear) S_OrbsInit_Linear
 
   implicit none
@@ -9,6 +14,11 @@ submodule(M_OrbsInit_Linear) S_OrbsInit_Linear
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Select and wire the linear initialization sub-backend from JSON config.
+!>
+!> @details
+!> Currently supports: harmonic (quantum HO eigenstates).
+!> Binds `OrbsInit_InitializeOrb` to the local InitializeOrb routine.
   module subroutine OrbsInit_Linear_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -37,6 +47,16 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Initialize a single orbital on the 1D linear grid.
+!>
+!> @details
+!> Samples the backend-specific `OrbsInit_Linear_InitFunction` at each grid
+!> point, then normalizes using the grid's inner product (which accounts for
+!> the spatial metric/quadrature weights).
+!>
+!> @param[out] orb  Complex orbital vector of length nGrid, filled and normalized.
+!> @param[in]  ind  Orbital index (1-based; maps to quantum number n = ind - 1).
+!> @param[in]  bt_  Optional body type for species-dependent initialization.
   subroutine InitializeOrb(orb, ind, bt_)
     use M_Grid
     use M_Grid_Linear
@@ -48,21 +68,16 @@ contains
     integer(I32) :: iGrid
     real(R64)    :: x, norm
 
-    ! Initialize to zero
     orb(:) = 0.0_R64
 
-    ! Calculate orbital values for each grid point
+    ! Sample the initialization function at each grid point
     do iGrid = 1, Grid_nPoints
       x = Grid_Linear_xCoord(iGrid)
-
-      ! 1D harmonic oscillator eigenfunction (unnormalized)
       orb(iGrid) = OrbsInit_Linear_InitFunction(x, ind, bt_)
     end do
 
-    ! Now verify normalization directly with Grid_InnerProduct
+    ! Normalize using grid-aware inner product (handles quadrature weights)
     norm = real(Grid_InnerProduct(orb, orb), kind=R64)
-
-    ! Apply normalization correction
     orb(:) = orb(:) / sqrt(norm)
 
   end subroutine

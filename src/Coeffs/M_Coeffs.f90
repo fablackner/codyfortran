@@ -2,13 +2,67 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Central coefficient API used throughout CodyFortran.
+!> Central coefficient API (interface module) for CI expansion vectors.
 !>
-!> This module defines the public contract for CI (Configuration Interaction)
-!> coefficients and exposes it via procedure pointers. At runtime these pointers
-!> are wired to representation-specific implementations (generic, Hubbard, …)
-!> by `Coeffs_Fabricate`. No numerical work happens here; this is the interface
-!> layer that other parts of the code call into.
+!> # Purpose
+!>
+!> This module defines the public contract for Configuration Interaction (CI)
+!> coefficients—the expansion amplitudes \( c_I \) of a many-body wave function
+!> in a Fock-space basis:
+!> \[
+!>   |\Psi\rangle = \sum_I c_I |I\rangle
+!> \]
+!> where \( |I\rangle \) is a Slater determinant (fermionic) or permanent
+!> (bosonic) configuration.
+!>
+!> # Architecture
+!>
+!> This is a pure **interface module** following the CodyFortran M_/S_ pattern:
+!> - **M_Coeffs (this file):** Declares procedure pointer signatures and module
+!>   data. No concrete algorithms live here.
+!> - **S_Coeffs (submodule):** Implements `Coeffs_Fabricate` which reads JSON
+!>   and binds procedure pointers to the appropriate backend at runtime.
+!>
+!> # Backends
+!>
+!> Two major coefficient representations are available:
+!>
+!> 1. **Generic** (`coeffs.generic`): Model-agnostic tensor-product basis built
+!>    from `ConfigList` descriptors. Supports arbitrary body-type combinations
+!>    (fermions, bosons, mixed statistics).
+!>
+!> 2. **Hubbard** (`coeffs.hubbard`): Bit-encoded Fock states optimized for
+!>    lattice models with on-site interactions. Three spin-symmetry variants:
+!>    - `noSpinSym`:    Full \( n_{up} \times n_{dn} \) product space
+!>    - `plusSpinSym`:  Symmetric sector, \( n(n+1)/2 \) states (triplet-like)
+!>    - `minusSpinSym`: Antisymmetric sector, \( n(n-1)/2 \) states (singlet-like)
+!>
+!> # Key Operations
+!>
+!> | Pointer                         | Description                                     |
+!> |---------------------------------|-------------------------------------------------|
+!> | `Coeffs_ApplyH1FillRdm1`        | Apply 1-body Ĥ₁; optionally fill 1-RDM         |
+!> | `Coeffs_ApplyH2FillRdm2`        | Apply 2-body Ĥ₂; optionally fill 2-RDM         |
+!> | `Coeffs_FillRdm{1,2,3}Bt`       | Compute body-type-resolved RDMs                 |
+!> | `Coeffs_ApplyExcitation`        | Apply \( a^\dagger_i a_j \) ladder operators    |
+!> | `Coeffs_Normalize`              | Normalize \(\langle\Psi|\Psi\rangle = 1\)       |
+!> | `Coeffs_ProjectOnSubspace`      | Project out a reference state (orthogonalize)   |
+!> | `Coeffs_IndexFromConfigurations`| Configuration tuple → linear index              |
+!> | `Coeffs_ConfigurationsFromIndex`| Linear index → configuration tuple              |
+!> | `Coeffs_SaveCoeffs`             | Binary I/O for checkpointing                    |
+!> | `Coeffs_SaveTwoRdm`             | Persist computed 2-RDM                          |
+!>
+!> # Usage
+!>
+!> ```fortran
+!> call Coeffs_Fabricate          ! Bind pointers from JSON ("coeffs" section)
+!> call Coeffs_Setup              ! Initialize backend-specific data
+!> ! ... use Coeffs_coeffs(:), Coeffs_ApplyH1FillRdm1, etc.
+!> ```
+!>
+!> @see M_ConfigList    Fock-space basis enumeration (configuration lists)
+!> @see M_Method_Mb     Many-body method driver (TDCI, MCTDHX, TD-2RDM, …)
+!> @see M_CoeffsInit    Coefficient vector initialization
 module M_Coeffs
   use M_Utils_Types
   use M_Utils_NoOpProcedures

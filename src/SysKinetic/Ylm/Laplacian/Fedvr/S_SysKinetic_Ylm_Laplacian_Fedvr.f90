@@ -2,6 +2,8 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @file S_SysKinetic_Ylm_Laplacian_Fedvr.f90
+!> @brief Implementation of FEDVR radial kinetic operator for Ylm channels.
 submodule(M_SysKinetic_Ylm_Laplacian_Fedvr) S_SysKinetic_Ylm_Laplacian_Fedvr
 
   implicit none
@@ -9,6 +11,7 @@ submodule(M_SysKinetic_Ylm_Laplacian_Fedvr) S_SysKinetic_Ylm_Laplacian_Fedvr
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Bind FEDVR radial operator, validate grid requirements.
   module subroutine SysKinetic_Ylm_Laplacian_Fedvr_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -18,10 +21,14 @@ contains
     call Say_Fabricate("sysKinetic.ylm.laplacian.fedvr")
 
     !------------------------------------
-    ! set values and procedure pointers
+    ! bind procedure pointers
     !------------------------------------
 
     SysKinetic_Ylm_MultiplyWithRadialKineticOp => MultiplyWithRadialKineticOp
+
+    !------------------------------------
+    ! validate grid requirements
+    !------------------------------------
 
     if (.not. Json_GetExistence("grid.ylm.fedvr")) then
       error stop "grid.ylm.fedvr is required for sysKinetic.ylm.laplacian.fedvr"
@@ -29,10 +36,16 @@ contains
 
   end subroutine
 
-  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> MultiplyWith the radial part of the Laplacian (∂²/∂r² + (2/r)∂/∂r)
-  !> using the transformation g(r) = r*f(r), such that Laplacian(f) = (1/r) * d²g/dr².
-  !> Applies the radial part of the Laplacian using the utility module
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Apply the radial kinetic operator using FEDVR and g(r) = r·f(r) transformation.
+  !>
+  !> @details
+  !> Algorithm (same as FinDiff, but uses FEDVR derivative context):
+  !>   1. Transform: g(r) = r · f(r)
+  !>   2. Compute d²g/dr² using FEDVR derivative matrices
+  !>   3. Inverse transform: result = (1/r) d²g/dr²
+  !>   4. Add centrifugal term: − l(l+1)/r² · f(r)
+  !>   5. Scale by −1/(2m)
   subroutine MultiplyWithRadialKineticOp(dOrbLm, orbLm, l, m, time, bt_)
     use M_Utils_Fedvr
     use M_Utils_UnusedVariables
@@ -42,39 +55,39 @@ contains
     use M_Grid_Ylm_Fedvr, fedvrCtx => Grid_Ylm_Fedvr_fedvrCtx, derivativeCtx => Grid_Ylm_Fedvr_derivativeCtx
     use M_SysKinetic_Ylm_Laplacian
 
-    complex(R64), intent(out) :: dOrbLm(:) ! Output vector (result of D² * input)
-    complex(R64), intent(in)  :: orbLm(:)   ! Input vector
+    complex(R64), intent(out) :: dOrbLm(:)
+    complex(R64), intent(in)  :: orbLm(:)
     integer(I32), intent(in)  :: l
     integer(I32), intent(in)  :: m
     real(R64), intent(in)     :: time
     integer(I32), intent(in), optional :: bt_
 
-    complex(R64), allocatable :: gRadial(:)  ! Temporary array for transformed function
+    complex(R64), allocatable :: gRadial(:)
     integer(I32) :: bt
 
     if (.false.) call UnusedVariables_Mark(m, time)
 
-    if (.not. present(bt_)) bt = 1
+    bt = 1
     if (present(bt_)) bt = bt_
 
-    ! Initialize output and temporary arrays
     allocate (gRadial(Grid_Ylm_nRadial))
     gRadial = 0.0_R64
 
-    ! Transform: g(r) = r * f(r)
+    ! Transform: g(r) = r · f(r)
     gRadial(:) = Grid_Ylm_radialPoints(:) * orbLm(:)
 
-    ! MultiplyWith second derivative to g(r) using FEDVR method
+    ! Compute d²g/dr² using FEDVR method
     call DerivativeFedvr_Do2ndDerivative(dOrbLm, gRadial, derivativeCtx, fedvrCtx)
 
-    ! Inverse transform: result = (1/r) * d²g/dr²
+    ! Inverse transform: result = (1/r) · d²g/dr²
     dOrbLm(:) = dOrbLm(:) / Grid_Ylm_radialPoints(:)
 
-    ! Add the angular part: -l(l+1)/r² term
+    ! Add centrifugal term: −l(l+1)/r² · f(r)
     if (l > 0) then
       dOrbLm(:) = dOrbLm(:) - (l * (l + 1)) * orbLm(:) / Grid_Ylm_radialPoints(:)**2
     end if
 
+    ! Scale by −1/(2m)
     dOrbLm(:) = -0.5_R64 * dOrbLm(:) / SysKinetic_Ylm_Laplacian_bodyMass(bt)
 
     deallocate (gRadial)

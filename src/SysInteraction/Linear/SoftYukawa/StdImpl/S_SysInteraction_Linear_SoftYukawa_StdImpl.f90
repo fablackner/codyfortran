@@ -2,16 +2,19 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Standard (direct convolution) implementation of SoftYukawa.
 submodule(M_SysInteraction_Linear_SoftYukawa_StdImpl) S_SysInteraction_Linear_SoftYukawa_StdImpl
   use M_Utils_ConvolutionIntegral, only: T_ConvolutionIntegral_Ctx
 
   implicit none
 
+  !> Convolution context holding precomputed kernel values
   type(T_ConvolutionIntegral_Ctx) :: convolutionCtx
 
 contains
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Bind the direct-convolution SoftYukawa implementation.
   module subroutine SysInteraction_Linear_SoftYukawa_StdImpl_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -31,6 +34,9 @@ contains
   end subroutine
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Initialize the convolution context with the SoftYukawa kernel.
+  !>
+  !> Called once during setup to precompute kernel values on the grid.
   subroutine Setup
     use M_Utils_Constants
     use M_Utils_ConvolutionIntegral
@@ -42,16 +48,23 @@ contains
     integer(I32) :: nG
     real(R64)    :: dx
 
-    ! --- Obtain grid info ---
     nG = Grid_nPoints
     dx = Grid_Linear_xCoord(2) - Grid_Linear_xCoord(1)
 
-    ! --- Initialize convolution with the SoftYukawa kernel function ---
     call ConvolutionIntegral_CreateCtx(convolutionCtx, nG, dx, SysInteraction_Linear_SoftYukawa_Interaction)
 
   end subroutine
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Compute interaction potential via direct convolution.
+  !>
+  !> Evaluates V(x) = ∫ w(|x-x'|) ρ(x') dx' using O(N²) direct summation.
+  !>
+  !> @param[out] interactionPotential  Resulting potential V(x)
+  !> @param[in]  src                   Weighted source density ρ(x)·w(x)
+  !> @param[in]  time                  Physical time (unused)
+  !> @param[in]  bt1_                  Target body type (unused)
+  !> @param[in]  bt2_                  Source body type (unused)
   subroutine FillInteractionPotential(interactionPotential, src, time, bt1_, bt2_)
     use M_Utils_UnusedVariables
     use M_Utils_Constants
@@ -70,7 +83,6 @@ contains
 
     if (.not. allocated(interactionPotential)) allocate (interactionPotential(Grid_nPoints))
 
-    ! --- Apply convolution utility ---
     call ConvolutionIntegral_Apply(interactionPotential, src, convolutionCtx)
 
   end subroutine

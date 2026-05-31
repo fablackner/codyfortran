@@ -17,7 +17,7 @@
         "-Walign-commons"
     ],
     "fortran.linter.includePaths": [
-        "${workspaceFolder}/build",
+        "${workspaceFolder}/build/modules",
         "${workspaceFolder}/thirdParty/installation/include"
     ]
 }

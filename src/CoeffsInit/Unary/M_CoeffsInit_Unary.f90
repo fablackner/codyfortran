@@ -7,10 +7,19 @@
 !> initial condition.
 !>
 !> Overview
-!> - Constructs a coefficient vector corresponding to a single selected
-!>   configuration (or a simple product state) as specified in the input.
-!> - This module's factory routine wires the unary implementation into the
-!>   generic interface exported by `M_CoeffsInit`.
+!> --------
+!> Constructs a coefficient vector c(1) = 1, c(i>1) = 0, corresponding
+!> to the reference Fock configuration |Φ₀⟩ — the first configuration
+!> in the enumeration defined by ConfigList.
+!>
+!> This is the simplest and most common initializer, used whenever
+!> the simulation should start from a product state (Slater determinant
+!> for fermions, permanents for bosons).
+!>
+!> Wiring
+!> ------
+!> The factory `CoeffsInit_Unary_Fabricate` binds `CoeffsInit_Initialize`
+!> in M_CoeffsInit to the unary implementation. No setup phase is required.
 module M_CoeffsInit_Unary
   use M_Utils_Types
   use M_Utils_NoOpProcedures
@@ -25,10 +34,11 @@ module M_CoeffsInit_Unary
     !> Factory that registers the "Unary" initializer.
     !>
     !> Behavior
-    !> - Reads the input configuration (JSON) that specifies which
-    !>   configuration/product-state to populate.
-    !> - Assigns `CoeffsInit_Setup` and `CoeffsInit_Initialize` in
-    !>   `M_CoeffsInit` to the unary-specific implementations.
+    !> --------
+    !> - Binds `CoeffsInit_Initialize` in `M_CoeffsInit` to produce
+    !>   the coefficient vector [1, 0, 0, ..., 0].
+    !> - No JSON parameters are required; the `"unary": {}` block
+    !>   signals the selection of this initializer.
     module subroutine CoeffsInit_Unary_Fabricate
     end subroutine
   end interface

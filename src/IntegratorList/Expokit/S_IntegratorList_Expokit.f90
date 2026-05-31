@@ -2,6 +2,41 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @file S_IntegratorList_Expokit.f90
+!> @brief Krylov subspace matrix exponential integrator (Expokit-style).
+!>
+!> @details
+!> Computes the action of the matrix exponential on a vector:
+!>
+!>     ψ(t + Δt) = exp(−i Δt Ĥ) ψ(t)
+!>
+!> using an Arnoldi/Lanczos-based Krylov subspace approximation. This approach
+!> is highly efficient for large, sparse Hamiltonians where forming the full
+!> exponential is infeasible.
+!>
+!> ## Algorithm Outline
+!>
+!> 1. Build a Krylov basis V_m spanning {v, Av, A²v, …, A^{m-1}v}.
+!> 2. Project A onto V_m to get a small Hessenberg matrix H_m.
+!> 3. Compute exp(Δt · H_m) via dense methods.
+!> 4. Map back to the full space: ψ_new ≈ ||v|| · V_m · exp(Δt · H_m) · e₁.
+!>
+!> ## Properties
+!>
+!> - **Accuracy**: Controlled by `krylov_dim` and `tolerance`.
+!> - **Stability**: Exact for linear time-independent Hamiltonians.
+!> - **Cost**: O(m) matrix-vector products per step; m ≪ N.
+!>
+!> ## Configuration (JSON)
+!>
+!> | Key          | Type    | Default | Description                     |
+!> |--------------|---------|---------|---------------------------------|
+!> | `krylov_dim` | integer | 30      | Krylov subspace dimension       |
+!> | `tolerance`  | real    | 1e-7    | Error tolerance for exp approx  |
+!> | `max_steps`  | integer | 1000    | Max internal sub-steps          |
+!>
+!> @note The `TimeDerivative` callback supplies −i Ĥ |ψ⟩. Internally we
+!>   multiply by i to recover Ĥ |ψ⟩ for the Expokit library.
 submodule(M_IntegratorList_Expokit) S_IntegratorList_Expokit
 
   implicit none
@@ -51,47 +86,50 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Advance the state via Krylov-based matrix exponential.
+  !>
+  !> Computes ψ(t1) ≈ exp(−i (t1−t0) Ĥ) ψ(t0) using the Expokit library's
+  !> `zhexpv` routine for Hermitian matrices.
+  !>
+  !> @param[inout] this   The Expokit integrator instance.
+  !> @param[inout] state  Complex state vector (modified in-place).
+  !> @param[in]    t0     Starting time.
+  !> @param[in]    t1     Target ending time.
   module subroutine Integrate(this, state, t0, t1)
     use M_Utils_ExpokitLib, only: ExpokitLib_IntegrateSym
     use M_Utils_UnusedVariables
 
     class(T_IntegratorList_E_Expokit), intent(inout) :: this
     complex(R64), intent(inout), contiguous :: state(:)
-    real(R64), intent(in) :: t0       ! Starting time
-    real(R64), intent(in) :: t1       ! Target ending time
+    real(R64), intent(in) :: t0
+    real(R64), intent(in) :: t1
 
-    ! Local variables
     integer :: iflag, nSteps
     real(R64) :: t_step
     character(len=100) :: error_msg
 
-    ! Calculate time step
     t_step = t1 - t0
-
-    ! Set default number of steps for Expokit
     nSteps = this % max_steps
 
-    ! Call the ExpokitLib wrapper for Hermitian matrices
+    ! Call Expokit wrapper for Hermitian/symmetric matrices
     call ExpokitLib_IntegrateSym(state, t_step, ApplyMatrix, &
                                  this % krylov_dim, this % tolerance, nSteps, iflag)
 
-    ! Check for errors
-    if (iflag .ne. 0) then
+    if (iflag /= 0) then
       write (error_msg, '(A,I0)') "Expokit zhexpv failed with status: ", iflag
       error stop error_msg
     end if
 
   contains
-    ! Matrix-vector product callback required by ExpokitLib
-    ! Converts from the TimeDerivative interface (-i*H*x) to H*x for Expokit
+    !> Internal callback: convert TimeDerivative output to H*x for Expokit.
+    !>
+    !> TimeDerivative computes −i Ĥ x; Expokit needs Ĥ x, so we multiply by i.
     subroutine ApplyMatrix(dState, inState)
       complex(R64), intent(out), contiguous, target :: dState(:)
       complex(R64), intent(in), contiguous, target  :: inState(:)
 
-      ! The TimeDerivative gives us -i*H*x, we need H*x for Expokit
-      ! So we call TimeDerivative and then multiply by i
       call this % TimeDerivative(dState, inState, t0)
-      dState = (0.0_R64, 1.0_R64) * dState  ! Multiply by i
+      dState = (0.0_R64, 1.0_R64) * dState  ! Multiply by i: −i·(−i Ĥ x) = Ĥ x
     end subroutine
   end subroutine
 

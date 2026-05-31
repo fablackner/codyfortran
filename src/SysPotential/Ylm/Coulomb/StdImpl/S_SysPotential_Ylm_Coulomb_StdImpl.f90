@@ -2,6 +2,14 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Default numerical implementation for Ylm Coulomb potential.
+!>
+!> Evaluates the central Coulomb potential V(r) = -Z/r in a spherical harmonics
+!> representation. For a spherically symmetric potential, only the (l=0, m=0)
+!> component is nonzero:
+!>   V₀₀(r) = -Z × √(4π) / r
+!>
+!> The √(4π) prefactor arises from the normalization of Y₀₀ = 1/√(4π).
 submodule(M_SysPotential_Ylm_Coulomb_StdImpl) S_SysPotential_Ylm_Coulomb_StdImpl
 
   implicit none
@@ -25,6 +33,11 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Fill the radial component V_{lm}(r) of the Coulomb potential.
+  !>
+  !> For a central Coulomb potential, only the (l=0, m=0) component is nonzero.
+  !> Requests for other (l,m) pairs result in an error since they should not
+  !> occur when `SysPotential_Ylm_lmax = 0` is properly set.
   subroutine FillExternalPotentialRadial(potLm, l, m, time, bt_)
     use M_Utils_UnusedVariables
     use M_Utils_Constants
@@ -49,11 +62,8 @@ contains
 
     if (.not. allocated(potLm)) allocate (potLm(Grid_Ylm_nRadial))
 
-    ! Get nuclear charge
     prefactor = SysPotential_Ylm_Coulomb_charge * sqrt(4.0_R64 * PI)
 
-    ! Std Coulomb potential: V(r) = -Z/r in spherical harmonics
-    ! Only the (l=0, m=0) component is non-zero
     do iRad = 1, Grid_Ylm_nRadial
       r = Grid_Ylm_radialPoints(iRad)
       potLm(iRad) = -prefactor / r

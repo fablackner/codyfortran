@@ -2,12 +2,40 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Spherical-harmonics (Y_l^m) orbital initialization backend.
+!> @brief Spherical-harmonics (Y_lm) orbital initialization backend.
 !>
-!> Provides an initialization function interface for orbitals defined in a
-!> spherical basis. Typical use is to construct radial-times-angular products
-!> where the angular part is Y_l^m. The fabricate routine connects Ylm-specific
-!> implementations to the generic pointers in `M_OrbsInit`.
+!> @details
+!> Provides an initialization interface for orbitals represented in a
+!> spherical basis R(r)·Y_l^m(θ,φ). The grid stores composite indices
+!> (r, l, m), and the InitFunction computes the radial part for matching
+!> (l, m) quantum numbers.
+!>
+!> Available Sub-Backends
+!> ----------------------
+!> - **HydrogenLike** : Hydrogenic radial functions R_nl(r) for Coulomb potentials.
+!>                      Quantum numbers (n, l, m) specified per orbital via JSON.
+!>
+!> Procedure Pointer Contract
+!> --------------------------
+!> `OrbsInit_Ylm_InitFunction(r, l, m, index, bt_)` returns complex amplitude
+!> at radius r for the given angular quantum numbers (l, m) and orbital index.
+!> Returns zero if (l, m) doesn't match the orbital's target quantum numbers.
+!>
+!> JSON Configuration
+!> ------------------
+!>   "orbsInit": {
+!>     "ylm": {
+!>       "hydrogenLike": {
+!>         "charge": 1.0,           // effective nuclear charge Z
+!>         "n": [1, 2, 2],          // principal quantum numbers
+!>         "l": [0, 0, 1],          // orbital angular momentum
+!>         "m": [0, 0, 0]           // magnetic quantum numbers
+!>       }
+!>     }
+!>   }
+!>
+!> @note Grid coordinates accessed via Grid_Ylm_rCoord, Grid_Ylm_lCoord, Grid_Ylm_mCoord.
+!> @see M_OrbsInit_Ylm_HydrogenLike for the hydrogenic radial implementation.
 module M_OrbsInit_Ylm
   use M_Utils_Types
   use M_Utils_NoOpProcedures

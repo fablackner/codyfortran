@@ -2,6 +2,8 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @file S_SysKinetic_Lattice.f90
+!> @brief Implementation submodule for lattice kinetic fabrication.
 submodule(M_SysKinetic_Lattice) S_SysKinetic_Lattice
 
   implicit none
@@ -9,6 +11,9 @@ submodule(M_SysKinetic_Lattice) S_SysKinetic_Lattice
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Dispatch to the appropriate lattice kinetic scheme.
+  !>
+  !> Currently supports: `nearestNeighbor` (tight-binding hopping).
   module subroutine SysKinetic_Lattice_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -17,11 +22,7 @@ contains
     call Say_Fabricate("sysKinetic.lattice")
 
     !------------------------------------
-    ! set values and procedure pointers
-    !------------------------------------
-
-    !------------------------------------
-    ! branch
+    ! branch to the appropriate scheme
     !------------------------------------
 
     if (Json_GetExistence("sysKinetic.lattice.nearestNeighbor")) then

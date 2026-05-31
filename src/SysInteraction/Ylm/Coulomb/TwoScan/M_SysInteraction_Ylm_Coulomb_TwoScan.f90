@@ -2,10 +2,16 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Coulomb solver variant: two-scan method in Ylm representation.
+!> @brief Two-scan O(N) radial Coulomb solver.
 !>
-!> Employs forward/backward radial scans to compute the potential efficiently
-!> with modest memory footprint. Suitable for large radial grids.
+!> @details Exploits the separable structure of the Green's function to compute
+!> the radial potential in two linear passes (prefix and suffix sums):
+!>    C1(i) = Σⱼ≤ᵢ ρ(j) rⱼˡ        (forward scan)
+!>    C2(i) = Σⱼ≥ᵢ ρ(j) / rⱼˡ⁺¹    (backward scan)
+!>    V(i) = factor × (C1(i)/rᵢˡ⁺¹ + rᵢˡ × C2(i) - ρ(i)/rᵢ)
+!>
+!> **Complexity:** O(N) — optimal for large radial grids.
+!> **Use case:** Production runs, large grids (N > 100).
 module M_SysInteraction_Ylm_Coulomb_TwoScan
   use M_Utils_Types
 

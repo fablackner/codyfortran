@@ -2,11 +2,13 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> FFTW3-backed implementation of the SoftYukawa interaction on a linear grid.
+!> @brief FFT-accelerated implementation of SoftYukawa interaction.
 !>
-!> Implements convolution with the SoftYukawa kernel using FFTs for improved
-!> performance on larger grids. Requires FFTW3 to be available and initialized
-!> by the build/system configuration.
+!> @details Uses FFTW3 for O(N log N) convolution via the convolution theorem:
+!>    V = IFFT( FFT(kernel) * FFT(ρ) )
+!>
+!> Requires FFTW3 library. Recommended for grids with N > 500 points where
+!> the O(N log N) scaling significantly outperforms direct O(N²) summation.
 module M_SysInteraction_Linear_SoftYukawa_Fftw
   use M_Utils_Types
 

@@ -2,18 +2,70 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Ylm-optimized TDHx implementation submodule.
+!>
+!> @details
+!> Implements the SCF iteration exploiting spherical symmetry. For atoms with
+!> a central potential, orbitals factorize as φ_{nlm}(r) = R_nl(r)·Y_lm(θ,φ).
+!> This allows diagonalizing smaller nRadial×nRadial matrices per l-channel
+!> instead of a single large Grid_nPoints×Grid_nPoints matrix.
+!>
+!> ## Algorithm
+!>
+!> **Setup**: Allocate working arrays for radial potentials and sources.
+!>
+!> **Approach** (per iteration):
+!>   1. Extract l=0 radial component of external potential
+!>   2. Build monopole Hartree potential from |φ_j|² (l=0 component)
+!>   3. Diagonalize per-l radial Fock operators via DiagonalizerList(l+1)
+!>   4. Map eigenvectors back using hydrogen-like quantum numbers (n,l,m)
+!>   5. Mix with old orbitals, copy spin-up → spin-down, orthonormalize
+!>
+!> **HartreeFockAction** (per l-channel):
+!>   - Radial kinetic + centrifugal: SysKinetic_Ylm_MultiplyWithRadialKineticOp
+!>   - Mean-field potential: Gaunt-weighted monopole
+!>   - Exchange: full angular coupling via Grid_Ylm_{Set,Get}LmComponent
+!>
+!> ## Working Arrays
+!>
+!> - `potLm`: Combined external + Hartree radial potential (l=0)
+!> - `src`: Full angular interaction source density
+!> - `orb`, `dOrbTmp`: Full-grid temporaries for exchange computation
+!>
+!> @note Requires OrbsInit_Ylm_HydrogenLike to track (n,l,m) quantum numbers.
 submodule(M_GroundSolver_Tdhx_YlmOpt) S_GroundSolver_Tdhx_YlmOpt
 
   implicit none
 
+  !-----------------------------------------------------------------------------
+  ! Module-level working arrays (allocated in Setup, used in Approach/HartreeFockAction)
+  !-----------------------------------------------------------------------------
+
+  !> Temporary for radial operator action, dimension(Grid_Ylm_nRadial)
   complex(R64), allocatable :: dOrbLmTmp(:)
+
+  !> Combined radial potential (external + Hartree), dimension(Grid_Ylm_nRadial)
   complex(R64), allocatable :: potLm(:)
+
+  !> Temporary for radial potential computation, dimension(Grid_Ylm_nRadial)
   complex(R64), allocatable :: potLmTmp(:)
+
+  !> Full angular interaction source density, dimension(potSize)
   complex(R64), allocatable :: src(:)
+
+  !> Temporary source for summation, dimension(potSize)
   complex(R64), allocatable :: srcTmp(:)
+
+  !> Radial source (l=0 component), dimension(Grid_Ylm_nRadial)
   complex(R64), allocatable :: srcLm(:)
+
+  !> Temporary for full-grid interaction potential, dimension(potSize)
   complex(R64), allocatable :: interactionPotential(:)
+
+  !> Full-grid orbital temporary for exchange, dimension(Grid_nPoints)
   complex(R64), allocatable :: orb(:)
+
+  !> Full-grid action temporary for exchange, dimension(Grid_nPoints)
   complex(R64), allocatable :: dOrbTmp(:)
 
 contains
@@ -38,6 +90,11 @@ contains
   end subroutine
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Allocate working arrays for the Ylm-optimized TDHx implementation.
+  !>
+  !> @details
+  !> Allocates radial potentials and full-grid temporaries. The potential size
+  !> is (2·lmax_pot+1)² × nRadial to accommodate all angular momentum channels.
   subroutine Setup
     use M_Utils_Say
     use M_Grid
@@ -64,6 +121,18 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Apply the radial Fock operator for channel l: dOrbLm = F̂_l·orbLm.
+  !>
+  !> @details
+  !> Computes:
+  !>   1. Radial kinetic + centrifugal: T̂_l·orbLm via SysKinetic_Ylm
+  !>   2. Mean-field potential: G(l,0;l,0;0,0)·potLm·orbLm where G is the Gaunt coefficient
+  !>   3. Exchange: full angular coupling to all occupied orbitals
+  !>
+  !> The Gaunt coefficient G(l,0;l,0;0,0) = <Y_l0|Y_00|Y_l0> couples the monopole
+  !> potential to the l-channel. Exchange is computed by expanding the trial
+  !> orbital to the full grid, computing the exchange there, and extracting the
+  !> l-component.
   subroutine HartreeFockAction(dOrbLm, orbLm, l, time)
     use M_Utils_SphericalHarmonics
     use M_SysKinetic_Ylm
@@ -84,18 +153,20 @@ contains
 
     dOrbLm = 0.0_R64
 
+    ! Gaunt coefficient for monopole coupling: <Y_l0|Y_00|Y_l0>
     gVal = SphericalHarmonics_GauntCoefficient( &
            l1=0, m1=0, &
            l2=l, m2=0, &
            l3=l, m3=0)
 
-    ! Kinetic part
+    ! Radial kinetic + centrifugal: T̂_l·orbLm
     call SysKinetic_Ylm_MultiplyWithRadialKineticOp(dOrbLmTmp, orbLm, l, 0, time)
     dOrbLm = dOrbLm + dOrbLmTmp
 
-    ! Potential part
+    ! Mean-field potential (Gaunt-weighted monopole): potLm filled in Approach
     dOrbLm = dOrbLm + gVal * potLm * orbLm
 
+    ! Exchange: expand to full grid, compute exchange, extract l-component
     orb = 0.0_R64
     call Grid_Ylm_SetLmComponent(orb, l, 0, orbLm)
     do j = 1, Orbs_nOrbsInState / 2
@@ -109,6 +180,23 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Perform one Ylm-optimized SCF iteration.
+  !>
+  !> @details
+  !> Algorithm:
+  !>   1. Extract radial external potential V̂_ext(r) for l=0,m=0
+  !>   2. Build monopole Hartree potential from occupied orbitals
+  !>   3. Diagonalize each l-channel's radial Fock operator
+  !>   4. Map eigenvectors to orbitals using (n,l,m) quantum numbers
+  !>   5. Mix with old orbitals, copy spin-up → spin-down
+  !>   6. Gram–Schmidt orthonormalize
+  !>
+  !> The orbital-to-eigenvector mapping uses the radial quantum number nr = n - l - 1
+  !> to select the correct eigenvector from the l-channel diagonalization.
+  !>
+  !> @param[inout] state  Packed orbital state
+  !> @param[in]    alpha  Mixing parameter (0 < α ≤ 1)
+  !> @param[in]    time   Time for potential evaluation
   subroutine Approach(state, alpha, time)
     use M_Grid
     use M_Grid_Ylm
@@ -131,35 +219,38 @@ contains
     nOS = Orbs_nOrbsInState
     orbs(1:nG, 1:nOS) => state(1:)
 
+    ! Step 1: Extract radial external potential (l=0, m=0 component)
     call SysPotential_Ylm_FillExternalPotentialRadial(potLm, 0, 0, time)
 
+    ! Step 2: Build monopole (l=0) Hartree potential from occupied orbitals
     src = 0.0_R64
     do j = 1, nOS / 2
       call SysInteraction_FillInteractionSrc(srcTmp, orbs(:, j), orbs(:, j))
-      src = src + 2.0_R64 * srcTmp
+      src = src + 2.0_R64 * srcTmp  ! Factor 2 for spin degeneracy
     end do
     call Grid_Ylm_GetLmComponent(srcLm, 0, 0, src)
     call SysInteraction_Ylm_FillInteractionPotentialRadial(potLmTmp, srcLm, 0, 0, time)
     potLm = potLm + potLmTmp
 
-    ! Diagonalize
+    ! Step 3: Diagonalize each l-channel's radial Fock operator
     do l = 0, Grid_Ylm_lmax
       call DiagonalizerList(l + 1) % e % Diagonalize(time, .true.)
     end do
 
+    ! Steps 4-5: Map eigenvectors to orbitals using (n,l,m), mix, and copy spins
     do j = 1, nOS / 2
       n = OrbsInit_Ylm_HydrogenLike_n(j)
       l = OrbsInit_Ylm_HydrogenLike_l(j)
       m = OrbsInit_Ylm_HydrogenLike_m(j)
-      nr = n - l - 1
+      nr = n - l - 1  ! Radial quantum number (node count)
 
       dOrbTmp = 0.0_R64
       call Grid_Ylm_SetLmComponent(dOrbTmp(:), l, m, DiagonalizerList(l + 1) % e % evecs(:, nr + 1))
       orbs(:, j) = (1.0_R64 - alpha) * orbs(:, j) + alpha * dOrbTmp(:)
-      orbs(:, nOS / 2 + j) = orbs(:, j)
+      orbs(:, nOS / 2 + j) = orbs(:, j)  ! Copy spin-up → spin-down
     end do
 
-    ! Orthonormalize the mixed orbitals
+    ! Step 6: Gram–Schmidt orthonormalize
     call Orbs_Orthonormalize(orbs)
 
   end subroutine

@@ -4,6 +4,7 @@ lintbuild/
 *.dat
 *.in
 *.exe
+*.pyc
 *.save
 *.zip
 *.pt

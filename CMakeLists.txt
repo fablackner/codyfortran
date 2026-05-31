@@ -72,8 +72,12 @@ if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     target_link_libraries(CodyFortran PRIVATE fftw3 openblas)
 endif()
 
+# Umbrella targets for building all apps or all tests
+add_custom_target(apps)
+add_custom_target(tests)
+
 # === Function to compile Fortran programs ===
-function(create_executables_from_dir dir extra_libs)
+function(create_executables_from_dir dir extra_libs umbrella_target)
     file(GLOB_RECURSE programs CONFIGURE_DEPENDS "${dir}/*.f90")
     foreach(file ${programs})
         # Generate unique target name based on relative path
@@ -91,34 +95,42 @@ function(create_executables_from_dir dir extra_libs)
         add_executable("${target_name}" "${file}")
         set_target_properties("${target_name}" PROPERTIES 
             OUTPUT_NAME "${exe_name}.exe"
-            RUNTIME_OUTPUT_DIRECTORY "${output_dir}"
+            RUNTIME_OUTPUT_DIRECTORY "${src_dir}"
         )
         
         # Link CodyFortran and any extra libraries (like test-drive)
         target_link_libraries("${target_name}" PRIVATE CodyFortran ${extra_libs})
-        
-        # Install to the source directory (preserving original behavior)
-        install(TARGETS "${target_name}" DESTINATION "${src_dir}")
+
+        # Add to umbrella target
+        add_dependencies(${umbrella_target} "${target_name}")
     endforeach()
 endfunction()
 
 # Process programs in app/ (only link CodyFortran)
-create_executables_from_dir(app "")
+create_executables_from_dir(app "" apps)
 
 # Process programs in test/ (link CodyFortran and test-drive)
-create_executables_from_dir(test "test-drive")
+create_executables_from_dir(test "test-drive" tests)
 
 # === Define CTest tests ===
 function(add_fortran_test file)
     get_filename_component(test_name "${file}" NAME_WE)
     
-    # Reconstruct target name
+    # Reconstruct target name (same logic as create_executables_from_dir)
     file(RELATIVE_PATH rel_path "${CMAKE_SOURCE_DIR}" "${file}")
     string(REPLACE "/" "_" target_name "${rel_path}")
     string(REPLACE ".f90" "" target_name "${target_name}")
 
+    # Get the source directory for working directory
+    get_filename_component(src_dir "${file}" DIRECTORY)
+
     add_test(NAME "${test_name}"
-             COMMAND "${target_name}")
+             COMMAND "${target_name}"
+             WORKING_DIRECTORY "${src_dir}")
+    
+    # Set environment variables for tests
+    set_tests_properties("${test_name}" PROPERTIES
+        ENVIRONMENT "CODY_PROJECT_DIR=${CMAKE_SOURCE_DIR}")
 endfunction()
 
 file(GLOB_RECURSE test_sources CONFIGURE_DEPENDS "test/*.f90")

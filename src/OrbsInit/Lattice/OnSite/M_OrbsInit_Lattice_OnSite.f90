@@ -2,6 +2,27 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief On-site δ-orbital initializer for lattice models.
+!>
+!> @details
+!> Implements orbital initialization as Kronecker δ functions localized at
+!> individual lattice sites. Each orbital is nonzero only at one site:
+!>
+!>   φ_i(j) = δ_{ij}
+!>
+!> The orbital index maps to site coordinates via row-major ordering:
+!>   index → (ix, iy, iz) where x varies fastest, then y, then z.
+!>
+!> This is the standard basis for Hubbard model calculations where orbitals
+!> represent localized atomic states on each lattice site.
+!>
+!> JSON Configuration
+!> ------------------
+!>   "orbsInit": {
+!>     "lattice": {
+!>       "onSite": { }  // no additional parameters needed
+!>     }
+!>   }
 module M_OrbsInit_Lattice_OnSite
   use M_Utils_Types
 

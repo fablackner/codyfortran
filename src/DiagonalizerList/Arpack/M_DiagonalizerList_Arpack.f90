@@ -2,11 +2,53 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Module M_DiagonalizerList_Arpack provides an ARPACK-based iterative
-!> eigensolver backend. It implements the abstract
-!> T_DiagonalizerList_E interface using Arnoldi/Lanczos methods to
-!> compute a selected subset of eigenvalues and (optionally) eigenvectors
-!> of a linear operator accessed through a matrix–vector callback.
+!> @file M_DiagonalizerList_Arpack.f90
+!> @brief ARPACK-based iterative eigensolver backend.
+!>
+!> @details
+!> This module provides an iterative eigensolver using ARPACK's Implicitly
+!> Restarted Arnoldi Method (IRAM). It is suitable for large sparse or
+!> matrix-free problems where only a few eigenpairs are needed.
+!>
+!> **Algorithm:**
+!> The ARPACK backend uses the reverse-communication interface:
+!> 1. Initialize Arnoldi iteration with random starting vector
+!> 2. Build Krylov subspace of dimension `nKry` via repeated matvecs
+!> 3. Extract Ritz values/vectors and restart until convergence
+!> 4. Post-process to obtain final eigenpairs
+!>
+!> **Complexity:** O(nKry × dim × T_matvec + nKry³) per restart, typically
+!> converges in O(nEvals/nKry) restarts for well-separated eigenvalues.
+!>
+!> **JSON Configuration:**
+!> @code{.json}
+!> "diagonalizerList": {
+!>   "arpack_ground": {
+!>     "nEvals": 5,
+!>     "which": "SR",
+!>     "bmat": "I",
+!>     "nKry": 20,
+!>     "checkConvergenceQ": true,
+!>     "printLevel": 0
+!>   }
+!> }
+!> @endcode
+!>
+!> | Parameter           | Type   | Default        | Description                         |
+!> |---------------------|--------|----------------|-------------------------------------|
+!> | `nEvals`            | int    | 1              | Number of eigenvalues (-1 = all)    |
+!> | `which`             | string | "SR"           | Spectrum region (see below)         |
+!> | `bmat`              | string | "I"            | "I" = standard, "G" = generalized   |
+!> | `nKry`              | int    | 2*nEvals+1     | Krylov subspace dimension           |
+!> | `checkConvergenceQ` | bool   | true           | Verify residuals after solve        |
+!> | `printLevel`        | int    | 0              | Verbosity level                     |
+!>
+!> **Spectrum selection (`which`):**
+!> - "LM" / "SM" : Largest / Smallest Magnitude
+!> - "LR" / "SR" : Largest / Smallest Real part (ground states)
+!> - "LI" / "SI" : Largest / Smallest Imaginary part
+!>
+!> @see M_Utils_ArpackLib for underlying ARPACK wrappers
 module M_DiagonalizerList_Arpack
   use M_Utils_Types
   use M_DiagonalizerList, only: T_DiagonalizerList_E
@@ -18,8 +60,9 @@ module M_DiagonalizerList_Arpack
   !=============================================================================
 
   interface
-    !> Allocates a new ARPACK diagonalizer instance and associates it with a
-    !> configuration path. Intended to be called by the list fabrication logic.
+    !> @brief Allocate an ARPACK diagonalizer instance.
+    !> @param[out] e     Polymorphic pointer to allocated instance
+    !> @param[in]  path  JSON configuration path
     module subroutine DiagonalizerList_Arpack_Allocate(e, path)
       class(T_DiagonalizerList_E), allocatable, intent(out) :: e
       character(len=*), intent(in) :: path
@@ -30,52 +73,65 @@ module M_DiagonalizerList_Arpack
   ! module types
   !=============================================================================
 
-  !> ARPACK diagonalizer.
-  !> Wraps an implicitly restarted Arnoldi/Lanczos iteration to compute the
-  !> requested number of eigenpairs of large sparse or matrix-free operators.
+  !-----------------------------------------------------------------------------
+  !> @brief ARPACK iterative eigensolver implementation.
+  !>
+  !> @details
+  !> Extends the abstract `T_DiagonalizerList_E` to provide iterative
+  !> Arnoldi/Lanczos diagonalization. Only requires matrix–vector products,
+  !> never forms the explicit matrix.
+  !>
+  !> **Best suited for:**
+  !> - Large sparse matrices (dim > 1000)
+  !> - Matrix-free operators
+  !> - Partial spectrum (nEvals << dim)
+  !> - Ground state / low-lying excitations
+  !-----------------------------------------------------------------------------
   type, extends(T_DiagonalizerList_E) :: T_DiagonalizerList_E_Arpack
-    !> Which Ritz values to target (e.g., 'LM','SM','LR','SR','LI','SI').
-    character(2)  :: which
-    !> Matrix type flag for ARPACK: 'I' for standard problem, 'G' for generalized.
-    character(1)  :: bmat
-    !> Dimension of the Krylov subspace (number of Arnoldi vectors).
-    integer(I32)  :: nKry
-    !> If true, perform explicit convergence checks and optional retries.
-    logical       :: checkConvergenceQ
+    !> Spectrum region selector: 'LM','SM','LR','SR','LI','SI'
+    character(2)  :: which = "SR"
+    !> Problem type: 'I' = standard Ax=λx, 'G' = generalized Ax=λBx
+    character(1)  :: bmat = "I"
+    !> Krylov subspace dimension (number of Arnoldi vectors).
+    !> Must satisfy: nEvals + 1 ≤ nKry ≤ dim.
+    !> Larger values improve convergence but increase memory and compute cost.
+    integer(I32)  :: nKry = 0
+    !> If true, compute and print residual norms after diagonalization.
+    logical       :: checkConvergenceQ = .true.
   contains
-    !> Backend-specific setup (allocate work arrays, set ARPACK parameters).
-    procedure :: Setup
-    !> Read/derive ARPACK parameters from configuration and bind callbacks.
-    procedure :: Fabricate
-    !> Run the ARPACK iteration to compute eigenvalues (and optionally eigenvectors).
-    procedure :: Diagonalize
+    procedure :: Setup      !< Prepare for diagonalization
+    procedure :: Fabricate  !< Read JSON parameters
+    procedure :: Diagonalize !< Run ARPACK iteration
   end type
 
   interface
-    !> Initializes the ARPACK diagonalizer with configuration parameters
-    !> (e.g., which, bmat, nKry, print level) and binds ApplyMatOnVec.
+    !> @brief Read ARPACK parameters from JSON configuration.
     module subroutine Fabricate(this)
-      !> The ARPACK diagonalizer instance to initialize
       class(T_DiagonalizerList_E_Arpack), intent(inout) :: this
     end subroutine
   end interface
 
   interface
-    !> Performs setup operations for the ARPACK diagonalizer after initialization
-    !> (e.g., size workspaces based on dim, nEvals, and nKry).
+    !> @brief Perform setup for ARPACK backend.
     module subroutine Setup(this)
-      !> The ARPACK diagonalizer instance to set up
       class(T_DiagonalizerList_E_Arpack), intent(inout) :: this
     end subroutine
   end interface
 
   interface
+    !> @brief Diagonalize the operator using ARPACK.
+    !>
+    !> @details
+    !> Runs the implicitly restarted Arnoldi method to compute `nEvals`
+    !> eigenpairs in the spectral region specified by `which`. Uses a
+    !> contained procedure to wrap `ApplyMatOnVec` for ARPACK's interface.
+    !>
+    !> @param[inout] this    Diagonalizer instance (results in %evals, %evecs)
+    !> @param[in]    time    Time for time-dependent operators
+    !> @param[in]    evecsQ  Whether to compute eigenvectors
     module subroutine Diagonalize(this, time, evecsQ)
-      !> The ARPACK diagonalizer instance
       class(T_DiagonalizerList_E_Arpack), intent(inout) :: this
-      !> Time at which to evaluate the operator if time dependent.
       real(R64), intent(in) :: time
-      !> Flag indicating whether to compute eigenvectors
       logical, intent(in) :: evecsQ
     end subroutine
   end interface

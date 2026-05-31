@@ -3,6 +3,17 @@
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 submodule(M_Method_Mb_GridBased) S_Method_Mb_GridBased
+  !-----------------------------------------------------------------------------
+  ! Grid-based many-body method implementation.
+  !
+  ! Provides operator-application routines that work directly on tensor-product
+  ! grid representations of many-body wavefunctions. The full wavefunction
+  ! Ψ(r₁,r₂,...,rₙ) is stored on a grid without orbital expansion.
+  !
+  ! Currently supports: Full (exact tensor-product representation)
+  !
+  ! Note: Exponentially expensive in particle number, suitable only for small N.
+  !-----------------------------------------------------------------------------
 
   implicit none
 
@@ -14,6 +25,12 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_GridBased_Fabricate
+    !---------------------------------------------------------------------------
+    ! Initializes grid-based operator procedures and dispatches to variant.
+    !
+    ! Binds default operator-application procedures for kinetic, potential,
+    ! and interaction operators on grid slices.
+    !---------------------------------------------------------------------------
     use M_Utils_Json
     use M_Utils_Say
     use M_Method
@@ -23,7 +40,7 @@ contains
     call Say_Fabricate("method.gridBased")
 
     !------------------------------------
-    ! set values and procedure pointers
+    ! bind operator procedures
     !------------------------------------
 
     Method_GetEnergy => GetEnergy
@@ -32,7 +49,7 @@ contains
     Method_Mb_GridBased_ApplyInteractionOp => ApplyInteractionOp
 
     !------------------------------------
-    ! branch
+    ! branch: variant selection
     !------------------------------------
 
     if (Json_GetExistence("method.mb.gridBased.full")) then
@@ -46,6 +63,13 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   function GetEnergy(time) result(res)
+    !---------------------------------------------------------------------------
+    ! Computes energy via E = Im[⟨dΨ|Ψ⟩] where dΨ = -i·H·Ψ.
+    !
+    ! Since dΨ/dt = -i·H·Ψ, we have H·Ψ = i·dΨ, and
+    !   E = ⟨Ψ|H|Ψ⟩ = ⟨Ψ|i·dΨ⟩ = i·⟨Ψ|dΨ⟩ = Re[i·⟨Ψ|dΨ⟩]
+    ! which equals Re[⟨dΨ|Ψ⟩] since ⟨dΨ|Ψ⟩ = conj(⟨Ψ|dΨ⟩).
+    !---------------------------------------------------------------------------
     use M_Grid
     use M_Method
 
@@ -64,6 +88,13 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyKineticOp(dSlice, slice, time, bt_)
+    !---------------------------------------------------------------------------
+    ! Applies the kinetic (Laplacian) operator to a 1D grid slice.
+    !
+    ! Accumulates: dSlice += T̂ · slice
+    !
+    ! The optional bt_ argument allows body-type-dependent masses.
+    !---------------------------------------------------------------------------
     use M_Grid
     use M_Method
     use M_Method_Mb_GridBased
@@ -87,6 +118,13 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyPotentialOp(dSlice, slice, time, bt_)
+    !---------------------------------------------------------------------------
+    ! Applies the external potential operator to a 1D grid slice.
+    !
+    ! Accumulates: dSlice += V̂_ext · slice
+    !
+    ! The optional bt_ argument selects body-type-dependent potentials.
+    !---------------------------------------------------------------------------
     use M_Grid
     use M_SysPotential
 
@@ -113,6 +151,14 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyInteractionOp(dSlice2d, slice2d, bt1, bt2, time)
+    !---------------------------------------------------------------------------
+    ! Applies the two-body interaction operator to a 2D grid slice.
+    !
+    ! For each grid point r₂, computes:
+    !   dSlice2d(:, r₂) += W(r₁, r₂) · slice2d(:, r₂)
+    !
+    ! Arguments bt1, bt2 specify body types for body-type-dependent interactions.
+    !---------------------------------------------------------------------------
     use M_Grid
     use M_SysInteraction
 
@@ -130,10 +176,16 @@ contains
     allocate (orbTmp(nG))
     allocate (src(nG))
 
+    ! Loop over second particle's grid points
     do iGrid2 = 1, nG
+      ! Build delta-function source at grid point iGrid2
       src = (0.0_R64, 0.0_R64)
       src(iGrid2) = (1.0_R64, 0.0_R64)
+
+      ! Compute interaction potential from this source
       call SysInteraction_FillInteractionPotential(interactionPotential, src, time, bt1, bt2)
+
+      ! Apply to slice and accumulate
       call SysInteraction_MultiplyWithInteractionPotential(orbTmp, interactionPotential, slice2d(:, iGrid2))
       dSlice2d(:, iGrid2) = dSlice2d(:, iGrid2) + orbTmp(:)
     end do

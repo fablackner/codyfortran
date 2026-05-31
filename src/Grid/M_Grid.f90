@@ -2,15 +2,43 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Generic grid API and runtime wiring for spatial representations.
+!> @file M_Grid.f90
+!> @brief Generic grid API and runtime wiring for spatial representations.
 !>
+!> @details
 !> M_Grid provides a thin, implementation-agnostic interface for spatial
-!> grids used throughout the code base. It exposes a small set of procedure
-!> pointers (setup, inner product, orthonormalization, projection) and a
-!> single size scalar. Concrete grid back-ends (1D constant, 2D/3D regular,
-!> spherical/Ylm, FEDVR, …) are selected at runtime by Grid_Fabricate which
-!> associates these procedure pointers and initializes module state owned by
-!> the selected back-end.
+!> discretizations used throughout the quantum many-body simulation framework.
+!> It exposes:
+!>   - A global scalar `Grid_nPoints` (total degrees of freedom)
+!>   - Procedure pointers for setup, inner product, Gram–Schmidt
+!>     orthonormalization, and subspace projection
+!>
+!> Concrete spatial back-ends are selected at runtime via `Grid_Fabricate`,
+!> which reads the JSON configuration and delegates to the appropriate
+!> implementation (Linear, Square, Polar, Spherical, Ylm, Lattice). Each
+!> back-end defines its own metric/quadrature so that inner products,
+!> orthonormality, and projection are metric-aware.
+!>
+!> @par Supported Back-ends
+!>   | JSON Key         | Module             | Geometry / Basis                       |
+!>   |------------------|--------------------|----------------------------------------|
+!>   | `grid.linear`    | M_Grid_Linear      | 1D Cartesian (Const, FEDVR)            |
+!>   | `grid.square`    | M_Grid_Square      | 2D Cartesian (Const)                   |
+!>   | `grid.polar`     | M_Grid_Polar       | 2D polar (Const)                       |
+!>   | `grid.spherical` | M_Grid_Spherical   | 3D spherical (Const)                   |
+!>   | `grid.ylm`       | M_Grid_Ylm         | Radial + spherical harmonics Y_lm      |
+!>   | `grid.lattice`   | M_Grid_Lattice     | 3D discrete lattice (Hubbard-style)    |
+!>
+!> @par Typical Initialization
+!> @code{.f90}
+!>   call Grid_Fabricate   ! selects & wires back-end from JSON
+!>   call Grid_Setup       ! allocates coordinates, weights, etc.
+!> @endcode
+!>
+!> @note Only import M_Grid in client code; implementation details live in
+!>       the corresponding M_Grid_* and S_Grid_* modules.
+!>
+!> @see S_Grid.f90 for fabrication logic and default orthonormalization.
 module M_Grid
   use M_Utils_Types
   use M_Utils_NoOpProcedures

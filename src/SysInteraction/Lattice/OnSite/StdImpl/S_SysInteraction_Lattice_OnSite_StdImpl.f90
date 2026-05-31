@@ -2,6 +2,7 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Standard implementation of the on-site lattice interaction.
 submodule(M_SysInteraction_Lattice_OnSite_StdImpl) S_SysInteraction_Lattice_OnSite_StdImpl
 
   implicit none
@@ -9,6 +10,7 @@ submodule(M_SysInteraction_Lattice_OnSite_StdImpl) S_SysInteraction_Lattice_OnSi
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Bind the standard on-site implementation.
   module subroutine SysInteraction_Lattice_OnSite_StdImpl_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -25,6 +27,16 @@ contains
   end subroutine
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Compute interaction potential from source density.
+  !>
+  !> For on-site interaction: V(i) = U * ρ(i)
+  !> This is a simple scaling—no convolution or Poisson solve needed.
+  !>
+  !> @param[out] interactionPotential  Resulting potential V(i)
+  !> @param[in]  src                   Source density ρ(i)
+  !> @param[in]  time                  Physical time (unused, time-independent)
+  !> @param[in]  bt1_                  Target body type (unused)
+  !> @param[in]  bt2_                  Source body type (unused)
   subroutine FillInteractionPotential(interactionPotential, src, time, bt1_, bt2_)
     use M_Utils_UnusedVariables
     use M_SysInteraction_Lattice_OnSite

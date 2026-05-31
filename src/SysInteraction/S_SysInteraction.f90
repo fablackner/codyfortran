@@ -2,6 +2,14 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Fabrication submodule for the SysInteraction interface.
+!>
+!> @details Implements the top-level factory that dispatches to grid-specific
+!> interaction back-ends based on the JSON configuration. The dispatch logic
+!> mirrors the grid hierarchy:
+!>   - `sysInteraction.linear`  → 1D real-space convolutions
+!>   - `sysInteraction.lattice` → discrete tight-binding models
+!>   - `sysInteraction.ylm`     → spherical-harmonic Coulomb solvers
 submodule(M_SysInteraction) S_Interaction
 
   implicit none
@@ -9,6 +17,12 @@ submodule(M_SysInteraction) S_Interaction
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Top-level fabrication entry point for SysInteraction.
+  !>
+  !> Reads the JSON path `sysInteraction.*` to determine which grid back-end
+  !> to activate, then delegates to the corresponding `*_Fabricate` routine.
+  !>
+  !> @note Exactly one of `linear`, `lattice`, or `ylm` must be present.
   module subroutine SysInteraction_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -24,7 +38,7 @@ contains
     !------------------------------------
 
     !------------------------------------
-    ! branch
+    ! branch: select grid-specific back-end
     !------------------------------------
 
     if (Json_GetExistence("sysInteraction.linear")) then

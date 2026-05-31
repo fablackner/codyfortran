@@ -2,11 +2,17 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Linear-grid interaction registration.
+!> @brief Linear-grid (1D real-space) interaction interface.
 !>
-!> This module plugs in interaction models that operate on uniformly spaced
-!> 1D/linear grids (e.g., real-space convolutions). It does not implement the
-!> physics itself; it only fabricates and wires the selected back-end.
+!> @details This module registers interaction models for uniformly spaced 1D
+!> grids where the interaction potential is computed via real-space convolution:
+!>    V(x) = ∫ w(|x - x'|) ρ(x') dx'
+!>
+!> **Available implementations:**
+!>   - `SoftYukawa`: Screened Coulomb/Yukawa kernel with softening
+!>
+!> The convolution can be computed via direct O(N²) integration (`StdImpl`)
+!> or FFT-accelerated O(N log N) method (`Fftw3`).
 module M_SysInteraction_Linear
   use M_Utils_Types
   use M_Utils_NoOpProcedures

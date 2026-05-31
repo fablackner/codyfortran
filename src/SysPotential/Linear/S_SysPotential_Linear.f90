@@ -2,6 +2,11 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Linear-grid fabrication submodule for external potentials.
+!>
+!> Dispatches to the appropriate linear (1D real-space) potential model based on
+!> the JSON configuration. All linear potentials share the same point-wise
+!> multiplication operator implemented here.
 submodule(M_SysPotential_Linear) S_SysPotential_Linear
 
   implicit none
@@ -9,6 +14,11 @@ submodule(M_SysPotential_Linear) S_SysPotential_Linear
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Parse linear potential configuration and wire the selected model.
+  !>
+  !> Available models:
+  !> - `harmonic`:   Parabolic trap V = ½ω²(x-x₀)²
+  !> - `softYukawa`: Multi-center softened Yukawa/Coulomb potential
   module subroutine SysPotential_Linear_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -25,7 +35,7 @@ contains
     SysPotential_MultiplyWithExternalPotential => MultiplyWithExternalPotential
 
     !------------------------------------
-    ! branch
+    ! branch by potential model
     !------------------------------------
 
     if (Json_GetExistence("sysPotential.linear.harmonic")) then
@@ -41,6 +51,10 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Apply the external potential to an orbital via point-wise multiplication.
+  !>
+  !> For linear grids, the potential is diagonal in position space, so
+  !> application is simply: dOrb(i) = V(i) × orb(i).
   subroutine MultiplyWithExternalPotential(dOrb, externalPotential, orb)
     use M_Grid
 

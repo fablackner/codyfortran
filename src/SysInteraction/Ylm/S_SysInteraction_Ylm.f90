@@ -2,6 +2,15 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Implementation submodule for Ylm-domain interactions.
+!>
+!> @details Provides the common spherical-harmonic routines:
+!>   - `FillInteractionSrc`: Product of orbitals expanded to higher lmax
+!>   - `FillInteractionPotential`: Loop over (l,m) channels, solve radial Poisson
+!>   - `MultiplyWithInteractionPotential`: Angular recoupling via SpatialProduct
+!>
+!> The radial solver (`FillInteractionPotentialRadial`) is set by the specific
+!> implementation (StdImpl, TwoScan, FullEq, BlockEq).
 submodule(M_SysInteraction_Ylm) S_SysInteraction_Ylm
 
   implicit none
@@ -9,6 +18,10 @@ submodule(M_SysInteraction_Ylm) S_SysInteraction_Ylm
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Fabricate the Ylm interaction back-end.
+  !>
+  !> Reads `lmax` for the potential expansion (defaults to 2× orbital lmax to
+  !> capture the full density product) and dispatches to Coulomb variants.
   module subroutine SysInteraction_Ylm_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -42,6 +55,20 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Compute interaction potential from source via channel-by-channel Poisson solve.
+  !>
+  !> For each (l,m) channel:
+  !>   1. Extract radial component ρₗₘ(r) from source
+  !>   2. Solve radial Poisson equation → Vₗₘ(r)
+  !>   3. Store in full Ylm expansion
+  !>
+  !> Channels with negligible source (|ρₗₘ| < 10⁻¹⁴) are skipped for efficiency.
+  !>
+  !> @param[out] interactionPotential  Full Ylm-expanded potential V(r,Ω)
+  !> @param[in]  src                   Source density in Ylm basis (higher lmax)
+  !> @param[in]  time                  Physical time
+  !> @param[in]  bt1_                  Target body type (optional)
+  !> @param[in]  bt2_                  Source body type (optional)
   subroutine FillInteractionPotential(interactionPotential, src, time, bt1_, bt2_)
     use M_Grid
     use M_Grid_Ylm
@@ -52,7 +79,6 @@ contains
     integer(I32), intent(in), optional :: bt1_
     integer(I32), intent(in), optional :: bt2_
 
-    ! Local variables
     integer(I32) :: l, m, potSize, nRad
     integer(I32) :: lmaxPot
     complex(R64), allocatable :: srcLm(:), potLm(:)
@@ -79,6 +105,17 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Build source term from orbital product in Ylm basis.
+  !>
+  !> Computes ρ(r,Ω) = ψ*ᵢ(r,Ω) ψⱼ(r,Ω) expanded to lmax_pot to capture the
+  !> full angular content of the density (product of two l functions needs 2l).
+  !>
+  !> Uses `Grid_Ylm_SpatialProduct` which handles the Clebsch-Gordan coupling
+  !> of spherical harmonics and includes radial quadrature weights.
+  !>
+  !> @param[out] src        Source density ρₗₘ(r) in Ylm basis
+  !> @param[in]  orbConjg   Conjugated orbital (will be conjugated → bra)
+  !> @param[in]  orb        Orbital (ket)
   subroutine FillInteractionSrc(src, orbConjg, orb)
     use M_Grid_Ylm
 
@@ -99,6 +136,14 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Apply interaction potential to an orbital via angular recoupling.
+  !>
+  !> Computes dψ(r,Ω) = V(r,Ω) × ψ(r,Ω) where both are in Ylm basis.
+  !> Uses `Grid_Ylm_SpatialProduct` to handle the Clebsch-Gordan coupling.
+  !>
+  !> @param[out] dOrb                   Resulting orbital V·ψ
+  !> @param[in]  interactionPotential   Potential V in Ylm basis (lmax_pot)
+  !> @param[in]  orb                    Source orbital ψ in Ylm basis (lmax)
   subroutine MultiplyWithInteractionPotential(dOrb, interactionPotential, orb)
     use M_Grid
     use M_Grid_Ylm

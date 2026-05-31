@@ -2,12 +2,28 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Linear-grid orbital initialization backend.
+!> @brief Linear-grid (1D continuous) orbital initialization backend.
 !>
+!> @details
 !> Provides an initialization function interface for orbitals defined on a
-!> 1D spatial coordinate x. The fabricate routine connects linear-specific
-!> implementations (e.g., plane waves, harmonic eigenstates) to the generic
-!> pointers in `M_OrbsInit`.
+!> 1D spatial coordinate x ∈ [xmin, xmax]. The fabricate routine connects
+!> linear-specific implementations to the generic pointers in `M_OrbsInit`.
+!>
+!> Available Sub-Backends
+!> ----------------------
+!> - **Harmonic** : Quantum harmonic oscillator eigenstates ψ_n(x) = H_n(ξ)·e^{-ξ²/2}
+!>                  where ξ = (x - x₀)/a and a = 1/√ω. Uses GSL Hermite polynomials.
+!>
+!> Procedure Pointer Contract
+!> --------------------------
+!> `OrbsInit_Linear_InitFunction(x, index, bt_)` returns the real-valued amplitude
+!> at position x for orbital `index`. Normalization is applied after sampling.
+!>
+!> JSON Configuration
+!> ------------------
+!>   {"orbsInit": {"linear": {"harmonic": {"position": 0.0, "omega": 1.0}}}}
+!>
+!> @see M_OrbsInit_Linear_Harmonic for the harmonic oscillator implementation.
 module M_OrbsInit_Linear
   use M_Utils_Types
   use M_Utils_NoOpProcedures

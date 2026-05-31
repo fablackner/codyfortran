@@ -2,6 +2,33 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Implementation submodule for M_Orbs.
+!>
+!> This submodule provides the concrete implementations for orbital operations:
+!> - Fabrication: procedure pointer binding and configuration parsing
+!> - Orthonormalization: per-body-type Gram-Schmidt via Grid backend
+!> - Subspace projection: gauge enforcement via Grid backend
+!> - Persistence: binary file I/O for orbital coefficients
+!>
+!> Design rationale
+!> ----------------
+!> Orbital operations are thin wrappers around Grid operations. The key insight
+!> is that each body type's orbitals form an independent subspace and must be
+!> orthonormalized separately. This ensures that fermions/bosons of different
+!> species remain distinguishable and that the many-body wavefunction retains
+!> proper antisymmetry/symmetry structure.
+!>
+!> The loop pattern `do ibt = 1, nBodyTypes` appears in all operations and
+!> partitions the orbital matrix into body-type slices using the indexing:
+!>   startOrb = nOrbsStart(ibt), endOrb = nOrbsEnd(ibt)
+!>
+!> Dependencies
+!> ------------
+!> - M_Grid: provides metric-aware orthonormalization and projection
+!> - M_Method_Mb: defines nBodyTypes (number of particle species)
+!> - M_Method_Mb_OrbBased: defines nOrbs(ibt), nOrbsSum (orbital partitioning)
+!> - M_Utils_Json: JSON configuration access
+!> - M_Utils_DataStorage: binary I/O for SaveOrbs
 submodule(M_Orbs) S_Orbs
 
   implicit none
@@ -9,6 +36,27 @@ submodule(M_Orbs) S_Orbs
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Bind procedure pointers and configure the orbital representation.
+!>
+!> Configuration keys (JSON)
+!> -------------------------
+!> - `orbs.restrictedQ` (logical, default: false):
+!>     If true, use spin-restricted representation where a single set of
+!>     spatial orbitals is shared between spin-up and spin-down electrons.
+!>     This halves `Orbs_nOrbsInState` and enables Hamiltonian symmetries.
+!>
+!> Procedure pointer bindings
+!> --------------------------
+!> - Orbs_ProjectOnSubspace => ProjectOnSubspace
+!> - Orbs_Orthonormalize    => Orthonormalize
+!> - Orbs_SaveOrbs          => SaveOrbs
+!>
+!> Post-conditions
+!> ---------------
+!> - `Orbs_restrictedQ` is set from JSON configuration
+!> - `Orbs_nOrbsInState` is computed:
+!>     * Restricted:   nOrbsSum / 2 (shared spatial orbitals)
+!>     * Unrestricted: nOrbsSum     (independent orbitals per body type)
   module subroutine Orbs_Fabricate
     use M_Utils_Say
     use M_Utils_Json
@@ -32,6 +80,23 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Orthonormalize orbital columns independently for each body type.
+!>
+!> Algorithm
+!> ---------
+!> For each body type ibt in [1, nBodyTypes]:
+!>   1. Extract the orbital slice orbs(:, startOrb:endOrb) for this body type
+!>   2. Apply Grid_Orthonormalize which performs modified Gram-Schmidt with
+!>      the grid's metric tensor (handles non-uniform grids, FEDVR, etc.)
+!>   3. Result: <φ_i^(bt) | φ_j^(bt)> = δ_ij within body type
+!>
+!> Why per-body-type?
+!> ------------------
+!> Cross-body-type orthogonality is not required (and would be unphysical for
+!> distinguishable particles). Each species maintains its own orthonormal
+!> orbital basis independently.
+!>
+!> Complexity: O(nBodyTypes * nOrbs(ibt)^2 * nBasis) dominated by inner products.
   subroutine Orthonormalize(orbs)
     use M_Method_Mb
     use M_Method_Mb_OrbBased
@@ -55,6 +120,28 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Project orbital derivatives onto the orthogonal complement of the orbital
+!> subspace, independently for each body type.
+!>
+!> Mathematical operation
+!> ----------------------
+!> For each column ψ in dOrbs and the reference orbitals {φ_j} in orbs:
+!>   ψ' = ψ - Σ_j <φ_j|ψ> φ_j
+!>
+!> This removes the component of ψ parallel to span{φ_1, ..., φ_n}.
+!>
+!> Physical motivation (MCTDH gauge)
+!> ---------------------------------
+!> In MCTDH/MCTDHF/MCTDHB propagation, the orbital time derivatives dφ/dt
+!> must be orthogonal to the current orbital space to avoid redundant
+!> parametrization (gauge freedom). This projection enforces the standard
+!> "parallel transport" gauge condition: <φ_j | dφ_i/dt> = 0.
+!>
+!> Why per-body-type?
+!> ------------------
+!> The gauge condition applies within each body type independently. Orbitals
+!> of different species are already distinguishable and need not (and should
+!> not) be projected against each other.
   subroutine ProjectOnSubspace(dOrbs, orbs)
     use M_Method_Mb
     use M_Method_Mb_OrbBased
@@ -79,6 +166,29 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Persist orbital coefficients to binary files, one file per orbital.
+!>
+!> File naming convention
+!> ----------------------
+!> Each orbital is saved to: `orbBB_II.in`
+!>   - BB: two-digit body type index (01, 02, ...)
+!>   - II: two-digit orbital index within that body type (01, 02, ...)
+!>
+!> Example for 2 body types with 3 and 2 orbitals respectively:
+!>   orb01_01.in, orb01_02.in, orb01_03.in  (body type 1)
+!>   orb02_01.in, orb02_02.in               (body type 2)
+!>
+!> File format
+!> -----------
+!> Raw binary via M_Utils_DataStorage. Each file contains the complex(R64)
+!> coefficient vector of length Grid_nPoints. Files can be reloaded via
+!> OrbsInit with backend "Load".
+!>
+!> Use cases
+!> ---------
+!> - Checkpoint/restart for long propagations
+!> - Post-processing and visualization
+!> - Initial guess for subsequent calculations
   subroutine SaveOrbs(orbs)
     use M_Utils_DataStorage
     use M_Method_Mb

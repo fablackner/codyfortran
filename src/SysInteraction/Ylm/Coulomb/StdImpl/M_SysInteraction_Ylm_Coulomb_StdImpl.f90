@@ -2,10 +2,13 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Default/reference Coulomb solver in Ylm representation.
+!> @brief Reference (Green's function) implementation of radial Coulomb solver.
 !>
-!> A robust, easy-to-understand baseline implementation used when no specialized
-!> method is requested. Prioritizes clarity over peak performance.
+!> @details Computes the radial potential using the analytical Green's function:
+!>    Vₗₘ(r) = (4π/(2l+1)) ∫ (r<ˡ/r>ˡ⁺¹) ρₗₘ(r') dr'
+!>
+!> **Complexity:** O(N²) where N is the number of radial points.
+!> **Use case:** Reference/validation, small grids (N < 100).
 module M_SysInteraction_Ylm_Coulomb_StdImpl
   use M_Utils_Types
 

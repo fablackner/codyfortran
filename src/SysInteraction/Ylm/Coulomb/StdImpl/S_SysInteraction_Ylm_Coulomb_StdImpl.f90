@@ -2,7 +2,7 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!
+!> @brief Standard O(N²) Green's function implementation of radial Poisson solver.
 submodule(M_SysInteraction_Ylm_Coulomb_StdImpl) S_SysInteraction_Ylm_Coulomb_StdImpl
 
   implicit none
@@ -10,6 +10,7 @@ submodule(M_SysInteraction_Ylm_Coulomb_StdImpl) S_SysInteraction_Ylm_Coulomb_Std
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Bind the reference Coulomb solver.
   module subroutine SysInteraction_Ylm_Coulomb_StdImpl_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -27,6 +28,22 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Compute radial potential via direct Green's function integration.
+  !>
+  !> Uses the Coulomb Green's function kernel:
+  !>    G_l(r,r') = (r<ˡ)/(r>ˡ⁺¹)
+  !> where r< = min(r,r') and r> = max(r,r').
+  !>
+  !> The double loop over radial points gives O(N²) complexity but is exact
+  !> for the given quadrature. Use for validation or small systems.
+  !>
+  !> @param[out] potLm   Radial potential component Vₗₘ(r)
+  !> @param[in]  srcLm   Radial density component ρₗₘ(r) (includes weights)
+  !> @param[in]  l       Angular momentum quantum number
+  !> @param[in]  m       Magnetic quantum number (unused for Coulomb)
+  !> @param[in]  time    Physical time (unused, time-independent)
+  !> @param[in]  bt1_    Target body type (unused)
+  !> @param[in]  bt2_    Source body type (unused)
   subroutine FillInteractionPotentialRadial(potLm, srcLm, l, m, time, bt1_, bt2_)
     use M_Utils_Constants, only: PI
     use M_Utils_UnusedVariables
@@ -59,7 +76,6 @@ contains
         rMin = min(r1, r2)
         rMax = max(r1, r2)
 
-        ! Coulomb interaction with Green's function kernel
         potLm(iRad1) = potLm(iRad1) + srcLm(iRad2) * (rMin**l) / (rMax**(l + 1))
       end do
     end do

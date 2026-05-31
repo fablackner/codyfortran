@@ -172,6 +172,7 @@ contains
     character(32) :: stVal
     integer(I32) :: istat = 0
     character(len=:), allocatable :: emojiPrefix
+    character(1) :: esc
 
     call get_environment_variable("CODY_PRETTY_PRINT", stVal, status=istat)
 
@@ -203,23 +204,25 @@ contains
 
     else
 
+      esc = achar(27)
       nl = new_line('A')
-      bold = achar(27)//"[1m"
-      reset = achar(27)//"[0m"
-      red = achar(27)//"[41;97m"
-      green = achar(27)//"[42;97m"
-      blue = achar(27)//"[44;97m"
-      purple = achar(27)//"[45;97m"
+      bold = esc//"[1m"
+      reset = esc//"[0m"
+      ! Use truecolor SGR sequences to avoid terminal palette remapping.
+      red = esc//"[1;38;2;255;255;255;48;2;220;38;38m"
+      green = esc//"[1;38;2;255;255;255;48;2;46;125;50m"
+      blue = esc//"[1;38;2;255;255;255;48;2;38;96;166m"
+      purple = esc//"[1;38;2;255;255;255;48;2;136;63;157m"
 
-      emph = achar(27)//"[1;30;103m"
-      blink = achar(27)//"[1;5m"
+      emph = esc//"[1;38;2;0;0;0;48;2;255;215;87m"
+      blink = esc//"[1;5m"
 
-      colorLogo1 = achar(27)//"[1;48;5;226;38;5;52m"
-      colorLogo2 = achar(27)//"[1;48;5;190;38;5;53m"
-      colorLogo3 = achar(27)//"[1;48;5;154;38;5;54m"
-      colorLogo4 = achar(27)//"[1;48;5;118;38;5;55m"
-      colorLogo5 = achar(27)//"[1;48;5;82;38;5;56m"
-      colorLogo6 = achar(27)//"[1;48;5;46;38;5;57m"
+      colorLogo1 = esc//"[1;48;2;255;255;0;38;2;95;0;0m"
+      colorLogo2 = esc//"[1;48;2;215;255;0;38;2;95;0;95m"
+      colorLogo3 = esc//"[1;48;2;175;255;0;38;2;95;0;135m"
+      colorLogo4 = esc//"[1;48;2;135;255;0;38;2;95;0;175m"
+      colorLogo5 = esc//"[1;48;2;95;255;0;38;2;95;0;215m"
+      colorLogo6 = esc//"[1;48;2;0;255;0;38;2;95;0;255m"
 
       emojiPrefix = char(int(z"F0"))//char(int(z"9F"))
 

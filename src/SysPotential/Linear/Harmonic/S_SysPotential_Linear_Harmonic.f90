@@ -2,6 +2,10 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Fabrication submodule for linear harmonic potential.
+!>
+!> Reads configuration parameters and sets up a 1D harmonic trap. The potential
+!> is time-independent and body-type-independent.
 submodule(M_SysPotential_Linear_Harmonic) S_SysPotential_Linear_Harmonic
 
   implicit none
@@ -12,6 +16,7 @@ contains
   module subroutine SysPotential_Linear_Harmonic_Fabricate
     use M_Utils_Json
     use M_Utils_Say
+    use M_SysPotential
     use M_SysPotential_Linear_Harmonic_StdImpl
 
     implicit none
@@ -30,13 +35,15 @@ contains
     SysPotential_Linear_Harmonic_position = position
     SysPotential_Linear_Harmonic_omega = omega
 
-    ! Make sure all arrays have the same size
     if (size(position) .ne. size(omega)) then
       error stop "sysPotential.linear.harmonic: position and omega arrays must have the same length"
     end if
 
+    SysPotential_timeIndependentQ = .true.
+    SysPotential_bodyTypeIndependentQ = .true.
+
     !------------------------------------
-    ! branch
+    ! branch by implementation
     !------------------------------------
 
     if (Json_GetExistence("sysPotential.linear.harmonic.stdImpl")) then

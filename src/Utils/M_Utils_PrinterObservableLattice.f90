@@ -153,7 +153,7 @@ contains
     nOS = Orbs_nOrbsInState
     occupation = nO / nOS
 
-    needsOutput = (filename .ne. "")
+    needsOutput = toScreenQ .or. (filename .ne. "")
     if (.not. needsOutput) return
 
     nSites = size(orbs, 1)
@@ -170,8 +170,32 @@ contains
     end do
 
     !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ! Print to Screen
+    !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    if (toScreenQ) then
+
+      write (*, *)
+      write (*, *) "------------------------"
+      write (*, *) "particle density on lattice sites:"
+      write (*, *) "------------------------"
+      write (*, *)
+
+      write (*, '(E20.10E3)', advance='no') time
+      do iSite = 1, nSites
+        write (*, '(1X, E20.10E3)', advance='no') real(c_density(iSite), kind=R64)
+      end do
+      write (*, *)
+
+      write (*, *)
+
+    end if
+
+    !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     ! Print to file
     !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    if (filename .eq. "") return
 
     open (newunit=io, file=filename, status="unknown", position="append", iostat=istat, iomsg=msg)
     if (istat .ne. 0) then

@@ -70,7 +70,9 @@ module M_Orbs
   !> Convention: `Orbs_orbs(i, j)` is the i-th basis component of the j-th
   !> orbital. Columns are typically assumed to be orthonormal after
   !> `Orbs_Orthonormalize` or backend initialization.
-  complex(R64), contiguous, pointer :: Orbs_orbs(:, :)
+  !>
+  !> Initialized to null; use `associated(Orbs_orbs)` to check if setup has run.
+  complex(R64), contiguous, pointer :: Orbs_orbs(:, :) => null()
 
   !> If true, a spin/body-type restricted representation is used and a single
   !> set of orbitals is propagated for all body types. Otherwise the backend

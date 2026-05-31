@@ -2,12 +2,29 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Lattice-based orbital initialization backend.
+!> @brief Lattice-based (3D discrete) orbital initialization backend.
 !>
+!> @details
 !> Provides an initialization function interface for orbitals defined on
-!> discrete lattice indices (ix, iy, iz). The fabricate routine in this module
-!> connects lattice-specific implementations to the generic pointers in
-!> `M_OrbsInit`.
+!> discrete lattice sites (ix, iy, iz). Designed for tight-binding and Hubbard
+!> model simulations where orbitals are localized on lattice points.
+!>
+!> Available Sub-Backends
+!> ----------------------
+!> - **OnSite** : Kronecker δ orbitals localized at individual lattice sites.
+!>                Orbital index maps to site via row-major ordering (x fastest).
+!>
+!> Procedure Pointer Contract
+!> --------------------------
+!> `OrbsInit_Lattice_InitFunction(ix, iy, iz, index, bt_)` returns the amplitude
+!> at site (ix, iy, iz) for orbital `index`. Normalization applied after sampling.
+!>
+!> JSON Configuration
+!> ------------------
+!>   {"orbsInit": {"lattice": {"onSite": {}}}}
+!>
+!> @note Lattice dimensions come from Grid_Lattice_xSize/ySize/zSize.
+!> @see M_OrbsInit_Lattice_OnSite for the on-site δ-orbital implementation.
 module M_OrbsInit_Lattice
   use M_Utils_Types
   use M_Utils_NoOpProcedures

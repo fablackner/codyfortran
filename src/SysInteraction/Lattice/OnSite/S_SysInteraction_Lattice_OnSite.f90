@@ -2,6 +2,10 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Implementation submodule for on-site lattice interaction.
+!>
+!> @details Reads the coupling strength from JSON and sets the time/body-type
+!> independence flags (the Hubbard-U is constant and species-independent).
 submodule(M_SysInteraction_Lattice_OnSite) S_SysInteraction_Lattice_OnSite
 
   implicit none
@@ -9,6 +13,10 @@ submodule(M_SysInteraction_Lattice_OnSite) S_SysInteraction_Lattice_OnSite
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Fabricate the on-site lattice interaction.
+  !>
+  !> Reads `sysInteraction.lattice.onSite.strength` and sets feature flags.
+  !> Dispatches to the standard implementation (or future variants).
   module subroutine SysInteraction_Lattice_OnSite_Fabricate
     use M_Utils_Json
     use M_Utils_Say

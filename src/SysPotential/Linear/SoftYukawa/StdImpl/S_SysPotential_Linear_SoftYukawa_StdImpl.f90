@@ -2,6 +2,18 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Default numerical implementation for linear soft-Yukawa potential.
+!>
+!> Evaluates a sum of softened Yukawa (screened Coulomb) potentials:
+!>   V(x) = -Σₙ qₙ exp(-αₙ|x-xₙ|) / (√((x-xₙ)² + s₁ₙ²) + s₂ₙ)
+!>
+!> The softening parameters regularize the Coulomb singularity:
+!> - s₁ (softening1): Enters under the square root, smooths the 1/r behavior
+!> - s₂ (softening2): Additive offset, provides additional short-range control
+!> - α (dampening): Yukawa screening length; α=0 gives pure soft-Coulomb
+!>
+!> This form is commonly used for 1D model atoms and molecules where the
+!> true 3D Coulomb potential would be inappropriate.
 submodule(M_SysPotential_Linear_SoftYukawa_StdImpl) S_SysPotential_Linear_SoftYukawa_StdImpl
 
   implicit none
@@ -25,9 +37,12 @@ contains
 
   end subroutine
 
-  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Fill the external potential array with soft-Yukawa values.
+  !>
+  !> Sums contributions from all charge centers. Each center contributes a
+  !> softened Coulomb-like potential with optional exponential screening.
   subroutine FillExternalPotential(externalPotential, time, bt_)
-    ! array-filling implementation of soft Yukawa potential
     use M_Utils_UnusedVariables
     use M_SysPotential_Linear_SoftYukawa
     use M_Grid
@@ -56,13 +71,9 @@ contains
     if (.not. allocated(externalPotential)) allocate (externalPotential(Grid_nPoints))
     allocate (distances(size(externalPotential)))
 
-    ! Initialize result
     externalPotential(:) = 0.0_R64
 
-    ! Sum contributions from all charges
     do i = 1, size(position)
-      ! Calculate the potential contribution from each charge
-      ! Using the soft Yukawa potential formula
       distances = abs(Grid_Linear_xCoord(:) - position(i))
       externalPotential(:) = externalPotential(:) - charge(i) * exp(-distances * dampening(i)) / &
                              (sqrt(distances**2 + softening1(i)**2) + softening2(i))

@@ -2,10 +2,11 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Default real-space implementation of the SoftYukawa interaction on a linear grid.
+!> @brief Direct convolution implementation of SoftYukawa interaction.
 !>
-!> Provides a simple, dependency-free realization (e.g., direct convolution) of
-!> the SoftYukawa kernel. For large grids, FFT-backed variants may be preferred.
+!> @details Uses the `ConvolutionIntegral` utility for O(N²) real-space
+!> convolution. Exact and dependency-free, but slow for large grids (N > 1000).
+!> Prefer the FFT variant for production runs on large systems.
 module M_SysInteraction_Linear_SoftYukawa_StdImpl
   use M_Utils_Types
 

@@ -152,3 +152,63 @@ echo "Compiler Flags: ${FFLAGS}"
 echo "Dynamic ld path: ${LD_LIBRARY_PATH}"
 echo "CODY Project Dir: ${CODY_PROJECT_DIR}"
 echo "CODY Pretty Print: ${CODY_PRETTY_PRINT}"
+echo "Available shortcuts: cody build [app|test|<path>], cody clean, cody run [test|cov]"
+
+# Convenience function for building and running
+function cody() {
+    local cmd=$1
+    local target=$2
+
+    local original_dir=$(pwd)
+    cd "${CODY_PROJECT_DIR}" || return 1
+
+    if [[ "$cmd" == "build" ]]; then
+        cmake -B build
+        if [[ -z "$target" ]]; then
+            cmake --build build
+        elif [[ "$target" == "app" ]]; then
+            cmake --build build --target apps
+        elif [[ "$target" == "test" ]]; then
+            cmake --build build --target tests
+        else
+            # Support building a specific target like app/cnnHubbard/main
+            local cmake_target=${target//\//_}
+            cmake_target=${cmake_target%.f90}
+            cmake --build build --target "$cmake_target"
+        fi
+    elif [[ "$cmd" == "clean" ]]; then
+        rm -rf build
+        find app test -type f -name "*.exe" -delete 2>/dev/null || true
+        echo "Cleaned build directory and generated executables."
+    elif [[ "$cmd" == "run" ]]; then
+        if [[ "$target" == "test" ]]; then
+            (cd build && ctest -R T_)
+        elif [[ "$target" == "cov" ]]; then
+            if [[ "$COMPILER" != "gnu" || "$BUILD_TYPE" != "debug" ]]; then
+                echo "Warning: Coverage requires gnu compiler and debug build."
+                echo "Please run: source setBuildVars.sh -c gnu -t debug"
+            else
+                cmake -B build && \
+                cmake --build build && \
+                cd build && \
+                ctest -R T_ && \
+                ctest -T Coverage && \
+                lcov -c -d . -o main_coverage.info && \
+                genhtml main_coverage.info --output-directory out && \
+                chromium out/index.html 2>/dev/null &
+            fi
+        else
+            echo "Unknown run target: $target"
+        fi
+    else
+        echo "Usage:"
+        echo "  cody build                 # Build everything"
+        echo "  cody build app             # Build all apps"
+        echo "  cody build test            # Build all tests"
+        echo "  cody build <path>          # Build specific target (e.g. app/cnnHubbard/main)"
+        echo "  cody clean                 # Remove build directory"
+        echo "  cody run test              # Run tests"
+        echo "  cody run cov               # Run coverage (requires gnu/debug)"
+    fi
+    cd "$original_dir"
+}

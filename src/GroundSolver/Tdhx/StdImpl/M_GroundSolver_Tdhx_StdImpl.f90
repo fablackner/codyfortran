@@ -2,12 +2,20 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Default TDHx wiring for the ground-state solver.
+!> @brief Standard TDHx implementation interface module.
 !>
-!> This module provides the factory routine that binds TDHx callbacks to a
-!> reference/default implementation (e.g., CPU, baseline linear algebra).
-!> It contains no heavy numerical kernels itself; it only assigns the
-!> procedure pointers exported by the TDHx interface modules.
+!> @details
+!> Provides the factory routine that binds TDHx callbacks to a reference
+!> implementation suitable for general (non-Ylm) grids. This backend:
+!>
+!>   - Operates on the full Grid_nPoints-dimensional Hilbert space
+!>   - Uses a single diagonalizer for all orbitals
+!>   - Suitable for 1D (Linear) and 2D grids
+!>
+!> For spherical-harmonics (Ylm) grids with angular symmetry, prefer the
+!> `ylmOpt` backend which diagonalizes smaller per-l-channel matrices.
+!>
+!> @see M_GroundSolver_Tdhx_YlmOpt
 module M_GroundSolver_Tdhx_StdImpl
   use M_Utils_Types
 
@@ -18,10 +26,15 @@ module M_GroundSolver_Tdhx_StdImpl
   !=============================================================================
 
   interface
-    !> Bind TDHx procedure pointers to the default implementation.
+    !> @brief Bind TDHx procedure pointers to the standard implementation.
     !>
-    !> Responsibilities typically include assigning the Hartree–Fock action
-    !> routine and any auxiliary callbacks needed by the ground-state solver.
+    !> @details
+    !> Assigns the following procedure pointers:
+    !>   - `GroundSolver_Setup` → local `Setup`
+    !>   - `GroundSolver_Approach` → local `Approach`
+    !>   - `GroundSolver_Tdhx_HartreeFockAction` → local `HartreeFockAction`
+    !>
+    !> @pre JSON key `groundSolver.tdhx.stdImpl` exists
     module subroutine GroundSolver_Tdhx_StdImpl_Fabricate
     end subroutine
   end interface

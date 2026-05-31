@@ -2,10 +2,22 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Coulomb solver variant: block-equation method in Ylm representation.
+!> @brief Block-factorized FEDVR solver with precomputed Schur complement.
 !>
-!> Provides a memory-efficient scheme that solves radial equations in blocks
-!> per (l, m) channel. Useful trade-off between complexity and performance.
+!> @details Exploits the block-tridiagonal structure of the FEDVR discretization
+!> to achieve efficient repeated solves. During setup, precomputes:
+!>   - LU factorizations for each element block
+!>   - Unit response vectors for interface coupling
+!>   - Schur complement structure for interface system
+!>
+!> At solve time, only a small interface system needs to be solved, with the
+!> interior recovered via back-substitution using precomputed responses.
+!>
+!> **Complexity:**
+!>   - Setup: O(nE × nLoc³) + O(lmax × nE × nLoc³) per l
+!>   - Solve: O(nE² + nE × nLoc) per (l,m) channel
+!>
+!> **Use case:** Many repeated Poisson solves (time propagation), large grids.
 module M_SysInteraction_Ylm_Coulomb_BlockEq
   use M_Utils_Types
 

@@ -2,16 +2,34 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Central interaction API for the code base.
+!> @brief Central two-body interaction API for the CodyFortranRDM framework.
 !>
-!> This module exposes a small, uniform set of procedure pointers that higher
-!> layers call to construct and apply interaction potentials. At runtime,
-!> `SysInteraction_Fabricate` binds these pointers to concrete implementations
-!> (e.g., lattice, linear, or ylm back-ends) based on the chosen configuration.
+!> @details This module defines the abstract interface for particle-particle
+!> interactions (Ŵ operator) used in many-body quantum simulations. It exposes
+!> a small, uniform set of procedure pointers that higher layers (e.g., Method,
+!> Hamiltonian construction) call to compute and apply interaction potentials.
 !>
-!> No interaction logic lives here directly; instead this module defines the
-!> abstract interfaces and the public pointers that are wired up during
-!> fabrication.
+!> **Physical role:**
+!> The interaction module handles the two-body operator Ŵ which appears in the
+!> many-body Hamiltonian as:
+!>    H = T + V_ext + W
+!> where W = (1/2) Σᵢⱼ w(rᵢ,rⱼ) represents electron-electron (or particle-particle)
+!> repulsion/attraction.
+!>
+!> **Architecture:**
+!> At runtime, `SysInteraction_Fabricate` reads the JSON configuration and binds
+!> these procedure pointers to concrete implementations from one of:
+!>   - `Lattice`: Discrete on-site interactions (Hubbard U)
+!>   - `Linear`: Real-space convolution (SoftYukawa, contact)
+!>   - `Ylm`: Spherical-harmonic expansion (Coulomb via Poisson solvers)
+!>
+!> **Workflow:**
+!> 1. `FillInteractionSrc`: Build source term ρ(r) = ψ*ᵢ(r)ψⱼ(r) from orbitals
+!> 2. `FillInteractionPotential`: Solve for V(r) = ∫ w(r,r') ρ(r') dr'
+!> 3. `MultiplyWithInteractionPotential`: Apply V·ψ to get Ŵψ contribution
+!>
+!> No interaction logic lives here directly; this module defines only the
+!> abstract interfaces and public pointers wired up during fabrication.
 module M_SysInteraction
   use M_Utils_Types
   use M_Utils_NoOpProcedures

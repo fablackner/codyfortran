@@ -2,6 +2,27 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @file S_IntegratorList.f90
+!> @brief Submodule implementing IntegratorList fabrication and setup.
+!>
+!> @details
+!> This submodule provides the runtime "factory" logic that:
+!> 1. Reads the JSON `"integratorList"` array.
+!> 2. Dispatches to backend-specific allocators based on child names.
+!> 3. Attaches the user-supplied `TimeDerivative` callback.
+!> 4. Invokes each backend's `Fabricate` and later `Setup` methods.
+!>
+!> ## Backend Dispatch
+!>
+!> The child name in JSON determines which allocator is called:
+!>
+!> | Child contains | Allocator called                   |
+!> |----------------|------------------------------------|
+!> | `"rk"`         | `IntegratorList_Rk_Allocate`       |
+!> | `"expokit"`    | `IntegratorList_Expokit_Allocate`  |
+!> | `"gslOdeiv2"`  | `IntegratorList_GslOdeiv2_Allocate`|
+!> | `"sil"`        | `IntegratorList_Sil_Allocate`      |
+!> | `"cn"`         | `IntegratorList_Cn_Allocate`       |
 submodule(M_IntegratorList) S_IntegratorList
 
   implicit none
@@ -9,6 +30,17 @@ submodule(M_IntegratorList) S_IntegratorList
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Build the integrator list from JSON configuration.
+  !>
+  !> Reads the `"integratorList"` array from the active JSON config, allocates
+  !> one concrete backend per element, attaches the supplied `TimeDerivative`
+  !> callback, and calls `Fabricate` on each.
+  !>
+  !> @param[in] input  Array of fabrication inputs (one per integrator).
+  !>                   Each entry must supply a valid `TimeDerivative` pointer.
+  !>
+  !> @note The size of `input` must match the number of children in
+  !>   `"integratorList"`. A mismatch triggers `error stop`.
   module subroutine IntegratorList_Fabricate(input)
     use M_Utils_Json
     use M_Utils_Say
@@ -26,13 +58,13 @@ contains
     call Say_Fabricate("integratorList")
 
     !------------------------------------
-    ! set values and procedure pointers
+    ! Bind module-level setup hook
     !------------------------------------
 
     IntegratorList_Setup => Setup
 
     !------------------------------------
-    ! branch
+    ! Allocate and fabricate each backend
     !------------------------------------
 
     nListElements = Json_GetNumChildren("integratorList")
@@ -72,6 +104,10 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Iterate over all integrators and call their `Setup` method.
+  !>
+  !> Invoked after fabrication, once state dimensions are finalized.
+  !> Each backend allocates its internal work arrays here.
   subroutine Setup()
 
     integer(I32) :: i

@@ -2,6 +2,13 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Top-level fabrication submodule for external potentials.
+!>
+!> This submodule reads the JSON configuration to determine which grid family
+!> (lattice, linear, or ylm) is requested and dispatches to the appropriate
+!> family-level fabricator. The family fabricator in turn selects the concrete
+!> potential model (harmonic, Coulomb, disorder, etc.) and wires the procedure
+!> pointers exported by M_SysPotential.
 submodule(M_SysPotential) S_Potential
 
   implicit none
@@ -9,6 +16,13 @@ submodule(M_SysPotential) S_Potential
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Parse the JSON configuration and dispatch to the appropriate grid backend.
+  !>
+  !> The JSON structure is:
+  !> ```json
+  !> { "sysPotential": { "<grid>": { "<model>": { ... } } } }
+  !> ```
+  !> where `<grid>` is one of: `lattice`, `linear`, `ylm`.
   module subroutine SysPotential_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -21,11 +35,7 @@ contains
     call Say_Fabricate("sysPotential")
 
     !------------------------------------
-    ! set values and procedure pointers
-    !------------------------------------
-
-    !------------------------------------
-    ! branch
+    ! branch by grid family
     !------------------------------------
 
     if (Json_GetExistence("sysPotential.lattice")) then

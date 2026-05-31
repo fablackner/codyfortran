@@ -2,6 +2,10 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Fabrication submodule for linear soft-Yukawa potential.
+!>
+!> Reads configuration parameters and sets up a multi-center softened Yukawa
+!> potential. The potential is time-independent and body-type-independent.
 submodule(M_SysPotential_Linear_SoftYukawa) S_SysPotential_Linear_SoftYukawa
 
   implicit none
@@ -12,6 +16,7 @@ contains
   module subroutine SysPotential_Linear_SoftYukawa_Fabricate
     use M_Utils_Json
     use M_Utils_Say
+    use M_SysPotential
     use M_SysPotential_Linear_SoftYukawa_StdImpl
 
     implicit none
@@ -40,8 +45,11 @@ contains
     SysPotential_Linear_SoftYukawa_softening2 = softening2
     SysPotential_Linear_SoftYukawa_dampening = dampening
 
+    SysPotential_timeIndependentQ = .true.
+    SysPotential_bodyTypeIndependentQ = .true.
+
     !------------------------------------
-    ! branch
+    ! branch by implementation
     !------------------------------------
 
     if (Json_GetExistence("sysPotential.linear.softYukawa.stdImpl")) then

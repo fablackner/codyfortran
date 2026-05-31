@@ -2,11 +2,35 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Ylm radial Laplacian backends for kinetic operators.
+!> @file M_SysKinetic_Ylm_Laplacian.f90
+!> @brief Ylm radial Laplacian backends for kinetic operators.
 !>
-!> Hosts shared data and fabrication for ylm radial-kinetic implementations,
-!> such as finite-difference and FEDVR. The operator targets individual (l,m)
-!> channels and is used together with angular momentum terms.
+!> @details
+!> Hosts shared data and fabrication for Ylm radial-kinetic implementations.
+!> The operator acts on individual (l,m) channels via:
+!>
+!>     T̂_{lm} f(r) = −(1/2m) [ d²f/dr² + (2/r)df/dr − l(l+1)/r² f ]
+!>
+!> Available backends:
+!>   - **FinDiff**: Finite-difference on uniform radial grid (requires `grid.ylm.const`)
+!>   - **FEDVR**: Finite-element DVR for nonuniform grids (requires `grid.ylm.fedvr`)
+!>
+!> JSON Configuration
+!> ------------------
+!> @code{.json}
+!> {
+!>   "sysKinetic": {
+!>     "ylm": {
+!>       "laplacian": {
+!>         "bodyMass": [1.0],
+!>         "finDiff": {}
+!>       }
+!>     }
+!>   }
+!> }
+!> @endcode
+!>
+!> @see M_SysKinetic_Ylm_Laplacian_FinDiff, M_SysKinetic_Ylm_Laplacian_Fedvr
 module M_SysKinetic_Ylm_Laplacian
   use M_Utils_Types
 
@@ -17,19 +41,20 @@ module M_SysKinetic_Ylm_Laplacian
   !=============================================================================
 
   interface
-    !> Fabricate and configure the ylm radial Laplacian backend.
+    !> @brief Fabricate the Ylm radial Laplacian backend.
     !>
-    !> Selects the numerical scheme (FinDiff/FEDVR) and prepares masses and
-    !> any radial grid metadata needed by the chosen implementation.
+    !> Selects the numerical scheme (FinDiff/FEDVR) and prepares masses.
     module subroutine SysKinetic_Ylm_Laplacian_Fabricate
     end subroutine
   end interface
 
   !=============================================================================
-  ! module data
+  ! module data (shared across FinDiff/FEDVR backends)
   !=============================================================================
 
-  !> Body masses used for radial kinetic scaling via 1/(2 m_bt)
+  !> @brief Body masses used for radial kinetic scaling via 1/(2 m_bt).
+  !>
+  !> Default is [1.0] (electron mass in atomic units).
   real(R64), allocatable :: SysKinetic_Ylm_Laplacian_bodyMass(:)
 
   !=============================================================================

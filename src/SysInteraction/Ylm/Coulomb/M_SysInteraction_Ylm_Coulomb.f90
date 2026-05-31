@@ -2,11 +2,34 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Coulomb interaction configuration for Ylm back-ends.
+!> @brief Coulomb interaction (1/r) for Ylm-basis atomic/molecular systems.
 !>
-!> Holds common parameters for Coulomb-like interactions in spherical-harmonic
-!> representations and provides the fabrication hook to select a concrete
-!> numerical scheme (see submodules).
+!> @details Implements the electron-electron Coulomb repulsion using the
+!> multipole expansion (Laplace expansion of 1/|r₁-r₂|).
+!>
+!> **Mathematical formulation:**
+!> The radial Poisson equation for each (l,m) channel is:
+!>    (d²/dr² - l(l+1)/r²) u(r) = -4πr ρₗₘ(r)
+!> where V_lm(r) = u(r)/r satisfies the boundary conditions.
+!>
+!> **Available radial solvers:**
+!>   - `StdImpl`: Direct O(N²) Green's function integration (reference)
+!>   - `TwoScan`: O(N) forward/backward scan algorithm
+!>   - `FullEq`: FEDVR-based differential equation with LU solve
+!>   - `BlockEq`: Block-factorized FEDVR with precomputed Schur complement
+!>
+!> **JSON configuration:**
+!> ```json
+!> "sysInteraction": {
+!>   "ylm": {
+!>     "lmax": 4,
+!>     "coulomb": {
+!>       "strength": 1.0,
+!>       "twoScan": {}
+!>     }
+!>   }
+!> }
+!> ```
 module M_SysInteraction_Ylm_Coulomb
   use M_Utils_Types
 

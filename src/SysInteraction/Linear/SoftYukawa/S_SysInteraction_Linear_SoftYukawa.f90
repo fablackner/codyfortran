@@ -2,6 +2,10 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Implementation submodule for SoftYukawa interaction.
+!>
+!> @details Reads kernel parameters from JSON and provides the pure function
+!> that evaluates the interaction kernel at any distance.
 submodule(M_SysInteraction_Linear_SoftYukawa) S_SysInteraction_Linear_SoftYukawa
 
   implicit none
@@ -9,6 +13,9 @@ submodule(M_SysInteraction_Linear_SoftYukawa) S_SysInteraction_Linear_SoftYukawa
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Fabricate the SoftYukawa interaction.
+  !>
+  !> Reads parameters and dispatches to direct or FFT-based implementation.
   module subroutine SysInteraction_Linear_SoftYukawa_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -47,6 +54,12 @@ contains
   end subroutine
 
   !--------------------------------------------------------------------
+  !> @brief Evaluate the SoftYukawa kernel at a given distance.
+  !>
+  !> Computes: w(r) = strength * exp(-dampening*r) / (sqrt(r² + softening1²) + softening2)
+  !>
+  !> @param[in] distance  The separation |x - x'|
+  !> @return              Kernel value w(distance)
   pure module function SysInteraction_Linear_SoftYukawa_Interaction(distance) result(res)
     real(R64) :: res
     real(R64), intent(in) :: distance

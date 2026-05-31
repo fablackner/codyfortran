@@ -2,6 +2,7 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Two-scan implementation of radial Poisson solver.
 submodule(M_SysInteraction_Ylm_Coulomb_TwoScan) S_SysInteraction_Ylm_Coulomb_TwoScan
 
   implicit none
@@ -9,6 +10,7 @@ submodule(M_SysInteraction_Ylm_Coulomb_TwoScan) S_SysInteraction_Ylm_Coulomb_Two
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Bind the two-scan Coulomb solver.
   module subroutine SysInteraction_Ylm_Coulomb_TwoScan_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -26,6 +28,22 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Compute radial potential via forward/backward prefix sums.
+  !>
+  !> Algorithm:
+  !>   1. Forward pass: C1(i) = C1(i-1) + ρ(i) × rᵢˡ
+  !>   2. Backward pass: C2(i) = C2(i+1) + ρ(i) / rᵢˡ⁺¹
+  !>   3. Combine: V(i) = factor × (C1(i)/rᵢˡ⁺¹ + rᵢˡ×C2(i) - ρ(i)/rᵢ)
+  !>
+  !> The subtraction of ρ(i)/rᵢ corrects for double-counting at j=i.
+  !>
+  !> @param[out] potLm   Radial potential component Vₗₘ(r)
+  !> @param[in]  srcLm   Radial density component ρₗₘ(r) (includes weights)
+  !> @param[in]  l       Angular momentum quantum number
+  !> @param[in]  m       Magnetic quantum number (unused)
+  !> @param[in]  time    Physical time (unused)
+  !> @param[in]  bt1_    Target body type (unused)
+  !> @param[in]  bt2_    Source body type (unused)
   subroutine FillInteractionPotentialRadial(potLm, srcLm, l, m, time, bt1_, bt2_)
     use M_Utils_Constants, only: PI
     use M_Utils_UnusedVariables
@@ -52,13 +70,13 @@ contains
 
     allocate (C1(nRad), C2(nRad))
 
-    ! prefix: C1(i) = sum_{j<=i} rho(j) * w_j * r_j^l
+    ! Forward scan: C1(i) = Σⱼ≤ᵢ ρ(j) × rⱼˡ
     C1(1) = srcLm(1) * Grid_Ylm_radialPoints(1)**l
     do i = 2, nRad
       C1(i) = C1(i - 1) + srcLm(i) * Grid_Ylm_radialPoints(i)**l
     end do
 
-    ! suffix: C2(i) = sum_{j>=i} rho(j) * w_j / r_j^(l+1)
+    ! Backward scan: C2(i) = Σⱼ≥ᵢ ρ(j) / rⱼˡ⁺¹
     C2(nRad) = srcLm(nRad) / Grid_Ylm_radialPoints(nRad)**(l + 1)
     do i = nRad - 1, 1, -1
       C2(i) = C2(i + 1) + srcLm(i) / Grid_Ylm_radialPoints(i)**(l + 1)
@@ -68,9 +86,7 @@ contains
 
     do i = 1, nRad
       r_i = Grid_Ylm_radialPoints(i)
-      ! exact discrete form (matches Std):
-      ! sum_j rho_j w_j * min(r_i,r_j)^l / max(r_i,r_j)^(l+1)
-      ! implemented as two scans without double-counting j=i
+      ! Combine scans, subtract diagonal to avoid double-counting
       potLm(i) = factor * (C1(i) / r_i**(l + 1) + (r_i**l) * C2(i) - srcLm(i) / r_i)
     end do
 

@@ -2,11 +2,27 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Spherical-harmonic (Ylm) domain interaction registration.
+!> @brief Spherical-harmonic (Ylm) domain interaction interface.
 !>
-!> Fabricates interaction models that operate in a spherical-harmonic basis
-!> with radial grids. It exposes a radial solver hook used by concrete Coulomb
-!> implementations.
+!> @details This module handles particle-particle interactions in a spherical-
+!> harmonic basis, primarily for atomic and molecular systems with central
+!> symmetry. The interaction potential is expanded in spherical harmonics:
+!>    V(r,Ω) = Σₗₘ Vₗₘ(r) Yₗₘ(Ω)
+!>
+!> **Physical context:**
+!> For Coulomb interactions between electrons in atoms, the 1/|r₁-r₂| kernel
+!> is expanded using the Laplace expansion:
+!>    1/|r₁-r₂| = Σₗ (4π/(2l+1)) (r<ˡ/r>ˡ⁺¹) Σₘ Yₗₘ*(Ω₁)Yₗₘ(Ω₂)
+!>
+!> This separates the angular and radial parts, allowing efficient computation
+!> by solving 1D radial Poisson equations for each (l,m) channel.
+!>
+!> **Available implementations:**
+!>   - `Coulomb`: Pure 1/r interaction with multiple radial solvers
+!>
+!> **Module data:**
+!>   - `lmax`: Maximum angular momentum in the expansion
+!>   - `mIndependentQ`: True if potential is m-independent (central field)
 module M_SysInteraction_Ylm
   use M_Utils_Types
   use M_Utils_NoOpProcedures

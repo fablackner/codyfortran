@@ -2,6 +2,11 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Lattice-grid fabrication submodule for external potentials.
+!>
+!> Dispatches to the appropriate lattice potential model (harmonic, disorder,
+!> seesaw, manual) based on the JSON configuration. All lattice potentials share
+!> the same point-wise multiplication operator implemented here.
 submodule(M_SysPotential_Lattice) S_SysPotential_Lattice
 
   implicit none
@@ -9,6 +14,14 @@ submodule(M_SysPotential_Lattice) S_SysPotential_Lattice
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Parse lattice potential configuration and wire the selected model.
+  !>
+  !> Available models:
+  !> - `harmonic`:      Parabolic trap V = ½ω²(r-r₀)²
+  !> - `randomUniform`: Disorder from uniform distribution
+  !> - `randomGauss`:   Disorder from Gaussian distribution
+  !> - `seesaw`:        Time-dependent linear tilt
+  !> - `manual`:        User-specified site values
   module subroutine SysPotential_Lattice_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -28,7 +41,7 @@ contains
     SysPotential_MultiplyWithExternalPotential => MultiplyWithExternalPotential
 
     !------------------------------------
-    ! branch
+    ! branch by potential model
     !------------------------------------
 
     if (Json_GetExistence("sysPotential.lattice.harmonic")) then
@@ -53,6 +66,10 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Apply the external potential to an orbital via point-wise multiplication.
+  !>
+  !> For lattice grids, the potential is diagonal in the site basis, so
+  !> application is simply: dOrb(i) = V(i) × orb(i).
   subroutine MultiplyWithExternalPotential(dOrb, externalPotential, orb)
     use M_Grid
 
