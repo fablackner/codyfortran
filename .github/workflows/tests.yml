@@ -1,0 +1,67 @@
+name: Tests
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+      - "[0-9]*.[0-9]*.[0-9]*"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran cmake make curl git
+
+      - name: Determine gfortran version
+        id: gfortran
+        run: echo "version=$(gfortran -dumpfullversion)" >> "$GITHUB_OUTPUT"
+
+      # The stdlib .mod files are compiler-version specific, so the cache key
+      # must include the exact gfortran version.
+      - name: Restore third-party libraries
+        id: restore-thirdparty
+        uses: actions/cache/restore@v4
+        with:
+          path: thirdParty/installation
+          key: thirdparty-${{ runner.os }}-gfortran${{ steps.gfortran.outputs.version }}-${{ hashFiles('thirdParty/CMakeLists.txt', 'thirdParty/getSources.sh', 'thirdParty/setBuildVars.sh') }}
+
+      - name: Build third-party libraries
+        if: steps.restore-thirdparty.outputs.cache-hit != 'true'
+        run: |
+          cd thirdParty
+          ./getSources.sh
+          source setBuildVars.sh -c gnu -t release
+          cmake -B build
+          cmake --build build
+
+      # Save the cache even if a later step fails, so the expensive
+      # third-party build is not repeated on every run.
+      - name: Save third-party libraries
+        if: always() && steps.restore-thirdparty.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: thirdParty/installation
+          key: thirdparty-${{ runner.os }}-gfortran${{ steps.gfortran.outputs.version }}-${{ hashFiles('thirdParty/CMakeLists.txt', 'thirdParty/getSources.sh', 'thirdParty/setBuildVars.sh') }}
+
+      - name: Build CodyFortran and tests
+        run: |
+          source setBuildVars.sh -c gnu -t release
+          cmake -B build
+          cmake --build build --target tests -j"$(nproc)"
+
+      # Tests must run serially: the numbered simulation tests build on each
+      # other (e.g. T_He1d_04 loads orbitals saved by T_He1d_03).
+      - name: Run tests
+        run: |
+          source setBuildVars.sh -c gnu -t release
+          cd build
+          ctest -R T_ --output-on-failure
