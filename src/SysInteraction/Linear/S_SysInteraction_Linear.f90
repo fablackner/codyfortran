@@ -29,6 +29,7 @@ contains
 
     SysInteraction_FillInteractionSrc => FillInteractionSrc
     SysInteraction_MultiplyWithInteractionPotential => MultiplyWithInteractionPotential
+    SysInteraction_ConjugateInteractionPotential => ConjugateInteractionPotential
 
     !------------------------------------
     ! branch
@@ -83,6 +84,17 @@ contains
     complex(R64), intent(in), contiguous   :: orb(:)
 
     dOrb(:) = interactionPotential(:) * orb(:)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Conjugate an interaction potential (point-wise representation).
+  subroutine ConjugateInteractionPotential(potOut, potIn)
+
+    complex(R64), intent(out), contiguous :: potOut(:)
+    complex(R64), intent(in), contiguous  :: potIn(:)
+
+    potOut(:) = conjg(potIn(:))
 
   end subroutine
 

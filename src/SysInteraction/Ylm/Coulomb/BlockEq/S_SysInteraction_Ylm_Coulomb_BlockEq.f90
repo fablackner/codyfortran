@@ -22,9 +22,6 @@ submodule(M_SysInteraction_Ylm_Coulomb_BlockEq) S_SysInteraction_Ylm_Coulomb_Blo
   !> Precomputed element factorizations for each (element, l) pair
   type(T_SubBlock), allocatable :: subBlocks(:, :)            ! (nE, lmax+1)
 
-  !> Workspace for homogeneous element solutions
-  complex(R64), allocatable :: homogeneousResponse(:, :)
-
   !> Unit response to left boundary excitation
   complex(R64), allocatable :: unitResponseLeft(:, :, :)      ! (nLoc, nE, lmax+1)
 
@@ -75,7 +72,6 @@ contains
     nLoc = Grid_Ylm_Fedvr_nLocals
 
     allocate (subBlocks(nE, lmaxPot + 1))
-    allocate (homogeneousResponse(nLoc, nE))
     allocate (unitResponseLeft(nLoc, nE, lmaxPot + 1))
     allocate (unitResponseRight(nLoc, nE, lmaxPot + 1))
 
@@ -131,6 +127,9 @@ contains
     complex(R64), allocatable :: schurMatrix(:, :)
     complex(R64), allocatable :: schurWeightRight(:)
     complex(R64), allocatable :: rhsRight(:)
+    ! Workspace for homogeneous element solutions; local (not module state) so
+    ! that concurrent solves for different (l,m) channels stay thread-safe
+    complex(R64), allocatable :: homogeneousResponse(:, :)
     integer(I32) :: nRad, nE, nLoc
     real(R64)    :: strength
 
@@ -141,6 +140,7 @@ contains
     nLoc = Grid_Ylm_Fedvr_nLocals
     strength = SysInteraction_Ylm_Coulomb_Strength
 
+    allocate (homogeneousResponse(nLoc, nE))
     homogeneousResponse = cmplx(0.0_R64, 0.0_R64, kind=R64)
 
     allocate (rhsRight(nE - 1))

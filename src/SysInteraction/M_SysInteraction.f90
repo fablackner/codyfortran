@@ -65,6 +65,15 @@ module M_SysInteraction
   !> back-end routines can be ignored and results cached/reused.
   logical :: SysInteraction_timeIndependentQ = .false.
 
+  !> True if the back-end guarantees that swapping the source orbital pair
+  !> conjugates the potential in the stored representation:
+  !>   V[conjg(phi_j)*phi_i] = ConjugateInteractionPotential(V[conjg(phi_i)*phi_j])
+  !> This holds for real, symmetric interaction kernels with real quadrature
+  !> weights (e.g., SoftYukawa, on-site Hubbard, Coulomb on a real radial
+  !> contour) and lets callers halve the number of potential solves over
+  !> orbital pairs. Must stay false for complex-scaled (ECS) contours.
+  logical :: SysInteraction_conjSymmetricQ = .false.
+
   !=============================================================================
   ! module procedures pointers
   !=============================================================================
@@ -113,6 +122,21 @@ module M_SysInteraction
       complex(R64), intent(in), contiguous :: orbConjg(:)
       !> Input: orbital (ket).
       complex(R64), intent(in), contiguous :: orb(:)
+    end subroutine
+  end interface
+
+  !> Pointer to a routine that returns the potential belonging to the complex
+  !> conjugated source, in the grid's stored representation. Only valid to call
+  !> when `SysInteraction_conjSymmetricQ` is true.
+  procedure(I_SysInteraction_ConjugateInteractionPotential), pointer :: SysInteraction_ConjugateInteractionPotential
+  abstract interface
+    !> Fill `potOut` with the representation of conjg(potIn as a spatial function).
+    subroutine I_SysInteraction_ConjugateInteractionPotential(potOut, potIn)
+      import :: R64
+      !> Output: conjugated interaction potential.
+      complex(R64), intent(out), contiguous :: potOut(:)
+      !> Input: interaction potential to conjugate.
+      complex(R64), intent(in), contiguous  :: potIn(:)
     end subroutine
   end interface
 

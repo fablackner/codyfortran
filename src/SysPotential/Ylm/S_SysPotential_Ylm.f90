@@ -22,6 +22,8 @@ contains
   module subroutine SysPotential_Ylm_Fabricate
     use M_Utils_Json
     use M_Utils_Say
+    use M_Utils_SphericalHarmonics
+    use M_Grid_Ylm
     use M_SysPotential
     use M_SysPotential_Ylm_Coulomb
 
@@ -40,6 +42,12 @@ contains
 
     if (Json_GetExistence("sysPotential.ylm.coulomb")) then
       call SysPotential_Ylm_Coulomb_Fabricate
+
+      ! Precompute Gaunt coefficients for the potential multiply
+      ! (l1 <= lmaxPot, l2,l3 <= lmax)
+      call SphericalHarmonics_EnsureGauntTable(max(Grid_Ylm_lmax, SysPotential_Ylm_lmax), &
+                                               Grid_Ylm_lmax, &
+                                               Grid_Ylm_lmax)
 
     else
       error stop "sysPotential.ylm is missing one of: coulomb"

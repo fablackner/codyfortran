@@ -73,21 +73,37 @@ contains
     complex(R64), intent(in), contiguous :: src(:)
     type(T_ConvolutionIntegral_Ctx), intent(in) :: ctx
 
-    integer(I32) :: i, j, nG, k
+    integer(I32) :: i, j, jj, nG, nActive
+    integer(I32), allocatable :: activeIdx(:)
     real(R64) :: thr
+    complex(R64) :: acc
 
     nG = ctx % nG
     thr = ctx % srcThreshold
-    dest = (0.0_R64, 0.0_R64)
 
+    ! Collect source points above threshold once, so each dest(i) can be
+    ! accumulated independently (thread-safe, no write conflicts).
+    allocate (activeIdx(nG))
+    nActive = 0
     do j = 1, nG
       if (abs(src(j)) > thr) then
-        do i = 1, nG
-          k = abs(i - j)
-          dest(i) = dest(i) + ctx % kernelVals(k) * src(j)
-        end do
+        nActive = nActive + 1
+        activeIdx(nActive) = j
       end if
     end do
+
+    !$omp parallel do default(shared) private(i, jj, j, acc)
+    do i = 1, nG
+      acc = (0.0_R64, 0.0_R64)
+      do jj = 1, nActive
+        j = activeIdx(jj)
+        acc = acc + ctx % kernelVals(abs(i - j)) * src(j)
+      end do
+      dest(i) = acc
+    end do
+    !$omp end parallel do
+
+    deallocate (activeIdx)
   end subroutine
 
 end module

@@ -20,6 +20,7 @@ contains
   module subroutine SysInteraction_Ylm_Coulomb_Fabricate
     use M_Utils_Json
     use M_Utils_Say
+    use M_SysInteraction
     use M_SysInteraction_Ylm
     use M_SysInteraction_Ylm_Coulomb_StdImpl
     use M_SysInteraction_Ylm_Coulomb_FullEq
@@ -34,6 +35,10 @@ contains
 
     SysInteraction_Ylm_Coulomb_Strength = Json_Get("sysInteraction.ylm.coulomb.strength", 1.0_R64)
     SysInteraction_Ylm_mIndependentQ = .true.
+
+    ! Real Coulomb kernel: swapped source pairs give the conjugated potential,
+    ! but only on a real radial contour (complex scaling breaks the symmetry)
+    SysInteraction_conjSymmetricQ = .not. Json_GetExistence("grid.ylm.fedvrEcs")
 
     !------------------------------------
     ! branch: select radial Poisson solver

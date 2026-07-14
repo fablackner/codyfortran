@@ -37,6 +37,10 @@ contains
     SysInteraction_timeIndependentQ = .true.
     SysInteraction_bodyTypeIndependentQ = .true.
 
+    ! Real symmetric kernel on a real grid: swapped source pairs give the
+    ! complex conjugated potential
+    SysInteraction_conjSymmetricQ = .true.
+
     !------------------------------------
     ! branch
     !------------------------------------

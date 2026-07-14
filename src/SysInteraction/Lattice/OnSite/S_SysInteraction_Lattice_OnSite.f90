@@ -34,6 +34,9 @@ contains
     SysInteraction_timeIndependentQ = .true.
     SysInteraction_bodyTypeIndependentQ = .true.
 
+    ! Real on-site coupling: swapped source pairs give the conjugated potential
+    SysInteraction_conjSymmetricQ = .true.
+
     !------------------------------------
     ! branch
     !------------------------------------

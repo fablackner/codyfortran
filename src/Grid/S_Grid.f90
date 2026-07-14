@@ -21,7 +21,8 @@
 !>   6. `grid.lattice`   → Grid_Lattice_Fabricate
 !>
 !> @par Orthonormalization Algorithm
-!> Uses the classical Gram–Schmidt procedure with metric-aware inner products:
+!> Uses modified Gram–Schmidt with one re-orthogonalization pass ("twice is
+!> enough") and metric-aware inner products:
 !> @f[
 !>   |\phi_i\rangle \leftarrow |\phi_i\rangle
 !>     - \sum_{j<i} \langle\phi_j|\phi_i\rangle |\phi_j\rangle, \quad
@@ -99,14 +100,15 @@ contains
 !> @brief Modified Gram–Schmidt orthonormalization using Grid_InnerProduct.
 !>
 !> @details
-!> Orthonormalizes the columns of fSet in place. Each column i is first made
-!> orthogonal to all preceding columns j < i by subtracting projections, then
-!> normalized to unit length. The metric is provided by the active back-end's
+!> Orthonormalizes the columns of fSet in place. Each column i is made
+!> orthogonal to all preceding columns j < i by sequentially subtracting
+!> projections (modified Gram–Schmidt), then normalized. A second projection
+!> sweep re-orthogonalizes each vector before normalization: a single MGS
+!> sweep leaves a residual overlap of order eps·kappa (condition number of
+!> the input set), while the "twice is enough" strategy (Giraud et al.)
+!> restores orthogonality to machine precision for any numerically
+!> non-degenerate input. The metric is provided by the active back-end's
 !> Grid_InnerProduct.
-!>
-!> @warning For large sets or poorly conditioned bases, classical Gram–Schmidt
-!> can lose orthogonality. Consider re-orthogonalization or QR-based methods
-!> if numerical stability is critical.
 !>
 !> @param[in,out] fSet  Matrix of size (Grid_nPoints, nSet) containing the
 !>                      column vectors to orthonormalize.
@@ -114,24 +116,30 @@ contains
 
     complex(R64), intent(inout), contiguous  :: fSet(:, :)
 
-    integer(I32) :: i1, j1, nSet
+    integer(I32) :: i1, j1, iPass, nSet
     real(R64) :: norm
     complex(R64) :: ovlp
 
     nSet = size(fSet, 2)
 
-    ! Classical Gram–Schmidt orthonormalization
-    ! For each vector i: subtract projections onto all earlier vectors j,
-    ! then normalize to unit length.
     do i1 = 1, nSet
-      do j1 = 1, i1 - 1
 
-        ovlp = Grid_InnerProduct(fSet(:, j1), fSet(:, i1))
+      ! Two modified Gram–Schmidt sweeps against all earlier vectors
+      do iPass = 1, 2
+        do j1 = 1, i1 - 1
 
-        fSet(:, i1) = fSet(:, i1) - fSet(:, j1) * ovlp
+          ovlp = Grid_InnerProduct(fSet(:, j1), fSet(:, i1))
+
+          fSet(:, i1) = fSet(:, i1) - fSet(:, j1) * ovlp
+        end do
       end do
 
       norm = real(Grid_InnerProduct(fSet(:, i1), fSet(:, i1)), kind=R64)
+
+      if (.not. (norm > 0.0_R64)) then
+        error stop "Grid Orthonormalize: vector with non-positive norm (linearly dependent input set?)"
+      end if
+
       fSet(:, i1) = fSet(:, i1) / sqrt(norm)
     end do
 
@@ -155,17 +163,20 @@ contains
 !> @param[in]     fSet       Orthonormal basis spanning the subspace to
 !>                           project out (Grid_nPoints x M).
   subroutine ProjectOnSubspace(fSetInOut, fSet)
+    use M_Utils_BlasLib
 
     complex(R64), intent(inout), contiguous  :: fSetInOut(:, :)
     complex(R64), intent(in), contiguous     :: fSet(:, :)
 
-    integer(I32) :: i1, j1, nSet
+    integer(I32) :: i1, j1, nSet, nG
     complex(R64), allocatable :: inp(:, :)
 
+    nG = size(fSet, 1)
     nSet = size(fSet, 2)
 
     allocate (inp(nSet, nSet))
 
+    !$omp parallel do default(shared) private(i1, j1) collapse(2)
     do j1 = 1, nSet
       do i1 = 1, nSet
 
@@ -173,18 +184,16 @@ contains
 
       end do
     end do
+    !$omp end parallel do
 
-    ! Subtract projection onto each basis vector.
+    ! Subtract projection onto each basis vector:
+    !   fSetInOut = fSetInOut - fSet * inp   (single rank-nSet update via ZGEMM)
     ! WARNING: This procedure is delicate and tends to lose orthonormality
     ! over long propagations because numerical errors accumulate and interact
     ! with the nonlinear coupling between orbital and coefficient dynamics.
-    do j1 = 1, nSet
-      do i1 = 1, nSet
-
-        fSetInOut(:, j1) = fSetInOut(:, j1) - inp(i1, j1) * fSet(:, i1)
-
-      end do
-    end do
+    call ZGEMM('N', 'N', nG, nSet, nSet, &
+               cmplx(-1.0_R64, 0.0_R64, kind=R64), fSet, nG, inp, nSet, &
+               cmplx(1.0_R64, 0.0_R64, kind=R64), fSetInOut, nG)
 
   end subroutine
 

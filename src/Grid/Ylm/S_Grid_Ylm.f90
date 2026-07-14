@@ -178,15 +178,19 @@ contains
             ! Calculate m value for output
             m = m1 + m2
 
+            ! No output channel can hold this m value
+            if (abs(m) > lMaxOut) cycle
+
             ! Expand Y_{l1,m1}(Ω)·Y_{l2,m2}(Ω) into Y_{l,m}(Ω) using Gaunt coefficients
             do l = abs(l1 - l2), min(l1 + l2, lMaxOut)
               if (abs(m) > l) cycle
 
-              ! Calculate Gaunt coefficient
-              gVal = SphericalHarmonics_GauntCoefficient( &
-                     l1, m1, &
-                     l2, m2, &
-                     l, m)
+              ! Gaunt coefficient vanishes for odd l1+l2+l (parity selection rule);
+              ! skip before the (expensive) Wigner-3j evaluation
+              if (mod(l1 + l2 + l, 2) .ne. 0) cycle
+
+              ! Look up Gaunt coefficient (precomputed table with fallback)
+              gVal = SphericalHarmonics_GauntTabulated(l1, m1, l2, m2, l)
 
               ! Skip if Gaunt coefficient is zero
               if (abs(gVal) < 1.0e-14_R64) cycle
