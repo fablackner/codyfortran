@@ -19,6 +19,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gfortran cmake make curl git
+          pipx install fypp
 
       - name: Determine gfortran version
         id: gfortran
