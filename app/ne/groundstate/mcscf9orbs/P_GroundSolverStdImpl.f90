@@ -1,10 +1,9 @@
-program T_Ne3d_02_GroundSolverTdhx
+program P_GroundSolverStdImpl
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
   use M_Utils_Actions
   use M_Grid
-  use M_Grid_Ylm
   use M_SysKinetic
   use M_SysPotential
   use M_SysInteraction
@@ -16,9 +15,7 @@ program T_Ne3d_02_GroundSolverTdhx
   use M_Method
   use M_DiagonalizerList
   use M_GroundSolver
-  use M_GroundSolver_Tdhx
-  use M_GroundSolver_Tdhx_YlmOpt
-  use testdrive, only: check, error_type
+  use M_GroundSolver_Mcscf
 
   implicit none
 
@@ -29,17 +26,14 @@ program T_Ne3d_02_GroundSolverTdhx
   real(R64)    :: time
   real(R64)    :: alpha
   integer(I32) :: iStep, nTimeSteps, innerStep
-  type(error_type), allocatable :: error
-  character(len=:), allocatable :: jsonFileName
-  type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(1)
+  type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(2)
 
   !==========================================
   call Say_Hello
   call Say_Section("start")
   !==========================================
 
-  jsonFileName = "test/simulationTests/Ne3d/T_Ne3d_02_GroundSolverTdhx.json"
-  call Json_LoadJsonFile(manualFileName_=jsonFileName, relativeToProjectDirQ_=.true.)
+  call Json_LoadJsonFile()
 
   call Grid_Fabricate
   call SysKinetic_Fabricate
@@ -52,8 +46,10 @@ program T_Ne3d_02_GroundSolverTdhx
   call Coeffs_Fabricate
   call CoeffsInit_Fabricate
   call GroundSolver_Fabricate
-  DiagonalizerListInput(1) % ApplyMatOnVec => GroundSolver_Tdhx_HartreeFockAction
-  DiagonalizerListInput(1) % dim = Grid_nPoints
+  DiagonalizerListInput(1) % ApplyMatOnVec => ApplyMatOnVecCi
+  DiagonalizerListInput(1) % dim = Coeffs_nCoeffs
+  DiagonalizerListInput(2) % ApplyMatOnVec => ApplyMatOnVecOrb
+  DiagonalizerListInput(2) % dim = Grid_nPoints
   call DiagonalizerList_Fabricate(DiagonalizerListInput)
 
   call Say_Fabricate("program")
@@ -103,11 +99,39 @@ program T_Ne3d_02_GroundSolverTdhx
   print *
   print *, "final energy: ", energyNew
 
-  call check(error, energyNew, -127.7449896_R64, thr=1e-8_R64)
-  if (allocated(error)) error stop "T_Ne3d_02_GroundSolverTdhx failure"
+  !==========================================
+  call Say_Section("save data")
+  !==========================================
+
+  call Coeffs_SaveCoeffs(Coeffs_coeffs)
+  call Orbs_SaveOrbs(Orbs_orbs)
 
   !==========================================
   call Say_Goodbye
   !==========================================
+
+contains
+
+  subroutine ApplyMatOnVecCi(dCoeffs, coeffs, time)
+    use M_GroundSolver_Mcscf
+
+    complex(R64), intent(out), contiguous, target :: dCoeffs(:)
+    complex(R64), intent(in), contiguous, target :: coeffs(:)
+    real(R64), intent(in) :: time
+
+    call GroundSolver_Mcscf_HamiltonianAction(dCoeffs, coeffs, time)
+
+  end subroutine
+
+  subroutine ApplyMatOnVecOrb(dOrb, orb, time)
+    use M_GroundSolver_Mcscf
+
+    complex(R64), intent(out), contiguous, target :: dOrb(:)
+    complex(R64), intent(in), contiguous, target :: orb(:)
+    real(R64), intent(in) :: time
+
+    call GroundSolver_Mcscf_FockAction(dOrb, orb, time)
+
+  end subroutine
 
 end program

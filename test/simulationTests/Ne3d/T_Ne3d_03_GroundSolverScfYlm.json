@@ -97,7 +97,7 @@
         }
     },
     "groundSolver": {
-        "tdhx": {
+        "scf": {
             "ylmOpt": { }
         }
     },

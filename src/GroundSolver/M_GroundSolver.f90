@@ -12,7 +12,7 @@
 !>
 !> The bound procedures implement a single SCF/relaxation iteration that drives
 !> an input quantum state towards a stationary (ground) state. Backends may use
-!> different physical models or discretizations (e.g., TDHx Hartree–Fock, Ylm
+!> different physical models or discretizations (e.g., SCF Hartree–Fock, Ylm
 !> radial grids), but they all conform to the same small interface declared here.
 !>
 !> ## Architecture
@@ -30,10 +30,10 @@
 !>
 !> ## Available Backends
 !>
-!> - **tdhx.stdImpl**: Standard TDHx Hartree–Fock (general grids)
-!> - **tdhx.ylmOpt**: TDHx optimized for spherical-harmonics (per-l channels)
+!> - **scf.stdImpl**: Standard SCF Hartree–Fock (general grids)
+!> - **scf.ylmOpt**: SCF optimized for spherical-harmonics (per-l channels)
 !>
-!> @see M_GroundSolver_Tdhx, M_DiagonalizerList
+!> @see M_GroundSolver_Scf, M_GroundSolver_Mcscf, M_DiagonalizerList
 module M_GroundSolver
   use M_Utils_Types
   use M_Utils_NoOpProcedures
@@ -51,7 +51,7 @@ module M_GroundSolver
     !> Reads the JSON configuration key `groundSolver.*` and dispatches to the
     !> appropriate backend's `_Fabricate` routine. This assigns the procedure
     !> pointers `GroundSolver_Setup` and `GroundSolver_Approach` to backend-
-    !> specific procedures (for example a TDHx or Ylm variant).
+    !> specific procedures (for example an SCF or MCSCF variant).
     !>
     !> No allocations or state creation occur here—only pointer assignment.
     !>

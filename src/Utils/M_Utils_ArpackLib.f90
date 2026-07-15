@@ -235,7 +235,7 @@ module M_Utils_ArpackLib
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine WrapZNAUPD(evals, evecs, nFound, ApplyMatOnVec, dim, evecsQ, nEvals, which, bmat, nKry)
+  subroutine WrapZNAUPD(evals, evecs, nFound, ApplyMatOnVec, dim, evecsQ, nEvals, which, bmat, nKry, tol_)
     use M_Utils_Combinatorics
 
     !> Output eigenvalues (real). Allocated to size nFound on exit.
@@ -258,6 +258,8 @@ contains
     character(1), intent(in)                         :: bmat
     !> Arnoldi subspace size (NCV).
     integer(I32), intent(in)                         :: nKry
+    !> Convergence tolerance for the Ritz values (0 => machine precision).
+    real(R64), intent(in), optional                  :: tol_
 
     complex(R64), allocatable :: workl(:), d(:), resid(:)
     complex(R64), allocatable :: v(:, :), workd(:), workev(:)
@@ -284,6 +286,7 @@ contains
     allocate (workev(2 * nKry))
 
     tol = zero
+    if (present(tol_)) tol = tol_
     info = 0
     ido = 0
     ishfts = 1
@@ -354,7 +357,7 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine WrapDSAUPD(evals, evecs, nFound, ApplyMatOnVec, dim, evecsQ, nEvals, which, bmat, nKry)
+  subroutine WrapDSAUPD(evals, evecs, nFound, ApplyMatOnVec, dim, evecsQ, nEvals, which, bmat, nKry, tol_)
     use M_Utils_Combinatorics
 
     !> Output eigenvalues (real). Allocated to size nFound on exit.
@@ -377,6 +380,8 @@ contains
     character(1), intent(in)                         :: bmat
     !> Arnoldi subspace size (NCV).
     integer(I32), intent(in)                         :: nKry
+    !> Convergence tolerance for the Ritz values (0 => machine precision).
+    real(R64), intent(in), optional                  :: tol_
 
     real(R64), allocatable :: workl(:), d(:), resid(:)
     real(R64), allocatable :: v(:, :), workd(:), workev(:)
@@ -403,6 +408,7 @@ contains
     allocate (workev(2 * nKry))
 
     tol = zero
+    if (present(tol_)) tol = tol_
     info = 0
     ido = 0
     ishfts = 1

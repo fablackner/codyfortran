@@ -111,6 +111,7 @@ src/DiagonalizerList/
 | `which`             | string | "SR"         | Spectrum region (see below)              |
 | `bmat`              | string | "I"          | "I" = standard, "G" = generalized        |
 | `nKry`              | int    | 2*nEvals+1   | Krylov subspace dimension                |
+| `tol`               | real   | 0 (machine eps) | Ritz value convergence tolerance      |
 | `checkConvergenceQ` | bool   | true         | Verify residuals after solve             |
 | `printLevel`        | int    | 0            | Verbosity level                          |
 

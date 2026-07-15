@@ -2,17 +2,17 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief TDHx (Time-Dependent Hartree–Exchange) backend interface module.
+!> @brief SCF (Time-Dependent Hartree–Exchange) backend interface module.
 !>
 !> @details
-!> Provides TDHx-specific procedure pointers for the ground-state solver. TDHx
+!> Provides SCF-specific procedure pointers for the ground-state solver. SCF
 !> is a mean-field method that constructs an effective single-particle Fock
 !> operator from the Hartree (direct) and Fock (exchange) potentials.
 !>
 !> This module declares the interface; concrete implementations (StdImpl, YlmOpt)
 !> bind the pointers via their `_Fabricate` routines.
 !>
-!> ## SCF Iteration (TDHx)
+!> ## SCF Iteration (SCF)
 !>
 !> Each iteration builds and diagonalizes the Fock operator:
 !>
@@ -31,7 +31,7 @@
 !>               smaller nRadial×nRadial matrices per l-channel
 !>
 !> @see M_GroundSolver, M_DiagonalizerList
-module M_GroundSolver_Tdhx
+module M_GroundSolver_Scf
   use M_Utils_Types
 
   implicit none
@@ -41,19 +41,19 @@ module M_GroundSolver_Tdhx
   !=============================================================================
 
   interface
-    !> @brief Bind TDHx-specific callbacks for the ground-state solver.
+    !> @brief Bind SCF-specific callbacks for the ground-state solver.
     !>
     !> @details
-    !> Reads `groundSolver.tdhx.*` from JSON and dispatches to either:
+    !> Reads `groundSolver.scf.*` from JSON and dispatches to either:
     !>   - `stdImpl`: Standard implementation for general grids
     !>   - `ylmOpt`: Optimized implementation for Ylm (spherical) grids
     !>
-    !> Assigns `GroundSolver_Tdhx_HartreeFockAction` to the selected backend's
+    !> Assigns `GroundSolver_Scf_HartreeFockAction` to the selected backend's
     !> Fock operator application routine.
     !>
-    !> @pre JSON configuration loaded; `groundSolver.tdhx` key exists
-    !> @post `GroundSolver_Tdhx_HartreeFockAction` is bound
-    module subroutine GroundSolver_Tdhx_Fabricate
+    !> @pre JSON configuration loaded; `groundSolver.scf` key exists
+    !> @post `GroundSolver_Scf_HartreeFockAction` is bound
+    module subroutine GroundSolver_Scf_Fabricate
     end subroutine
   end interface
 
@@ -61,12 +61,12 @@ module M_GroundSolver_Tdhx
   ! module procedures pointers
   !=============================================================================
 
-  !> @brief Pointer to the TDHx Fock operator action (matrix-vector product).
+  !> @brief Pointer to the SCF Fock operator action (matrix-vector product).
   !>
   !> This callback computes F̂·φ for the iterative diagonalizer (e.g., ARPACK).
-  procedure(I_GroundSolver_Tdhx_HartreeFockAction), pointer :: GroundSolver_Tdhx_HartreeFockAction
+  procedure(I_GroundSolver_Scf_HartreeFockAction), pointer :: GroundSolver_Scf_HartreeFockAction
   abstract interface
-    !> @brief Apply the TDHx Fock operator to an orbital.
+    !> @brief Apply the SCF Fock operator to an orbital.
     !>
     !> @details
     !> Computes dOrb = F̂ · orb = (T̂ + V̂_ext + Ĵ − K̂) · orb
@@ -78,7 +78,7 @@ module M_GroundSolver_Tdhx
     !> @param[out] dOrb  Result of F̂ applied to orb (same dimension as orb)
     !> @param[in]  orb   Input orbital/trial vector
     !> @param[in]  time  Time parameter (typically 0 for ground state)
-    subroutine I_GroundSolver_Tdhx_HartreeFockAction(dOrb, orb, time)
+    subroutine I_GroundSolver_Scf_HartreeFockAction(dOrb, orb, time)
       import :: R64
       !> Output: Fock operator applied to the orbital, F̂·orb
       complex(R64), intent(out), contiguous, target :: dOrb(:)

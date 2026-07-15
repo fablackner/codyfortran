@@ -2,7 +2,7 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief Ylm-optimized TDHx implementation submodule.
+!> @brief Ylm-optimized SCF implementation submodule.
 !>
 !> @details
 !> Implements the SCF iteration exploiting spherical symmetry. For atoms with
@@ -33,7 +33,7 @@
 !> - `orb`, `dOrbTmp`: Full-grid temporaries for exchange computation
 !>
 !> @note Requires OrbsInit_Ylm_HydrogenLike to track (n,l,m) quantum numbers.
-submodule(M_GroundSolver_Tdhx_YlmOpt) S_GroundSolver_Tdhx_YlmOpt
+submodule(M_GroundSolver_Scf_YlmOpt) S_GroundSolver_Scf_YlmOpt
 
   implicit none
 
@@ -71,13 +71,13 @@ submodule(M_GroundSolver_Tdhx_YlmOpt) S_GroundSolver_Tdhx_YlmOpt
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine GroundSolver_Tdhx_YlmOpt_Fabricate
+  module subroutine GroundSolver_Scf_YlmOpt_Fabricate
     use M_Utils_Say
     use M_Utils_Json
     use M_GroundSolver
-    use M_GroundSolver_Tdhx
+    use M_GroundSolver_Scf
 
-    call Say_Fabricate("groundSolver.tdhx.ylmOpt")
+    call Say_Fabricate("groundSolver.scf.ylmOpt")
 
     !------------------------------------
     ! set values and procedure pointers
@@ -85,12 +85,12 @@ contains
 
     GroundSolver_Setup => Setup
     GroundSolver_Approach => Approach
-    GroundSolver_Tdhx_YlmOpt_HartreeFockAction => HartreeFockAction
+    GroundSolver_Scf_YlmOpt_HartreeFockAction => HartreeFockAction
 
   end subroutine
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> @brief Allocate working arrays for the Ylm-optimized TDHx implementation.
+  !> @brief Allocate working arrays for the Ylm-optimized SCF implementation.
   !>
   !> @details
   !> Allocates radial potentials and full-grid temporaries. The potential size
@@ -103,7 +103,7 @@ contains
 
     integer(I32) :: lmaxPot, potSize
 
-    call Say_Setup("groundSolver.tdhx.ylmOpt")
+    call Say_Setup("groundSolver.scf.ylmOpt")
 
     lmaxPot = SysInteraction_Ylm_lmax
     potSize = (2 * lmaxPot + 1)**2 * Grid_Ylm_nRadial

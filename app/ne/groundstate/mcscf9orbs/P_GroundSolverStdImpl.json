@@ -1,0 +1,145 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "rmin": 0.0,
+            "rmax": 8.0,
+            "fedvr": {
+                "nElements": 8,
+                "nLocals": 12
+            }
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [
+                    1.0,
+                    1.0
+                ],
+                "fedvr": {}
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 10.0,
+                "stdImpl": {}
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "blockEq": {}
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [
+                5,
+                5
+            ],
+            "bodyStatistics": [
+                "f",
+                "f"
+            ],
+            "orbBased": {
+                "nOrbs": [
+                    9,
+                    9
+                ],
+                "mctdhx": {}
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": false
+    },
+    "orbsInit": {
+        "ylm": {
+            "hydrogenLike": {
+                "charge": 10.0,
+                "n": [
+                    1,
+                    2,
+                    2,
+                    2,
+                    2,
+                    3,
+                    3,
+                    3,
+                    3
+                ],
+                "l": [
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    0,
+                    1,
+                    1,
+                    1
+                ],
+                "m": [
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    -1,
+                    0,
+                    1
+                ]
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2
+            }
+        }
+    },
+    "coeffs": {
+        "generic": {}
+    },
+    "coeffsInit": {
+        "unary": {}
+    },
+    "diagonalizerList": {
+        "arpackCi": {
+            "nEvals": 1,
+            "which": "SR",
+            "bmat": "I",
+            "nKry": 30,
+            "tol": 1e-12,
+            "checkConvergenceQ": false,
+            "printLevel": 0
+        },
+        "lapackOrb": {
+            "nEvals": 9
+        }
+    },
+    "groundSolver": {
+        "mcscf": {
+            "stdImpl": {}
+        }
+    },
+    "program": {
+        "convThresh": 1e-10,
+        "alpha": 1.0,
+        "nTimeSteps": 10
+    }
+}

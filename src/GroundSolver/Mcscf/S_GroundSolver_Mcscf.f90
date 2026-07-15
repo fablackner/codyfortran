@@ -2,26 +2,24 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief Dispatch submodule for TDHx implementation selection.
+!> @brief Dispatch submodule for MCSCF ground-solver implementation selection.
 !>
 !> @details
-!> Reads `groundSolver.tdhx.*` and dispatches to:
+!> Reads `groundSolver.mcscf.*` and dispatches to:
 !>   - `stdImpl`: Standard implementation (general grids)
-!>   - `ylmOpt`: Ylm-optimized implementation (spherical grids)
-submodule(M_GroundSolver_Tdhx) S_GroundSolver_Tdhx
+submodule(M_GroundSolver_Mcscf) S_GroundSolver_Mcscf
 
   implicit none
 
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine GroundSolver_Tdhx_Fabricate
+  module subroutine GroundSolver_Mcscf_Fabricate
     use M_Utils_Json
     use M_Utils_Say
-    use M_GroundSolver_Tdhx_StdImpl
-    use M_GroundSolver_Tdhx_YlmOpt
+    use M_GroundSolver_Mcscf_StdImpl
 
-    call Say_Fabricate("groundSolver.tdhx")
+    call Say_Fabricate("groundSolver.mcscf")
 
     !------------------------------------
     ! set values and procedure pointers
@@ -31,14 +29,11 @@ contains
     ! branch
     !------------------------------------
 
-    if (Json_GetExistence("groundSolver.tdhx.stdImpl")) then
-      call GroundSolver_Tdhx_StdImpl_Fabricate
-
-    else if (Json_GetExistence("groundSolver.tdhx.ylmOpt")) then
-      call GroundSolver_Tdhx_YlmOpt_Fabricate
+    if (Json_GetExistence("groundSolver.mcscf.stdImpl")) then
+      call GroundSolver_Mcscf_StdImpl_Fabricate
 
     else
-      error stop "groundSolver.tdhx is missing one of: stdImpl, ylmOpt"
+      error stop "groundSolver.mcscf is missing one of: stdImpl"
 
     end if
 

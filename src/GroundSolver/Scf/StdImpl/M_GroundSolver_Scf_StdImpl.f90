@@ -2,10 +2,10 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief Standard TDHx implementation interface module.
+!> @brief Standard SCF implementation interface module.
 !>
 !> @details
-!> Provides the factory routine that binds TDHx callbacks to a reference
+!> Provides the factory routine that binds SCF callbacks to a reference
 !> implementation suitable for general (non-Ylm) grids. This backend:
 !>
 !>   - Operates on the full Grid_nPoints-dimensional Hilbert space
@@ -15,8 +15,8 @@
 !> For spherical-harmonics (Ylm) grids with angular symmetry, prefer the
 !> `ylmOpt` backend which diagonalizes smaller per-l-channel matrices.
 !>
-!> @see M_GroundSolver_Tdhx_YlmOpt
-module M_GroundSolver_Tdhx_StdImpl
+!> @see M_GroundSolver_Scf_YlmOpt
+module M_GroundSolver_Scf_StdImpl
   use M_Utils_Types
 
   implicit none
@@ -26,16 +26,16 @@ module M_GroundSolver_Tdhx_StdImpl
   !=============================================================================
 
   interface
-    !> @brief Bind TDHx procedure pointers to the standard implementation.
+    !> @brief Bind SCF procedure pointers to the standard implementation.
     !>
     !> @details
     !> Assigns the following procedure pointers:
     !>   - `GroundSolver_Setup` → local `Setup`
     !>   - `GroundSolver_Approach` → local `Approach`
-    !>   - `GroundSolver_Tdhx_HartreeFockAction` → local `HartreeFockAction`
+    !>   - `GroundSolver_Scf_HartreeFockAction` → local `HartreeFockAction`
     !>
-    !> @pre JSON key `groundSolver.tdhx.stdImpl` exists
-    module subroutine GroundSolver_Tdhx_StdImpl_Fabricate
+    !> @pre JSON key `groundSolver.scf.stdImpl` exists
+    module subroutine GroundSolver_Scf_StdImpl_Fabricate
     end subroutine
   end interface
 

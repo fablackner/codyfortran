@@ -2,7 +2,7 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief Standard TDHx implementation submodule.
+!> @brief Standard SCF implementation submodule.
 !>
 !> @details
 !> Implements the SCF iteration for general grids (non-Ylm). The algorithm:
@@ -26,7 +26,7 @@
 !>
 !> @note The exchange term K̂ is computed on-the-fly in `HartreeFockAction`
 !>       since it depends on which orbital is being acted upon.
-submodule(M_GroundSolver_Tdhx_StdImpl) S_GroundSolver_Tdhx_StdImpl
+submodule(M_GroundSolver_Scf_StdImpl) S_GroundSolver_Scf_StdImpl
 
   implicit none
 
@@ -52,13 +52,13 @@ submodule(M_GroundSolver_Tdhx_StdImpl) S_GroundSolver_Tdhx_StdImpl
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine GroundSolver_Tdhx_StdImpl_Fabricate
+  module subroutine GroundSolver_Scf_StdImpl_Fabricate
     use M_Utils_Say
     use M_Utils_Json
     use M_GroundSolver
-    use M_GroundSolver_Tdhx
+    use M_GroundSolver_Scf
 
-    call Say_Fabricate("groundSolver.tdhx.stdImpl")
+    call Say_Fabricate("groundSolver.scf.stdImpl")
 
     !------------------------------------
     ! set values and procedure pointers
@@ -66,12 +66,12 @@ contains
 
     GroundSolver_Setup => Setup
     GroundSolver_Approach => Approach
-    GroundSolver_Tdhx_HartreeFockAction => HartreeFockAction
+    GroundSolver_Scf_HartreeFockAction => HartreeFockAction
 
   end subroutine
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> @brief Allocate working arrays for the standard TDHx implementation.
+  !> @brief Allocate working arrays for the standard SCF implementation.
   !>
   !> @details
   !> Allocates potentials and temporaries based on the configured grid size.
@@ -85,7 +85,7 @@ contains
 
     integer(I32) :: lmaxPot, potSize
 
-    call Say_Setup("groundSolver.tdhx.stdImpl")
+    call Say_Setup("groundSolver.scf.stdImpl")
 
     lmaxPot = SysInteraction_Ylm_lmax
     potSize = (2 * lmaxPot + 1)**2 * Grid_Ylm_nRadial
@@ -96,7 +96,7 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> @brief Apply the TDHx Fock operator to an orbital: dOrb = F̂·orb.
+  !> @brief Apply the SCF Fock operator to an orbital: dOrb = F̂·orb.
   !>
   !> @details
   !> Computes dOrb = (T̂ + V̂_ext + Ĵ − K̂)·orb where:

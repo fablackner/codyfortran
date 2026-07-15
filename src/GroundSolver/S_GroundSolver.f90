@@ -8,7 +8,8 @@
 !> Reads the JSON configuration under `groundSolver.*` and dispatches to the
 !> appropriate backend. Currently supported:
 !>
-!>   - `groundSolver.tdhx`: Time-Dependent Hartree–Exchange (TDHx) method
+!>   - `groundSolver.scf`: Self-consistent field (Hartree–Fock) method
+!>   - `groundSolver.mcscf`: Multiconfiguration self-consistent field (MCSCF) method
 !>
 !> This is the only file that needs modification when adding new top-level
 !> ground-state solver backends.
@@ -22,7 +23,8 @@ contains
   module subroutine GroundSolver_Fabricate()
     use M_Utils_Json
     use M_Utils_Say
-    use M_GroundSolver_Tdhx
+    use M_GroundSolver_Scf
+    use M_GroundSolver_Mcscf
 
     call Say_Fabricate("groundSolver")
 
@@ -34,11 +36,14 @@ contains
     ! branch
     !------------------------------------
 
-    if (Json_GetExistence("groundSolver.tdhx")) then
-      call GroundSolver_Tdhx_Fabricate
+    if (Json_GetExistence("groundSolver.scf")) then
+      call GroundSolver_Scf_Fabricate
+
+    else if (Json_GetExistence("groundSolver.mcscf")) then
+      call GroundSolver_Mcscf_Fabricate
 
     else
-      error stop "groundSolver is missing one of: tdhx"
+      error stop "groundSolver is missing one of: scf, mcscf"
     end if
 
   end subroutine

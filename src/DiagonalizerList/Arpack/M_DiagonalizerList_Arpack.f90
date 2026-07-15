@@ -40,6 +40,7 @@
 !> | `which`             | string | "SR"           | Spectrum region (see below)         |
 !> | `bmat`              | string | "I"            | "I" = standard, "G" = generalized   |
 !> | `nKry`              | int    | 2*nEvals+1     | Krylov subspace dimension           |
+!> | `tol`               | real   | 0 (machine eps)| Ritz value convergence tolerance    |
 !> | `checkConvergenceQ` | bool   | true           | Verify residuals after solve        |
 !> | `printLevel`        | int    | 0              | Verbosity level                     |
 !>
@@ -96,6 +97,10 @@ module M_DiagonalizerList_Arpack
     !> Must satisfy: nEvals + 1 ≤ nKry ≤ dim.
     !> Larger values improve convergence but increase memory and compute cost.
     integer(I32)  :: nKry = 0
+    !> Convergence tolerance for the Ritz values (0 => machine precision).
+    !> Looser tolerances (e.g., 1e-12) can substantially reduce the number of
+    !> restarts, especially for (nearly) degenerate eigenvalues.
+    real(R64)     :: tol = 0.0_R64
     !> If true, compute and print residual norms after diagonalization.
     logical       :: checkConvergenceQ = .true.
   contains

@@ -3,10 +3,10 @@
         "ylm": {
             "lmax": 1,
             "rmin": 0.0,
-            "rmax": 8.0,
+            "rmax": 5.0,
             "fedvr": {
-                "nElements": 5,
-                "nLocals": 21
+                "nElements": 2,
+                "nLocals": 12
             }
         }
     },
@@ -79,31 +79,23 @@
         "unary": { }
     },
     "diagonalizerList": {
-        "arpack1": {
-            "nEvals": 2,
+        "arpack": {
+            "nEvals": 5,
             "which": "SR",
             "bmat": "I",
-            "nKry": 60,
-            "checkConvergenceQ": false,
-            "printLevel": 0
-        },
-        "arpack2": {
-            "nEvals": 1,
-            "which": "SR",
-            "bmat": "I",
-            "nKry": 25,
+            "nKry": 15,
             "checkConvergenceQ": false,
             "printLevel": 0
         }
     },
     "groundSolver": {
-        "tdhx": {
-            "ylmOpt": { }
+        "scf": {
+            "stdImpl": { }
         }
     },
     "program": {
         "convThresh": 1e-12,
-        "alpha": 1.0,
+        "outputStep": 0.002,
         "nTimeSteps": 1
     }
 }

@@ -2,11 +2,11 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief Ylm-optimized TDHx implementation interface module.
+!> @brief Ylm-optimized SCF implementation interface module.
 !>
 !> @details
 !> Provides the factory routine and interface for a spherical-harmonics (Ylm)
-!> optimized TDHx ground-state solver. This variant exploits angular momentum
+!> optimized SCF ground-state solver. This variant exploits angular momentum
 !> symmetry to reduce computational cost:
 !>
 !> **Key Optimization**: Instead of diagonalizing a single Grid_nPoints×Grid_nPoints
@@ -25,8 +25,8 @@
 !> ! ...
 !> ```
 !>
-!> @see M_GroundSolver_Tdhx_StdImpl for the general-grid alternative
-module M_GroundSolver_Tdhx_YlmOpt
+!> @see M_GroundSolver_Scf_StdImpl for the general-grid alternative
+module M_GroundSolver_Scf_YlmOpt
   use M_Utils_Types
 
   implicit none
@@ -36,17 +36,17 @@ module M_GroundSolver_Tdhx_YlmOpt
   !=============================================================================
 
   interface
-    !> @brief Bind Ylm-optimized TDHx callbacks for the ground-state solver.
+    !> @brief Bind Ylm-optimized SCF callbacks for the ground-state solver.
     !>
     !> @details
     !> Assigns the following procedure pointers:
     !>   - `GroundSolver_Setup` → local `Setup`
     !>   - `GroundSolver_Approach` → local `Approach`
-    !>   - `GroundSolver_Tdhx_YlmOpt_HartreeFockAction` → local `HartreeFockAction`
+    !>   - `GroundSolver_Scf_YlmOpt_HartreeFockAction` → local `HartreeFockAction`
     !>
-    !> @pre JSON key `groundSolver.tdhx.ylmOpt` exists
+    !> @pre JSON key `groundSolver.scf.ylmOpt` exists
     !> @pre Grid is configured as Ylm (spherical harmonics)
-    module subroutine GroundSolver_Tdhx_YlmOpt_Fabricate
+    module subroutine GroundSolver_Scf_YlmOpt_Fabricate
     end subroutine
   end interface
 
@@ -58,7 +58,7 @@ module M_GroundSolver_Tdhx_YlmOpt
   !>
   !> Used as the matvec callback for per-l diagonalizers. The caller must wrap
   !> this in l-specific callbacks (one per diagonalizer).
-  procedure(I_GroundSolver_Tdhx_YlmOpt_HartreeFockRadialAction), pointer :: GroundSolver_Tdhx_YlmOpt_HartreeFockAction
+  procedure(I_GroundSolver_Scf_YlmOpt_HartreeFockRadialAction), pointer :: GroundSolver_Scf_YlmOpt_HartreeFockAction
   abstract interface
     !> @brief Apply the radial Fock operator for angular momentum channel l.
     !>
@@ -74,7 +74,7 @@ module M_GroundSolver_Tdhx_YlmOpt
     !> @param[in]  orbLm   Input radial orbital for channel l
     !> @param[in]  l       Angular momentum quantum number
     !> @param[in]  time    Time parameter (typically 0 for ground state)
-    subroutine I_GroundSolver_Tdhx_YlmOpt_HartreeFockRadialAction(dOrbLm, orbLm, l, time)
+    subroutine I_GroundSolver_Scf_YlmOpt_HartreeFockRadialAction(dOrbLm, orbLm, l, time)
       import :: I32, R64
       !> Output: radial Fock operator applied to the orbital, F̂_l·orbLm
       complex(R64), intent(out), contiguous, target :: dOrbLm(:)

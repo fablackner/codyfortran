@@ -38,6 +38,7 @@ contains
 !> - `which`: Spectrum region selector
 !> - `bmat`: Problem type ('I' or 'G')
 !> - `nKry`: Krylov dimension (default: min(2*nEvals+1, dim))
+!> - `tol`: Ritz value convergence tolerance (default: 0 => machine precision)
 !> - `checkConvergenceQ`: Post-solve residual verification
 !> - `printLevel`: Verbosity level
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -61,6 +62,7 @@ contains
     this % which = Json_Get("which", "SR", path_=this % path)
     this % bmat = Json_Get("bmat", "I", path_=this % path)
     this % nKry = Json_Get("nKry", min(2 * this % nEvals + 1, this % dim), path_=this % path)
+    this % tol = Json_Get("tol", 0.0_R64, path_=this % path)
     this % checkConvergenceQ = Json_Get("checkConvergenceQ", .true., path_=this % path)
     this % printLevel = Json_Get("printLevel", 0, path_=this % path)
 
@@ -125,7 +127,8 @@ contains
                                this % nEvals, &
                                this % which, &
                                this % bmat, &
-                               this % nKry)
+                               this % nKry, &
+                               tol_=this % tol)
 
     ! Verify convergence
     if (this % nFound .ne. this % nEvals) then
