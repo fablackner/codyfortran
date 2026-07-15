@@ -154,6 +154,28 @@ Advances `state` from `t0` to `t1` **in-place**.
 
 Supported GSL stepper types: `rk4`, `rkf45`, `rkck`, `rk8pd`.
 
+### Short Iterative Lanczos (SIL)
+
+```json
+{
+  "integratorList": [
+    {
+      "sil": {
+        "krylovDim": 32,
+        "tolerance": 1.0e-10,
+        "maxRestarts": 8
+      }
+    }
+  ]
+}
+```
+
+The Krylov dimension adapts per step: the Lanczos basis stops growing as
+soon as the residual error estimate drops below `tolerance` (up to
+`krylovDim` vectors). If the tolerance cannot be met, the step is halved
+and retried up to `maxRestarts` times. Requires a Hermitian generator
+(TimeDerivative = −i Ĥ ψ with Ĥ Hermitian).
+
 ---
 
 ## Adding a New Integrator

@@ -1,0 +1,56 @@
+{
+    "grid": {
+        "prolate": {
+            "R": 2.0,
+            "ximax": 12.0,
+            "mmax": 0,
+            "nEta": 12,
+            "fedvr": {
+                "nElements": 8,
+                "nLocals": 10
+            }
+        }
+    },
+    "sysKinetic": {
+        "prolate": {
+            "laplacian": {
+                "bodyMass": [ 1.0 ],
+                "fedvr": { }
+            }
+        }
+    },
+    "sysPotential": {
+        "prolate": {
+            "coulomb": {
+                "charge": 1.0
+            }
+        }
+    },
+    "method": {
+        "sb": { }
+    },
+    "orbsInit": {
+        "prolate": {
+            "lcao": {
+                "charge": 1.0,
+                "n": [ 1 ],
+                "l": [ 0 ],
+                "m": [ 0 ],
+                "geradeQ": [ true ]
+            }
+        }
+    },
+    "integratorList": {
+        "rk": {
+            "o1Expl": { }
+        }
+    },
+    "propagator": {
+        "single": { }
+    },
+    "program": {
+        "convThresh": 1e-12,
+        "outputStep": 5e-1,
+        "nTimeSteps": 1000
+    }
+}

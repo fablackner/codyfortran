@@ -1,0 +1,22 @@
+{
+    "grid": {
+        "prolate": {
+            "R": 2.0,
+            "ximax": 10.0,
+            "mmax": 1,
+            "nEta": 8,
+            "fedvr": {
+                "nElements": 5,
+                "nLocals": 7
+            }
+        }
+    },
+    "sysKinetic": {
+        "prolate": {
+            "laplacian": {
+                "bodyMass": [ 1.0 ],
+                "fedvr": { }
+            }
+        }
+    }
+}

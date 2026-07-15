@@ -31,6 +31,7 @@ contains
     use M_SysPotential_Lattice
     use M_SysPotential_Linear
     use M_SysPotential_Ylm
+    use M_SysPotential_Prolate
 
     call Say_Fabricate("sysPotential")
 
@@ -47,8 +48,11 @@ contains
     else if (Json_GetExistence("sysPotential.ylm")) then
       call SysPotential_Ylm_Fabricate
 
+    else if (Json_GetExistence("sysPotential.prolate")) then
+      call SysPotential_Prolate_Fabricate
+
     else
-      error stop "sysPotential is missing one of: lattice, linear, ylm"
+      error stop "sysPotential is missing one of: lattice, linear, ylm, prolate"
 
     end if
 

@@ -33,6 +33,7 @@ contains
     use M_SysKinetic_Lattice
     use M_SysKinetic_Linear
     use M_SysKinetic_Ylm
+    use M_SysKinetic_Prolate
 
     call Say_Fabricate("sysKinetic")
 
@@ -49,8 +50,11 @@ contains
     else if (Json_GetExistence("sysKinetic.ylm")) then
       call SysKinetic_Ylm_Fabricate
 
+    else if (Json_GetExistence("sysKinetic.prolate")) then
+      call SysKinetic_Prolate_Fabricate
+
     else
-      error stop "sysKinetic is missing one of: lattice, linear, ylm"
+      error stop "sysKinetic is missing one of: lattice, linear, ylm, prolate"
     end if
 
   end subroutine

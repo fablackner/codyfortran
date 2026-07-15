@@ -30,6 +30,7 @@ contains
     use M_SysInteraction_Linear
     use M_SysInteraction_Lattice
     use M_SysInteraction_Ylm
+    use M_SysInteraction_Prolate
 
     call Say_Fabricate("sysInteraction")
 
@@ -50,8 +51,11 @@ contains
     else if (Json_GetExistence("sysInteraction.ylm")) then
       call SysInteraction_Ylm_Fabricate
 
+    else if (Json_GetExistence("sysInteraction.prolate")) then
+      call SysInteraction_Prolate_Fabricate
+
     else
-      error stop "sysInteraction is missing one of: linear, lattice, ylm"
+      error stop "sysInteraction is missing one of: linear, lattice, ylm, prolate"
 
     end if
 

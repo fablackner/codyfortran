@@ -1,0 +1,14 @@
+{
+    "grid": {
+        "prolate": {
+            "R": 2.0,
+            "ximax": 14.0,
+            "mmax": 1,
+            "nEta": 10,
+            "fedvr": {
+                "nElements": 8,
+                "nLocals": 8
+            }
+        }
+    }
+}

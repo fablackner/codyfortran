@@ -57,6 +57,11 @@ src/Grid/
 │   ├── Fedvr/
 │   └── FedvrEcs/              # FEDVR + Exterior Complex Scaling
 │
+├── Prolate/                   # Prolate spheroidal (homonuclear diatomics)
+│   ├── M_Grid_Prolate.f90     # R, mmax, (xi,eta) arrays, m-channel accessors
+│   ├── S_Grid_Prolate.f90     # SpatialProduct via azimuthal m-convolution
+│   └── Fedvr/                 # FEDVR in xi, Gauss-Legendre DVR in eta
+│
 └── Lattice/                   # 3D discrete lattice (Hubbard models)
     ├── M_Grid_Lattice.f90     # xSize, ySize, zSize, periodicQ, code(ix,iy,iz)
     └── S_Grid_Lattice.f90
@@ -178,6 +183,52 @@ src/Grid/
 |------|------|---------|-------------|
 | `grid.ylm.lmax` | int | 1 | Maximum angular momentum |
 | `grid.ylm.rmax` | real | 20.0 | Radial box size |
+
+### Prolate Grid (Homonuclear Diatomic Molecules)
+
+Two-center prolate spheroidal coordinates (ξ, η, φ) with the nuclei at the
+foci z = ±a, a = R/2. The volume element a³(ξ²−η²) dξ dη dφ cancels both
+nuclear Coulomb singularities analytically. Fields are stored in azimuthal
+channels ψ = Σ_m f_m(ξ,η) e^{imφ}/√(2π) (m is a good quantum number of the
+linear molecule); channels are laid out contiguously in the interleaved order
+m = 0, −1, +1, −2, +2, … Discretization: FEDVR in ξ (ξ = 1 is a grid point,
+ξmax carries a Dirichlet condition) and a single-element Gauss–Legendre DVR
+in η (interior nodes only).
+
+```json
+{
+  "grid": {
+    "prolate": {
+      "R": 2.0,
+      "ximax": 12.0,
+      "mmax": 0,
+      "nEta": 12,
+      "fedvr": {
+        "nElements": 8,
+        "nLocals": 10
+      }
+    }
+  }
+}
+```
+
+| Path | Type | Default | Description |
+|------|------|---------|-------------|
+| `grid.prolate.R` | real | 2.0 | Internuclear distance (foci at ±R/2) |
+| `grid.prolate.ximax` | real | 10.0 | Box boundary in ξ (z-extent is R/2·ξmax) |
+| `grid.prolate.mmax` | int | 0 | Maximum azimuthal quantum number (σ: 0, π: 1, …) |
+| `grid.prolate.nEta` | int | 8 | Gauss–Legendre points in η |
+| `grid.prolate.fedvr.nElements` | int | 10 | Finite elements in ξ |
+| `grid.prolate.fedvr.nLocals` | int | 7 | Lobatto points per element |
+
+Companion back-ends: `sysKinetic.prolate.laplacian.fedvr`,
+`sysPotential.prolate.coulomb` (charge per nucleus, −2Zξ/(a(ξ²−η²))),
+`sysInteraction.prolate.coulomb.stdImpl` (Neumann-expansion Poisson solve per
+(τ,m) channel), `orbsInit.prolate.lcao` (gerade/ungerade hydrogen-like LCAO).
+Validated against the exact H₂⁺ 1sσg energy at R = 2 and the H₂ Hartree–Fock
+limit at R = 1.4 (`test/simulationTests/H2/`). Note: odd-|m| channels carry a
+non-polynomial factor ((ξ²−1)(1−η²))^{|m|/2} and converge only algebraically;
+even-m channels are fully spectral.
 
 ### 3D Lattice Grid
 

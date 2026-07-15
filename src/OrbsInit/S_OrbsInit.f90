@@ -29,6 +29,7 @@ contains
 !> - orbsInit.gridPoint → OrbsInit_GridPoint_Fabricate
 !> - orbsInit.load      → OrbsInit_Load_Fabricate
 !> - orbsInit.ylm       → OrbsInit_Ylm_Fabricate
+!> - orbsInit.prolate   → OrbsInit_Prolate_Fabricate
   module subroutine OrbsInit_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -37,6 +38,7 @@ contains
     use M_OrbsInit_Lattice
     use M_OrbsInit_Load
     use M_OrbsInit_Ylm
+    use M_OrbsInit_Prolate
 
     call Say_Fabricate("orbsInit")
 
@@ -65,8 +67,11 @@ contains
     else if (Json_GetExistence("orbsInit.ylm")) then
       call OrbsInit_Ylm_Fabricate
 
+    else if (Json_GetExistence("orbsInit.prolate")) then
+      call OrbsInit_Prolate_Fabricate
+
     else
-      error stop "orbsInit is missing one of: linear, lattice, gridPoint, load, ylm"
+      error stop "orbsInit is missing one of: linear, lattice, gridPoint, load, ylm, prolate"
     end if
 
   end subroutine

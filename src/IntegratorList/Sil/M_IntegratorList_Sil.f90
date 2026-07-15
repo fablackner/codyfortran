@@ -32,6 +32,12 @@ module M_IntegratorList_Sil
 
   !> Short Iterative Lanczos integrator element.
   type, extends(T_IntegratorList_E) :: T_IntegratorList_E_Sil
+    !> Maximum Krylov subspace dimension for the Lanczos process.
+    integer(I32) :: krylovDim = 32
+    !> Error tolerance for the Lanczos exponential approximation.
+    real(R64) :: tolerance = 1.0e-10_R64
+    !> Maximum number of step-halving retries per sub-step.
+    integer(I32) :: maxRestarts = 8
   contains
     !> Read SIL-specific parameters from configuration and capture dependencies.
     procedure :: Fabricate

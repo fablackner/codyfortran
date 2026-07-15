@@ -18,7 +18,8 @@
 !>   3. `grid.polar`     → Grid_Polar_Fabricate
 !>   4. `grid.spherical` → Grid_Spherical_Fabricate
 !>   5. `grid.ylm`       → Grid_Ylm_Fabricate
-!>   6. `grid.lattice`   → Grid_Lattice_Fabricate
+!>   6. `grid.prolate`   → Grid_Prolate_Fabricate
+!>   7. `grid.lattice`   → Grid_Lattice_Fabricate
 !>
 !> @par Orthonormalization Algorithm
 !> Uses modified Gram–Schmidt with one re-orthogonalization pass ("twice is
@@ -57,6 +58,7 @@ contains
     use M_Grid_Polar
     use M_Grid_Spherical
     use M_Grid_Ylm
+    use M_Grid_Prolate
     use M_Grid_Lattice
 
     call Say_Fabricate("grid")
@@ -87,11 +89,14 @@ contains
     else if (Json_GetExistence("grid.ylm")) then
       call Grid_Ylm_Fabricate
 
+    else if (Json_GetExistence("grid.prolate")) then
+      call Grid_Prolate_Fabricate
+
     else if (Json_GetExistence("grid.lattice")) then
       call Grid_Lattice_Fabricate
 
     else
-      error stop "grid is missing one of: linear, square, polar, spherical, ylm, lattice"
+      error stop "grid is missing one of: linear, square, polar, spherical, ylm, prolate, lattice"
     end if
 
   end subroutine
