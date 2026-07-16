@@ -77,7 +77,15 @@
         "unary": { }
     },
     "diagonalizerList": {
-        "lapackCi": { },
+        "arpackCi": {
+            "nEvals": 1,
+            "which": "SR",
+            "bmat": "I",
+            "nKry": 30,
+            "tol": 1e-12,
+            "checkConvergenceQ": false,
+            "printLevel": 0
+        },
         "arpackL0": {
             "nEvals": 3,
             "which": "SR",
