@@ -23,7 +23,7 @@ contains
 
     call system_clock(finish)
 
-    duration = dble(finish - start) / ticksPerSec
+    duration = real(finish - start, kind=R64) / ticksPerSec
 
     if (ticksPerSec .ne. 0) write (*, '(A, f14.7, A)') 'wallTime: ', duration, '   routine: '//routine
     call system_clock(start, ticksPerSec)

@@ -23,17 +23,17 @@
 !>
 !> ## Properties
 !>
-!> - **Accuracy**: Controlled by `krylov_dim` and `tolerance`.
+!> - **Accuracy**: Controlled by `krylovDim` and `tolerance`.
 !> - **Stability**: Exact for linear time-independent Hamiltonians.
 !> - **Cost**: O(m) matrix-vector products per step; m ≪ N.
 !>
 !> ## Configuration (JSON)
 !>
-!> | Key          | Type    | Default | Description                     |
-!> |--------------|---------|---------|---------------------------------|
-!> | `krylov_dim` | integer | 30      | Krylov subspace dimension       |
-!> | `tolerance`  | real    | 1e-7    | Error tolerance for exp approx  |
-!> | `max_steps`  | integer | 1000    | Max internal sub-steps          |
+!> | Key         | Type    | Default | Description                     |
+!> |-------------|---------|---------|---------------------------------|
+!> | `krylovDim` | integer | 30      | Krylov subspace dimension       |
+!> | `tolerance` | real    | 1e-7    | Error tolerance for exp approx  |
+!> | `maxSteps`  | integer | 1000    | Max internal sub-steps          |
 !>
 !> @note The `TimeDerivative` callback supplies −i Ĥ |ψ⟩. Internally we
 !>   multiply by i to recover Ĥ |ψ⟩ for the Expokit library.
@@ -68,9 +68,9 @@ contains
     ! set values and procedure pointers
     !------------------------------------
 
-    this % krylov_dim = Json_Get("krylov_dim", 30, path_=this % path)
+    this % krylovDim = Json_Get("krylovDim", 30, path_=this % path)
     this % tolerance = Json_Get("tolerance", 1.0e-7_R64, path_=this % path)
-    this % max_steps = Json_Get("max_steps", 1000, path_=this % path)
+    this % maxSteps = Json_Get("maxSteps", 1000, path_=this % path)
 
   end subroutine
 
@@ -104,20 +104,20 @@ contains
     real(R64), intent(in) :: t0
     real(R64), intent(in) :: t1
 
-    integer :: iflag, nSteps
-    real(R64) :: t_step
-    character(len=100) :: error_msg
+    integer :: iFlag, nSteps
+    real(R64) :: tStep
+    character(len=100) :: errorMsg
 
-    t_step = t1 - t0
-    nSteps = this % max_steps
+    tStep = t1 - t0
+    nSteps = this % maxSteps
 
     ! Call Expokit wrapper for Hermitian/symmetric matrices
-    call ExpokitLib_IntegrateSym(state, t_step, ApplyMatrix, &
-                                 this % krylov_dim, this % tolerance, nSteps, iflag)
+    call ExpokitLib_IntegrateSym(state, tStep, ApplyMatrix, &
+                                 this % krylovDim, this % tolerance, nSteps, iFlag)
 
-    if (iflag /= 0) then
-      write (error_msg, '(A,I0)') "Expokit zhexpv failed with status: ", iflag
-      error stop error_msg
+    if (iFlag .ne. 0) then
+      write (errorMsg, '(A,I0)') "Expokit zhexpv failed with status: ", iFlag
+      error stop errorMsg
     end if
 
   contains

@@ -151,7 +151,7 @@ contains
       write (*, *)
 
       do iGrid = 1, nG
-        write (*, '(2E20.10E3)') Grid_Linear_xCoord(iGrid), dble(potential(iGrid, 1))
+        write (*, '(2E20.10E3)') Grid_Linear_xCoord(iGrid), real(potential(iGrid, 1), kind=R64)
       end do
 
     end if
@@ -167,7 +167,7 @@ contains
     if (istat .ne. 0) error stop
 
     do iGrid = 1, nG
-      write (io, '(2E20.10E3)') Grid_Linear_xCoord(iGrid), dble(potential(iGrid, 1))
+      write (io, '(2E20.10E3)') Grid_Linear_xCoord(iGrid), real(potential(iGrid, 1), kind=R64)
     end do
 
     write (io, *)

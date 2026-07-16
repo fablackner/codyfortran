@@ -65,8 +65,8 @@ contains
     res = (0.0_R64, 0.0_R64)
 
     ! Check if (l, m) matches this orbital's quantum numbers
-    if (l /= OrbsInit_Ylm_HydrogenLike_l(index)) return
-    if (m /= OrbsInit_Ylm_HydrogenLike_m(index)) return
+    if (l .ne. OrbsInit_Ylm_HydrogenLike_l(index)) return
+    if (m .ne. OrbsInit_Ylm_HydrogenLike_m(index)) return
 
     n = OrbsInit_Ylm_HydrogenLike_n(index)
     charge = OrbsInit_Ylm_HydrogenLike_charge

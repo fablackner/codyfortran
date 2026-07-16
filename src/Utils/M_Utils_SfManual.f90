@@ -94,43 +94,43 @@ contains
     integer(I32), intent(in) :: m
     real(R64), intent(in)    :: x
     real(R64)                :: somx2, fact
-    integer(I32)             :: abs_m, i
+    integer(I32)             :: absM, i
 
-    abs_m = abs(m)
+    absM = abs(m)
 
     ! Error case
-    if (l < 0 .or. abs_m > l) then
+    if (l < 0 .or. absM > l) then
       res = 0.0_R64
       return
     end if
 
     ! Base case: P_m^m(x)
-    if (l .eq. abs_m) then
+    if (l .eq. absM) then
       res = 1.0_R64
-      if (abs_m > 0) then
+      if (absM > 0) then
         somx2 = sqrt(1.0_R64 - x**2)
         fact = 1.0_R64
-        do i = 1, abs_m
+        do i = 1, absM
           res = res * (-fact) * somx2
           fact = fact + 2.0_R64
         end do
       end if
 
       ! Base case: P_{m+1}^m(x)
-    else if (l .eq. abs_m + 1) then
-      res = x * (2.0_R64 * real(abs_m, R64) + 1.0_R64) * SfManual_Legendre(abs_m, abs_m, x)
+    else if (l .eq. absM + 1) then
+      res = x * (2.0_R64 * real(absM, R64) + 1.0_R64) * SfManual_Legendre(absM, absM, x)
 
       ! Recursive case using recurrence relation
     else
-      res = ((2.0_R64 * real(l, R64) - 1.0_R64) * x * SfManual_Legendre(l - 1, abs_m, x) - &
-             (real(l + abs_m, R64) - 1.0_R64) * SfManual_Legendre(l - 2, abs_m, x)) / &
-            real(l - abs_m, R64)
+      res = ((2.0_R64 * real(l, R64) - 1.0_R64) * x * SfManual_Legendre(l - 1, absM, x) - &
+             (real(l + absM, R64) - 1.0_R64) * SfManual_Legendre(l - 2, absM, x)) / &
+            real(l - absM, R64)
     end if
 
     ! Handle negative m values
     if (m < 0) then
-      fact = real(SfManual_Factorial(l - abs_m), R64) / real(SfManual_Factorial(l + abs_m), R64)
-      if (mod(abs_m, 2) .eq. 1) then
+      fact = real(SfManual_Factorial(l - absM), R64) / real(SfManual_Factorial(l + absM), R64)
+      if (mod(absM, 2) .eq. 1) then
         res = -res * fact
       else
         res = res * fact
@@ -149,18 +149,18 @@ contains
     integer(I32), intent(in) :: m
     real(R64), intent(in)    :: theta
     real(R64), intent(in)    :: phi
-    real(R64)                :: factor, legendre_val, fact_ratio
-    integer(I32)             :: abs_m
+    real(R64)                :: factor, legendreVal, factRatio
+    integer(I32)             :: absM
 
-    abs_m = abs(m)
+    absM = abs(m)
 
-    fact_ratio = real(SfManual_Factorial(l - abs_m), R64) / real(SfManual_Factorial(l + abs_m), R64)
+    factRatio = real(SfManual_Factorial(l - absM), R64) / real(SfManual_Factorial(l + absM), R64)
 
-    factor = sqrt((2.0_R64 * real(l, R64) + 1.0_R64) / (4.0_R64 * PI) * fact_ratio)
+    factor = sqrt((2.0_R64 * real(l, R64) + 1.0_R64) / (4.0_R64 * PI) * factRatio)
 
-    legendre_val = SfManual_Legendre(l, m, cos(theta))
+    legendreVal = SfManual_Legendre(l, m, cos(theta))
 
-    res = factor * legendre_val * exp(CMPLX(0.0_R64, real(m, R64) * phi, kind=R64))
+    res = factor * legendreVal * exp(CMPLX(0.0_R64, real(m, R64) * phi, kind=R64))
 
   end function
 

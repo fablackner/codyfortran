@@ -59,7 +59,7 @@ contains
     integer(I32), intent(in), optional  :: bt2_
 
     integer(I32) :: i, nRad
-    real(R64)    :: r_i, factor
+    real(R64)    :: r, factor
     complex(R64), allocatable :: C1(:), C2(:)
     real(R64)    :: strength
 
@@ -85,9 +85,9 @@ contains
     factor = strength * (4.0_R64 * PI / (2.0_R64 * real(l, R64) + 1.0_R64))
 
     do i = 1, nRad
-      r_i = Grid_Ylm_radialPoints(i)
+      r = Grid_Ylm_radialPoints(i)
       ! Combine scans, subtract diagonal to avoid double-counting
-      potLm(i) = factor * (C1(i) / r_i**(l + 1) + (r_i**l) * C2(i) - srcLm(i) / r_i)
+      potLm(i) = factor * (C1(i) / r**(l + 1) + (r**l) * C2(i) - srcLm(i) / r)
     end do
 
     deallocate (C1, C2)

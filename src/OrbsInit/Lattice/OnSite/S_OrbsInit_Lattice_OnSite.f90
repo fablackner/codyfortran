@@ -64,7 +64,7 @@ contains
     ixOrb = mod(index - 1, nx) + 1
 
     ! δ-function: nonzero only at target site
-    if (ix == ixOrb .and. iy == iyOrb .and. iz == izOrb) then
+    if (ix .eq. ixOrb .and. iy .eq. iyOrb .and. iz .eq. izOrb) then
       res = 1.0_R64
     else
       res = 0.0_R64

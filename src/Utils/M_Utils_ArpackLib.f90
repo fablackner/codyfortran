@@ -340,7 +340,7 @@ contains
       if (.not. allocated(evals)) allocate (evals(nFound))
 
       do j = 1, nFound
-        evals(j) = dble(d(j))
+        evals(j) = real(d(j), kind=R64)
       end do
       call Combinatorics_SortRealArray(evals, nFound, permut_=permut)
 
@@ -470,7 +470,7 @@ contains
       if (.not. allocated(evals)) allocate (evals(nFound))
 
       do j = 1, nFound
-        evals(j) = dble(d(j))
+        evals(j) = real(d(j), kind=R64)
       end do
       call Combinatorics_SortRealArray(evals, nFound, permut_=permut)
 

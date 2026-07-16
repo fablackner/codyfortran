@@ -165,5 +165,5 @@ Module doc: `src/Utils/A_Utils.md`.
 
 ## Documentation Pointers
 - **Build:** `README.md`, `CMakeLists.txt`
-- **Tests:** `test/*.f90` paired with `test/*.json`
+- **Tests:** `test/componentTests/<Module>/T_*.f90` (unit-level) and `test/simulationTests/<System>/T_*.f90` paired with `T_*.json` configs (end-to-end)
 - **Add component:** Mirror directory structure, e.g., `src/SysPotential/.../MyPotential/`

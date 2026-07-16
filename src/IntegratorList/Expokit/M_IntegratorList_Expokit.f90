@@ -33,11 +33,11 @@ module M_IntegratorList_Expokit
   !> Expokit-style Krylov integrator element.
   type, extends(T_IntegratorList_E) :: T_IntegratorList_E_Expokit
     !> Krylov subspace dimension for the Arnoldi/Lanczos process.
-    integer(I32) :: krylov_dim = 30
+    integer(I32) :: krylovDim = 30
     !> Error tolerance for the matrix exponential approximation.
     real(R64) :: tolerance = 1.0e-7_R64
     !> Maximum number of internal steps in one `Integrate` call.
-    integer(I32) :: max_steps = 1000
+    integer(I32) :: maxSteps = 1000
   contains
     !> Read parameters (Krylov dimension, tolerances, limits) from config.
     procedure :: Fabricate

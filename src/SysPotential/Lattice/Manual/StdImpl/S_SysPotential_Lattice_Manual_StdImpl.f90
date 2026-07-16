@@ -41,7 +41,7 @@ contains
     SysPotential_Lattice_Manual_manualValues = 0.0_R64
 
     if (allocated(SysPotential_Lattice_Manual_sites)) then
-      if (size(SysPotential_Lattice_Manual_values) /= size(SysPotential_Lattice_Manual_sites)) then
+      if (size(SysPotential_Lattice_Manual_values) .ne. size(SysPotential_Lattice_Manual_sites)) then
         error stop "manual: values and sites arrays must have the same size"
       end if
 
@@ -51,7 +51,7 @@ contains
         SysPotential_Lattice_Manual_manualValues(iSite) = SysPotential_Lattice_Manual_values(i)
       end do
     else
-      if (size(SysPotential_Lattice_Manual_values) /= nG) then
+      if (size(SysPotential_Lattice_Manual_values) .ne. nG) then
         error stop "manual: values array size must match grid size when sites are not specified"
       end if
 
