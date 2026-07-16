@@ -21,12 +21,18 @@ src/Absorber/
 ├── M_Absorber.f90              # Public interface (procedure pointers)
 ├── S_Absorber.f90              # Top-level fabrication dispatcher
 ├── AGENTS.md                   # This file
-└── Linear/
-    ├── M_Absorber_Linear.f90   # Linear-grid family interface
-    ├── S_Absorber_Linear.f90   # Linear-grid variant dispatcher
+├── Linear/
+│   ├── M_Absorber_Linear.f90   # Linear-grid family interface
+│   ├── S_Absorber_Linear.f90   # Linear-grid variant dispatcher
+│   └── Cosinus/
+│       ├── M_Absorber_Linear_Cosinus.f90  # Cosine absorber interface
+│       └── S_Absorber_Linear_Cosinus.f90  # Cosine absorber implementation
+└── Ylm/
+    ├── M_Absorber_Ylm.f90      # Ylm-grid family interface
+    ├── S_Absorber_Ylm.f90      # Ylm-grid variant dispatcher
     └── Cosinus/
-        ├── M_Absorber_Linear_Cosinus.f90  # Cosine absorber interface
-        └── S_Absorber_Linear_Cosinus.f90  # Cosine absorber implementation
+        ├── M_Absorber_Ylm_Cosinus.f90  # Radial cosine absorber interface
+        └── S_Absorber_Ylm_Cosinus.f90  # Radial cosine absorber implementation
 ```
 
 ### Key Concepts
@@ -96,6 +102,28 @@ src/Absorber/
 |-----------|------|---------|-------------|
 | `onset` | real | 100.0 | Coordinate where absorption begins (`|x| ≥ onset`) |
 | `order` | int | 6 | Exponent denominator (larger = sharper transition) |
+
+### Example: Radial Cosine Absorber on Ylm Grid
+
+```json
+{
+  "absorber": {
+    "ylm": {
+      "cosinus": {
+        "onset": 16.0,
+        "order": 6
+      }
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `onset` | real | 0.8 · rmax | Radius where absorption begins (`r ≥ onset`) |
+| `order` | int | 6 | Exponent denominator (larger = sharper transition) |
+
+The mask depends only on r, so it acts identically on every spherical-harmonic (l,m) channel of the flattened Ylm grid (via `Grid_Ylm_rCoord`). Do not combine with an ECS radial back-end (`fedvrEcs`) — complex scaling already absorbs outgoing flux.
 
 ### No Absorber (Passthrough)
 
@@ -177,7 +205,7 @@ end do
 | `M_Utils_Say` | Logging/diagnostics |
 | `M_Utils_Constants` | PI |
 | `M_Utils_NoOpProcedures` | Default no-op implementations |
-| `M_Grid`, `M_Grid_Linear` | Spatial grid info (nPoints, xCoord) |
+| `M_Grid`, `M_Grid_Linear`, `M_Grid_Ylm` | Spatial grid info (nPoints, xCoord, rCoord/radialPoints) |
 | `M_Orbs` | Orbital count (`Orbs_nOrbsInState`) |
 
 ---

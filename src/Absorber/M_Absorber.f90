@@ -24,6 +24,8 @@
 !> @par Available Implementations
 !> - **Linear/Cosinus**: Cosine-profile mask for 1D linear grids
 !>   (see `M_Absorber_Linear_Cosinus`)
+!> - **Ylm/Cosinus**: Cosine-profile radial mask for Ylm grids, applied
+!>   uniformly to every (l,m) channel (see `M_Absorber_Ylm_Cosinus`)
 !>
 !> @par Typical Usage
 !> @code{.f90}
@@ -37,7 +39,7 @@
 !> If no absorber section is present, a no-op absorber is installed
 !> (wavefunctions pass through unchanged).
 !>
-!> @see M_Absorber_Linear, M_Absorber_Linear_Cosinus
+!> @see M_Absorber_Linear, M_Absorber_Linear_Cosinus, M_Absorber_Ylm, M_Absorber_Ylm_Cosinus
 module M_Absorber
   use M_Utils_Types
   use M_Utils_NoOpProcedures

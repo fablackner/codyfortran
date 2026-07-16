@@ -1,0 +1,21 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 2,
+            "rmin": 0.0,
+            "rmax": 5.0,
+            "fedvr": {
+                "nElements": 2,
+                "nLocals": 12
+            }
+        }
+    },
+    "absorber": {
+        "ylm": {
+            "cosinus": {
+                "onset": 3.0,
+                "order": 4
+            }
+        }
+    }
+}
