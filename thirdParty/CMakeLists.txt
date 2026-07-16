@@ -25,15 +25,31 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/sources/json-fortran")
 endif()
 
 #============================================================================
+if(EXISTS "${CMAKE_SOURCE_DIR}/sources/openblas")
+    ExternalProject_Add(
+        openblas
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/sources/openblas"
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND make -j4 PREFIX=${CMAKE_INSTALL_PREFIX} USE_OPENMP=1
+        INSTALL_COMMAND make install PREFIX=${CMAKE_INSTALL_PREFIX} USE_OPENMP=1
+        BUILD_IN_SOURCE 1
+        BUILD_ALWAYS OFF
+    )
+endif()
+
+#============================================================================
 if(EXISTS "${CMAKE_SOURCE_DIR}/sources/stdlib")
     ExternalProject_Add(
         stdlib
         SOURCE_DIR "${CMAKE_SOURCE_DIR}/sources/stdlib"
+        DEPENDS openblas
         CMAKE_ARGS
             -DCMAKE_BUILD_TYPE=$ENV{CMAKE_BUILD_TYPE}
             -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
             -DBUILD_TESTING=OFF
             "-DCMAKE_Fortran_FLAGS=$ENV{FFLAGS} -DSTDLIB_EXTERNAL_BLAS -DSTDLIB_EXTERNAL_LAPACK"
+            -DBLAS_LIBRARIES=${CMAKE_INSTALL_PREFIX}/lib/libopenblas.so
+            -DLAPACK_LIBRARIES=${CMAKE_INSTALL_PREFIX}/lib/libopenblas.so
         INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
         BUILD_ALWAYS OFF
     )
@@ -69,18 +85,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/sources/FTorch")
     )
 endif()
 
-#============================================================================
-if(EXISTS "${CMAKE_SOURCE_DIR}/sources/openblas")
-    ExternalProject_Add(
-        openblas
-        SOURCE_DIR "${CMAKE_SOURCE_DIR}/sources/openblas"
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND make -j4 PREFIX=${CMAKE_INSTALL_PREFIX} USE_OPENMP=1
-        INSTALL_COMMAND make install PREFIX=${CMAKE_INSTALL_PREFIX} USE_OPENMP=1
-        BUILD_IN_SOURCE 1
-        BUILD_ALWAYS OFF
-    )
-endif()
+
 
 #============================================================================
 if(EXISTS "${CMAKE_SOURCE_DIR}/sources/fftw3")
