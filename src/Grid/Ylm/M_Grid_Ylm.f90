@@ -55,6 +55,18 @@ module M_Grid_Ylm
   !> Radial quadrature weights w_i^r.
   real(R64), allocatable :: Grid_Ylm_radialWeights(:)
 
+  !> True when the active radial back-end defines a bilinear c-product metric
+  !> (complex weights, no conjugation of the bra), as for an actively rotated
+  !> ECS contour. Back-ends that set this must also fill
+  !> Grid_Ylm_radialMetricWeights; consumers use it to decide whether
+  !> conjugation-based symmetries hold.
+  logical :: Grid_Ylm_cProductQ = .false.
+
+  !> Radial metric weights defining the active inner-product/source metric.
+  !> Equals cmplx(Grid_Ylm_radialWeights) for Hermitian back-ends; complex
+  !> contour volume weights for c-product back-ends (set by the back-end).
+  complex(R64), allocatable :: Grid_Ylm_radialMetricWeights(:)
+
   !=============================================================================
   ! module procedures pointers
   !=============================================================================

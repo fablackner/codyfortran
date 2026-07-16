@@ -29,7 +29,7 @@ module M_Grid_Ylm_FedvrEcs
   !=============================================================================
 
   !> Module-level FEDVR-ECS grid context (complex contour, nodes, weights).
-  type(T_FedvrEcs_Ctx) :: Grid_Ylm_FedvrEcs_FedvrEcsCtx
+  type(T_FedvrEcs_Ctx) :: Grid_Ylm_FedvrEcs_fedvrEcsCtx
 
   !> Module-level derivative operator context adapted to ECS.
   type(T_DerivativeFedvrEcs_Ctx) :: Grid_Ylm_FedvrEcs_derivativeCtx
@@ -60,6 +60,10 @@ module M_Grid_Ylm_FedvrEcs
 
   !> Complex-valued volume weights (w*r^2) used in radial integrals.
   complex(R64), allocatable :: Grid_Ylm_FedvrEcs_volumeWeights(:)
+
+  !> Complex volume weights repeated over all (l,m) channels in flattened
+  !> order; metric of the c-product inner product on the ECS contour.
+  complex(R64), allocatable :: Grid_Ylm_FedvrEcs_weights(:)
 
   !=============================================================================
   ! module procedures pointers

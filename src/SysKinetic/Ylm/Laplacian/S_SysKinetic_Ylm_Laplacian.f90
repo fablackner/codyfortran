@@ -18,6 +18,7 @@ contains
     use M_SysKinetic
     use M_SysKinetic_Ylm_Laplacian_FinDiff
     use M_SysKinetic_Ylm_Laplacian_Fedvr
+    use M_SysKinetic_Ylm_Laplacian_FedvrEcs
 
     call Say_Fabricate("sysKinetic.ylm.laplacian")
 
@@ -40,8 +41,11 @@ contains
     else if (Json_GetExistence("sysKinetic.ylm.laplacian.fedvr")) then
       call SysKinetic_Ylm_Laplacian_Fedvr_Fabricate
 
+    else if (Json_GetExistence("sysKinetic.ylm.laplacian.fedvrEcs")) then
+      call SysKinetic_Ylm_Laplacian_FedvrEcs_Fabricate
+
     else
-      error stop "sysKinetic.ylm.laplacian is missing one of: finDiff, fedvr"
+      error stop "sysKinetic.ylm.laplacian is missing one of: finDiff, fedvr, fedvrEcs"
     end if
   end subroutine
 

@@ -11,29 +11,38 @@ module M_Utils_DerivativeFedvrEcs
   implicit none
 
   type :: T_DerivativeFedvrEcs_Ctx
-    ! Reference operators on [-0.5, 0.5], size (nLocals, nLocals)
+    ! Reference operators on [-0.5, 0.5], size (nLocals, nLocals).
+    ! firstOrderMatrix(i, j)      = dL_j/dxi(xi_i), bare collocation derivative
+    ! firstOrderMatrixWeak(i, j)  =  wRef(i) * dL_j/dxi(xi_i)          (scales as dx^0)
+    ! secondOrderMatrix(i, j)     = -sum_k wRef(k) L_i'(xi_k) L_j'(xi_k) (scales as 1/dx)
+    ! Applying a weak-form matrix and dividing by the global complex weights
+    ! (which carry one factor of the complex element size) yields the nodal
+    ! derivative along the ECS contour.
     real(R64), allocatable :: firstOrderMatrix(:, :)
+    real(R64), allocatable :: firstOrderMatrixWeak(:, :)
     real(R64), allocatable :: secondOrderMatrix(:, :)
   end type
 
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine DerivativeFedvrEcs_CreateCtx(ctx, FedvrEcsCtx)
+  subroutine DerivativeFedvrEcs_CreateCtx(ctx, fedvrEcsCtx)
     use M_Utils_FedvrEcs, only: T_FedvrEcs_Ctx
     use stdlib_quadrature, only: gauss_legendre_lobatto
 
     type(T_DerivativeFedvrEcs_Ctx), intent(out) :: ctx
-    type(T_FedvrEcs_Ctx), intent(in) :: FedvrEcsCtx
+    type(T_FedvrEcs_Ctx), intent(in) :: fedvrEcsCtx
 
     integer(I32) :: i, j, k, nLoc
     real(R64), allocatable :: xRef(:), wRef(:)
 
     ! Allocate operator storage based on uniform nLocals
-    nLoc = FedvrEcsCtx % nLocals
+    nLoc = fedvrEcsCtx % nLocals
     allocate (ctx % firstOrderMatrix(nLoc, nLoc))
+    allocate (ctx % firstOrderMatrixWeak(nLoc, nLoc))
     allocate (ctx % secondOrderMatrix(nLoc, nLoc))
     ctx % firstOrderMatrix = 0.0_R64
+    ctx % firstOrderMatrixWeak = 0.0_R64
     ctx % secondOrderMatrix = 0.0_R64
 
     ! Build reference nodes/weights on [-0.5, 0.5]
@@ -57,6 +66,13 @@ contains
       end do
     end do
 
+    ! Weak form FRef(i, j) = wRef(i) * DRef(i, j), so that dividing by the
+    ! global weights (which sum contributions of both elements at bridge
+    ! points) yields the correct weight-averaged nodal derivative
+    do i = 1, nLoc
+      ctx % firstOrderMatrixWeak(i, :) = wRef(i) * ctx % firstOrderMatrix(i, :)
+    end do
+
     deallocate (xRef, wRef)
   end subroutine
 
@@ -64,52 +80,58 @@ contains
   subroutine DerivativeFedvrEcs_DestroyCtx(ctx)
     type(T_DerivativeFedvrEcs_Ctx), intent(inout) :: ctx
     if (allocated(ctx % firstOrderMatrix)) deallocate (ctx % firstOrderMatrix)
+    if (allocated(ctx % firstOrderMatrixWeak)) deallocate (ctx % firstOrderMatrixWeak)
     if (allocated(ctx % secondOrderMatrix)) deallocate (ctx % secondOrderMatrix)
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine DerivativeFedvrEcs_Do1stDerivative(dfDx, f, ctx, FedvrEcsCtx)
+  subroutine DerivativeFedvrEcs_Do1stDerivative(dfDx, f, ctx, fedvrEcsCtx)
     use M_Utils_FedvrEcs, only: T_FedvrEcs_Ctx
 
     complex(R64), intent(out) :: dfDx(:)
     complex(R64), intent(in)  :: f(:)
     type(T_DerivativeFedvrEcs_Ctx), intent(in) :: ctx
-    type(T_FedvrEcs_Ctx), intent(in) :: FedvrEcsCtx
+    type(T_FedvrEcs_Ctx), intent(in) :: fedvrEcsCtx
 
-    call ApplyDerivativeOperator(dfDx, f, ctx % firstOrderMatrix, FedvrEcsCtx)
+    call ApplyDerivativeOperator(dfDx, f, ctx % firstOrderMatrixWeak, fedvrEcsCtx, 0)
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine DerivativeFedvrEcs_Do2ndDerivative(d2fDx2, f, ctx, FedvrEcsCtx)
+  subroutine DerivativeFedvrEcs_Do2ndDerivative(d2fDx2, f, ctx, fedvrEcsCtx)
     use M_Utils_FedvrEcs, only: T_FedvrEcs_Ctx
 
     complex(R64), intent(out) :: d2fDx2(:)
     complex(R64), intent(in) :: f(:)
     type(T_DerivativeFedvrEcs_Ctx), intent(in) :: ctx
-    type(T_FedvrEcs_Ctx), intent(in) :: FedvrEcsCtx
+    type(T_FedvrEcs_Ctx), intent(in) :: fedvrEcsCtx
 
-    call ApplyDerivativeOperator(d2fDx2, f, ctx % secondOrderMatrix, FedvrEcsCtx)
+    call ApplyDerivativeOperator(d2fDx2, f, ctx % secondOrderMatrix, fedvrEcsCtx, 1)
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine ApplyDerivativeOperator(res, f, operatorMatrix, FedvrEcsCtx)
+  !> Applies a weak-form reference operator elementwise and divides by the
+  !> global weights. dxPower is the inverse power of the (complex) element size
+  !> carried by the operator matrix itself (0 for the first, 1 for the second
+  !> derivative); the remaining 1/dx comes from the global weights.
+  subroutine ApplyDerivativeOperator(res, f, operatorMatrix, fedvrEcsCtx, dxPower)
     use M_Utils_FedvrEcs, only: T_FedvrEcs_Ctx
 
     complex(R64), intent(out) :: res(:)
     complex(R64), intent(in) :: f(:)
     real(R64), intent(in) :: operatorMatrix(:, :)
-    type(T_FedvrEcs_Ctx), intent(in) :: FedvrEcsCtx
+    type(T_FedvrEcs_Ctx), intent(in) :: fedvrEcsCtx
+    integer(I32), intent(in) :: dxPower
 
     integer(I32) :: iE, iStart, iEnd, nLoc, nE
     integer(I32) :: iLocalStart, iLocalEnd
     complex(R64) :: dx
 
-    nLoc = FedvrEcsCtx % nLocals
-    nE = FedvrEcsCtx % nElements
+    nLoc = fedvrEcsCtx % nLocals
+    nE = fedvrEcsCtx % nElements
     res = (0.0_R64, 0.0_R64)
 
     do iE = 1, nE
-      associate (element => FedvrEcsCtx % elements(iE))
+      associate (element => fedvrEcsCtx % elements(iE))
         iStart = element % iStart
         iEnd = element % iEnd
         dx = element % size
@@ -117,17 +139,17 @@ contains
         ! Set local index range based on element position
         iLocalStart = 1
         iLocalEnd = nLoc
-        if (FedvrEcsCtx % xminExcludedQ .and. iE .eq. 1) iLocalStart = 2
-        if (FedvrEcsCtx % xmaxExcludedQ .and. iE .eq. nE) iLocalEnd = nLoc - 1
+        if (fedvrEcsCtx % xminExcludedQ .and. iE .eq. 1) iLocalStart = 2
+        if (fedvrEcsCtx % xmaxExcludedQ .and. iE .eq. nE) iLocalEnd = nLoc - 1
 
         ! Apply operator matrix to f for this element
         res(iStart:iEnd) = res(iStart:iEnd) + &
                            matmul(operatorMatrix(iLocalStart:iLocalEnd, iLocalStart:iLocalEnd), &
-                                  f(iStart:iEnd)) / dx
+                                  f(iStart:iEnd)) / dx**dxPower
       end associate
     end do
 
-    res(:) = res(:) / FedvrEcsCtx % weights(:)
+    res(:) = res(:) / fedvrEcsCtx % weights(:)
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

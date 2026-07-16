@@ -159,7 +159,10 @@ contains
 
     if (.not. allocated(src)) allocate (src(srcSize))
 
-    call Grid_Ylm_SpatialProduct(src, orbConjg, orb, lmaxPot, lmax, lmax, conjgQ_=.true., withWeightsQ_=.true.)
+    ! Under a c-product metric (rotated ECS contour) the source is the
+    ! bilinear product phi_i(z) phi_j(z) without conjugation of the bra
+    call Grid_Ylm_SpatialProduct(src, orbConjg, orb, lmaxPot, lmax, lmax, &
+                                 conjgQ_=.not. Grid_Ylm_cProductQ, withWeightsQ_=.true.)
 
   end subroutine
 

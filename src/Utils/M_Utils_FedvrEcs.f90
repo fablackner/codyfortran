@@ -92,11 +92,11 @@ contains
 !> @param nLocals Number of local points within each element
 !> @param xminExcludedQ Logical flag to determine if global lower endpoint (xmin) is excluded
 !> @param xmaxExcludedQ Logical flag to determine if global upper endpoint (xmax) is excluded
-!> @param ecsStartElement First element for complex scaling (optional)
-!> @param ecsAngle Angle for complex scaling (optional)
-!> @param ecsTransitionElements Number of elements for scaling transition (optional)
+!> @param ecsStartElement_ First element for complex scaling (optional)
+!> @param ecsAngle_ Angle for complex scaling (optional)
+!> @param ecsTransitionElements_ Number of elements for scaling transition (optional)
   subroutine FedvrEcs_CreateCtx(ctx, xmin, xmax, nE, nLocals, xminExcludedQ, xmaxExcludedQ, &
-                                ecsStartElement, ecsAngle, ecsTransitionElements)
+                                ecsStartElement_, ecsAngle_, ecsTransitionElements_)
     use stdlib_quadrature, only: gauss_legendre_lobatto
 
     type(T_FedvrEcs_Ctx), intent(out) :: ctx
@@ -104,9 +104,9 @@ contains
     integer(I32), intent(in) :: nE, nLocals
     logical, intent(in) :: xminExcludedQ
     logical, intent(in) :: xmaxExcludedQ
-    integer(I32), intent(in), optional :: ecsStartElement
-    real(R64), intent(in), optional :: ecsAngle
-    integer(I32), intent(in), optional :: ecsTransitionElements
+    integer(I32), intent(in), optional :: ecsStartElement_
+    real(R64), intent(in), optional :: ecsAngle_
+    integer(I32), intent(in), optional :: ecsTransitionElements_
 
     integer(I32) :: iE, iLocal, iGrid
     real(R64) :: elementSizeReal
@@ -129,14 +129,14 @@ contains
 
     ! Determine complex scaling parameters
     firstEcsElement = nE + 1
-    if (present(ecsStartElement)) firstEcsElement = ecsStartElement
+    if (present(ecsStartElement_)) firstEcsElement = ecsStartElement_
     firstEcsElement = max(1, min(firstEcsElement, nE + 1))
 
     targetAngle = 0.0_R64
-    if (present(ecsAngle)) targetAngle = ecsAngle
+    if (present(ecsAngle_)) targetAngle = ecsAngle_
 
     transitionElements = 0
-    if (present(ecsTransitionElements)) transitionElements = max(0, ecsTransitionElements)
+    if (present(ecsTransitionElements_)) transitionElements = max(0, ecsTransitionElements_)
 
     ecsEnabled = (abs(targetAngle) > 0.0_R64) .and. (firstEcsElement <= nE)
     ctx % ecsEnabledQ = ecsEnabled
@@ -183,7 +183,7 @@ contains
       end associate
     end do
 
-    ! Standard FedvrEsc has shared points at element boundaries
+    ! Standard FEDVR has shared points at element boundaries
     ! Total is nE*nLocals - (nE-1) shared interior points
     ctx % nPoints = nE * (nLocals - 1) + 1
     if (ctx % xminExcludedQ) ctx % nPoints = ctx % nPoints - 1

@@ -79,9 +79,12 @@ SysKinetic/
         ├── FinDiff/          # FD on uniform radial grid
         │   ├── M_SysKinetic_Ylm_Laplacian_FinDiff.f90
         │   └── S_SysKinetic_Ylm_Laplacian_FinDiff.f90
-        └── Fedvr/            # Finite-element DVR on nonuniform grid
-            ├── M_SysKinetic_Ylm_Laplacian_Fedvr.f90
-            └── S_SysKinetic_Ylm_Laplacian_Fedvr.f90
+        ├── Fedvr/            # Finite-element DVR on nonuniform grid
+        │   ├── M_SysKinetic_Ylm_Laplacian_Fedvr.f90
+        │   └── S_SysKinetic_Ylm_Laplacian_Fedvr.f90
+        └── FedvrEcs/         # FEDVR on exterior-complex-scaled contour
+            ├── M_SysKinetic_Ylm_Laplacian_FedvrEcs.f90
+            └── S_SysKinetic_Ylm_Laplacian_FedvrEcs.f90
 ```
 
 ## Backend Summary
@@ -93,6 +96,7 @@ SysKinetic/
 | **Linear/Laplacian/Fourier** | 1D uniform Cartesian | −(1/2m) d²/dx² via FFT | Periodic |
 | **Ylm/Laplacian/FinDiff** | Radial uniform | −(1/2m)[∇²_r − l(l+1)/r²] | f(0)=0, f(r_max)=0 |
 | **Ylm/Laplacian/Fedvr** | Radial nonuniform | −(1/2m)[∇²_r − l(l+1)/r²] | f(0)=0, f(r_max)=0 |
+| **Ylm/Laplacian/FedvrEcs** | Radial nonuniform, ECS contour | −(1/2m)[∇²_z − l(l+1)/z²] on contour z(r) | f(0)=0, absorbing beyond ECS radius |
 
 ## Usage
 

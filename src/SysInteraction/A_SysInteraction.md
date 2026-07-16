@@ -124,6 +124,7 @@ w(r) = strength × exp(-dampening×r) / (√(r² + softening1²) + softening2)
 | `StdImpl` | O(N²) | Reference, Green's function |
 | `TwoScan` | O(N) | Forward/backward prefix sums |
 | `FullEq` | O(N³) | FEDVR + LU per call |
+| `FullEqEcs` | O(N³) | FEDVR-ECS contour + complex LU per call (requires `grid.ylm.fedvrEcs`) |
 | `BlockEq` | O(nE² + nE×nLoc) | FEDVR + precomputed Schur |
 
 **JSON path:** `sysInteraction.ylm.coulomb`

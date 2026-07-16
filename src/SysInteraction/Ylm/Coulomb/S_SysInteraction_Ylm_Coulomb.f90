@@ -20,10 +20,12 @@ contains
   module subroutine SysInteraction_Ylm_Coulomb_Fabricate
     use M_Utils_Json
     use M_Utils_Say
+    use M_Grid_Ylm
     use M_SysInteraction
     use M_SysInteraction_Ylm
     use M_SysInteraction_Ylm_Coulomb_StdImpl
     use M_SysInteraction_Ylm_Coulomb_FullEq
+    use M_SysInteraction_Ylm_Coulomb_FullEqEcs
     use M_SysInteraction_Ylm_Coulomb_BlockEq
     use M_SysInteraction_Ylm_Coulomb_TwoScan
 
@@ -37,8 +39,9 @@ contains
     SysInteraction_Ylm_mIndependentQ = .true.
 
     ! Real Coulomb kernel: swapped source pairs give the conjugated potential,
-    ! but only on a real radial contour (complex scaling breaks the symmetry)
-    SysInteraction_conjSymmetricQ = .not. Json_GetExistence("grid.ylm.fedvrEcs")
+    ! but only on a real radial contour (an actively rotated c-product contour
+    ! breaks the symmetry; the grid back-end declares its metric)
+    SysInteraction_conjSymmetricQ = .not. Grid_Ylm_cProductQ
 
     !------------------------------------
     ! branch: select radial Poisson solver
@@ -50,6 +53,9 @@ contains
     else if (Json_GetExistence("sysInteraction.ylm.coulomb.fullEq")) then
       call SysInteraction_Ylm_Coulomb_FullEq_Fabricate
 
+    else if (Json_GetExistence("sysInteraction.ylm.coulomb.fullEqEcs")) then
+      call SysInteraction_Ylm_Coulomb_FullEqEcs_Fabricate
+
     else if (Json_GetExistence("sysInteraction.ylm.coulomb.blockEq")) then
       call SysInteraction_Ylm_Coulomb_BlockEq_Fabricate
 
@@ -57,7 +63,7 @@ contains
       call SysInteraction_Ylm_Coulomb_TwoScan_Fabricate
 
     else
-      error stop "sysInteraction.ylm.coulomb is missing one of: stdImpl, fullEq, blockEq, twoScan"
+      error stop "sysInteraction.ylm.coulomb is missing one of: stdImpl, fullEq, fullEqEcs, blockEq, twoScan"
     end if
 
   end subroutine

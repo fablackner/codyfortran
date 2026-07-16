@@ -11,6 +11,10 @@ program T_Utils_DerivativeFedvr
   call test_second_derivative(error)
   if (allocated(error)) error stop 'DerivativeFedvr second derivative test failed'
 
+  ! Test the first derivative operator
+  call test_first_derivative(error)
+  if (allocated(error)) error stop 'DerivativeFedvr first derivative test failed'
+
 contains
 
   subroutine test_second_derivative(error)
@@ -69,5 +73,56 @@ contains
     call DerivativeFedvr_DestroyCtx(derivCtx)
     call Fedvr_DestroyCtx(fedvrCtx)
   end subroutine test_second_derivative
+
+  subroutine test_first_derivative(error)
+    type(error_type), allocatable, intent(out) :: error
+
+    type(T_Fedvr_Ctx) :: fedvrCtx
+    type(T_DerivativeFedvr_Ctx) :: derivCtx
+    complex(R64), allocatable :: f(:), dfDx(:), expected(:)
+    real(R64) :: relErr, r, xmin, xmax
+    real(R64) :: lambda
+    integer(I32) :: i, nElements, nLocals
+
+    print *, "Testing DerivativeFedvr first derivative..."
+
+    ! Set parameters for the grid
+    nElements = 10
+    nLocals = 21
+    xmin = 0.0_R64
+    xmax = 20.0_R64
+    lambda = 2.0_R64
+
+    ! Create FEDVR grid with excluded lower endpoint
+    call Fedvr_CreateCtx(fedvrCtx, xmin, xmax, nElements, nLocals, .true., .false.)
+
+    ! Create derivative context
+    call DerivativeFedvr_CreateCtx(derivCtx, fedvrCtx)
+
+    allocate (f(fedvrCtx % nPoints), dfDx(fedvrCtx % nPoints), expected(fedvrCtx % nPoints))
+
+    ! Initialize test wavefunction f(r) = r * exp(-lambda * r) and analytic first derivative
+    do i = 1, fedvrCtx % nPoints
+      r = fedvrCtx % points(i)
+      f(i) = r * exp(-lambda * r)
+      expected(i) = (1.0_R64 - lambda * r) * exp(-lambda * r)
+    end do
+
+    ! Compute first derivative using DerivativeFedvr
+    call DerivativeFedvr_Do1stDerivative(dfDx, f, derivCtx, fedvrCtx)
+
+    ! Calculate maximum relative error
+    relErr = maxval(abs(dfDx - expected)) / maxval(abs(expected))
+
+    print *, "Relative error of 1st derivative: ", relErr
+
+    ! Check if error is acceptable
+    call check(error, relErr < 1.0e-8_R64)
+
+    ! Clean up
+    deallocate (f, dfDx, expected)
+    call DerivativeFedvr_DestroyCtx(derivCtx)
+    call Fedvr_DestroyCtx(fedvrCtx)
+  end subroutine test_first_derivative
 
 end program T_Utils_DerivativeFedvr

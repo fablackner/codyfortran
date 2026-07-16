@@ -36,6 +36,9 @@ contains
     Grid_Ylm_AddLmComponent => AddLmComponent
     Grid_Setup => Setup
 
+    ! Hermitian metric by default; a c-product back-end overrides this below
+    Grid_Ylm_cProductQ = .false.
+
     !------------------------------------
     ! branch
     !------------------------------------
@@ -67,6 +70,14 @@ contains
 
     ! Call the specific setup procedure for the chosen grid type
     call Grid_Ylm_Setup
+
+    ! Default Hermitian metric: real radial weights; c-product back-ends have
+    ! already filled Grid_Ylm_radialMetricWeights in their own Setup
+    if (.not. Grid_Ylm_cProductQ) then
+      if (allocated(Grid_Ylm_radialMetricWeights)) deallocate (Grid_Ylm_radialMetricWeights)
+      allocate (Grid_Ylm_radialMetricWeights(Grid_Ylm_nRadial))
+      Grid_Ylm_radialMetricWeights(:) = cmplx(Grid_Ylm_radialWeights(:), 0.0_R64, kind=R64)
+    end if
 
     ! Allocate and initialize weights for the whole grid
     allocate (Grid_Ylm_weights(Grid_nPoints))
@@ -206,12 +217,12 @@ contains
       end do
     end do
 
-    ! Apply weights if requested
+    ! Apply metric weights if requested (complex on c-product back-ends)
     if (withWeightsQ) then
       do l = 0, lMaxOut
         do m = -l, l
           call Grid_Ylm_GetLmComponent(lmTmp, l, m, fOut)
-          lmTmp(:) = lmTmp(:) * Grid_Ylm_radialWeights(:)
+          lmTmp(:) = lmTmp(:) * Grid_Ylm_radialMetricWeights(:)
           call Grid_Ylm_SetLmComponent(fOut, l, m, lmTmp)
         end do
       end do

@@ -11,8 +11,15 @@ module M_Utils_DerivativeFedvr
   implicit none
 
   type :: T_DerivativeFedvr_Ctx
-    ! Reference operators on [-0.5, 0.5], size (nLocals, nLocals)
+    ! Reference operators on [-0.5, 0.5], size (nLocals, nLocals).
+    ! firstOrderMatrix(i, j)      = dL_j/dxi(xi_i), bare collocation derivative
+    !                               (also consumed directly by Poisson solvers)
+    ! firstOrderMatrixWeak(i, j)  =  wRef(i) * dL_j/dxi(xi_i)          (scales as dx^0)
+    ! secondOrderMatrix(i, j)     = -sum_k wRef(k) L_i'(xi_k) L_j'(xi_k) (scales as 1/dx)
+    ! Applying a weak-form matrix and dividing by the global weights (which
+    ! carry one factor of dx) yields the nodal first/second derivative.
     real(R64), allocatable :: firstOrderMatrix(:, :)
+    real(R64), allocatable :: firstOrderMatrixWeak(:, :)
     real(R64), allocatable :: secondOrderMatrix(:, :)
   end type
 
@@ -32,8 +39,10 @@ contains
     ! Allocate operator storage based on uniform nLocals
     nLoc = fedvrCtx % nLocals
     allocate (ctx % firstOrderMatrix(nLoc, nLoc))
+    allocate (ctx % firstOrderMatrixWeak(nLoc, nLoc))
     allocate (ctx % secondOrderMatrix(nLoc, nLoc))
     ctx % firstOrderMatrix = 0.0_R64
+    ctx % firstOrderMatrixWeak = 0.0_R64
     ctx % secondOrderMatrix = 0.0_R64
 
     ! Build reference nodes/weights on [-0.5, 0.5]
@@ -57,12 +66,20 @@ contains
       end do
     end do
 
+    ! Weak form FRef(i, j) = wRef(i) * DRef(i, j), so that dividing by the
+    ! global weights (which sum contributions of both elements at bridge
+    ! points) yields the correct weight-averaged nodal derivative
+    do i = 1, nLoc
+      ctx % firstOrderMatrixWeak(i, :) = wRef(i) * ctx % firstOrderMatrix(i, :)
+    end do
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine DerivativeFedvr_DestroyCtx(ctx)
     type(T_DerivativeFedvr_Ctx), intent(inout) :: ctx
     if (allocated(ctx % firstOrderMatrix)) deallocate (ctx % firstOrderMatrix)
+    if (allocated(ctx % firstOrderMatrixWeak)) deallocate (ctx % firstOrderMatrixWeak)
     if (allocated(ctx % secondOrderMatrix)) deallocate (ctx % secondOrderMatrix)
   end subroutine
 
@@ -75,7 +92,7 @@ contains
     type(T_DerivativeFedvr_Ctx), intent(in) :: ctx
     type(T_Fedvr_Ctx), intent(in) :: fedvrCtx
 
-    call ApplyDerivativeOperator(dfDx, f, ctx % firstOrderMatrix, fedvrCtx)
+    call ApplyDerivativeOperator(dfDx, f, ctx % firstOrderMatrixWeak, fedvrCtx, 0)
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -87,17 +104,22 @@ contains
     type(T_DerivativeFedvr_Ctx), intent(in) :: ctx
     type(T_Fedvr_Ctx), intent(in) :: fedvrCtx
 
-    call ApplyDerivativeOperator(d2fDx2, f, ctx % secondOrderMatrix, fedvrCtx)
+    call ApplyDerivativeOperator(d2fDx2, f, ctx % secondOrderMatrix, fedvrCtx, 1)
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine ApplyDerivativeOperator(res, f, operatorMatrix, fedvrCtx)
+  !> Applies a weak-form reference operator elementwise and divides by the
+  !> global weights. dxPower is the inverse power of the element size carried
+  !> by the operator matrix itself (0 for the first, 1 for the second
+  !> derivative); the remaining 1/dx comes from the global weights.
+  subroutine ApplyDerivativeOperator(res, f, operatorMatrix, fedvrCtx, dxPower)
     use M_Utils_Fedvr, only: T_Fedvr_Ctx
 
     complex(R64), intent(out) :: res(:)
     complex(R64), intent(in) :: f(:)
     real(R64), intent(in) :: operatorMatrix(:, :)
     type(T_Fedvr_Ctx), intent(in) :: fedvrCtx
+    integer(I32), intent(in) :: dxPower
 
     integer(I32) :: iE, iStart, iEnd, nLoc, nE
     integer(I32) :: iLocalStart, iLocalEnd
@@ -122,7 +144,7 @@ contains
         ! Apply operator matrix to f for this element
         res(iStart:iEnd) = res(iStart:iEnd) + &
                            matmul(operatorMatrix(iLocalStart:iLocalEnd, iLocalStart:iLocalEnd), &
-                                  f(iStart:iEnd)) / dx
+                                  f(iStart:iEnd)) / dx**dxPower
       end associate
     end do
 
