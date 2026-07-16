@@ -1,9 +1,10 @@
-program P_GroundSolverStdImpl
+program P_GroundSolverYlmOpt
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
   use M_Utils_Actions
   use M_Grid
+  use M_Grid_Ylm
   use M_SysKinetic
   use M_SysPotential
   use M_SysInteraction
@@ -17,6 +18,7 @@ program P_GroundSolverStdImpl
   use M_Mixing
   use M_GroundSolver
   use M_GroundSolver_Mcscf
+  use M_GroundSolver_Mcscf_YlmOpt
 
   implicit none
 
@@ -26,7 +28,7 @@ program P_GroundSolverStdImpl
   real(R64)    :: convThresh
   real(R64)    :: time
   integer(I32) :: iStep, nTimeSteps, innerStep
-  type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(2)
+  type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(3)
 
   !==========================================
   call Say_Hello
@@ -47,10 +49,12 @@ program P_GroundSolverStdImpl
   call CoeffsInit_Fabricate
   call Mixing_Fabricate
   call GroundSolver_Fabricate
-  DiagonalizerListInput(1) % ApplyMatOnVec => ApplyMatOnVecCi
+  DiagonalizerListInput(1) % ApplyMatOnVec => GroundSolver_Mcscf_HamiltonianAction
   DiagonalizerListInput(1) % dim = Coeffs_nCoeffs
-  DiagonalizerListInput(2) % ApplyMatOnVec => ApplyMatOnVecOrb
-  DiagonalizerListInput(2) % dim = Grid_nPoints
+  DiagonalizerListInput(2) % ApplyMatOnVec => ApplyMatOnVecL0
+  DiagonalizerListInput(2) % dim = Grid_Ylm_nRadial
+  DiagonalizerListInput(3) % ApplyMatOnVec => ApplyMatOnVecL1
+  DiagonalizerListInput(3) % dim = Grid_Ylm_nRadial
   call DiagonalizerList_Fabricate(DiagonalizerListInput)
 
   call Say_Fabricate("program")
@@ -112,25 +116,25 @@ program P_GroundSolverStdImpl
 
 contains
 
-  subroutine ApplyMatOnVecCi(dCoeffs, coeffs, time)
-    use M_GroundSolver_Mcscf
+  subroutine ApplyMatOnVecL0(dOrbLm, orbLm, time)
+    use M_GroundSolver_Mcscf_YlmOpt
 
-    complex(R64), intent(out), contiguous, target :: dCoeffs(:)
-    complex(R64), intent(in), contiguous, target :: coeffs(:)
+    complex(R64), intent(out), contiguous, target :: dOrbLm(:)
+    complex(R64), intent(in), contiguous, target :: orbLm(:)
     real(R64), intent(in) :: time
 
-    call GroundSolver_Mcscf_HamiltonianAction(dCoeffs, coeffs, time)
+    call GroundSolver_Mcscf_YlmOpt_FockAction(dOrbLm, orbLm, l=0, time=time)
 
   end subroutine
 
-  subroutine ApplyMatOnVecOrb(dOrb, orb, time)
-    use M_GroundSolver_Mcscf
+  subroutine ApplyMatOnVecL1(dOrbLm, orbLm, time)
+    use M_GroundSolver_Mcscf_YlmOpt
 
-    complex(R64), intent(out), contiguous, target :: dOrb(:)
-    complex(R64), intent(in), contiguous, target :: orb(:)
+    complex(R64), intent(out), contiguous, target :: dOrbLm(:)
+    complex(R64), intent(in), contiguous, target :: orbLm(:)
     real(R64), intent(in) :: time
 
-    call GroundSolver_Mcscf_FockAction(dOrb, orb, time)
+    call GroundSolver_Mcscf_YlmOpt_FockAction(dOrbLm, orbLm, l=1, time=time)
 
   end subroutine
 

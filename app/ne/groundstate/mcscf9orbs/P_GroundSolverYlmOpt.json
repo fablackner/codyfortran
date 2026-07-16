@@ -5,19 +5,16 @@
             "rmin": 0.0,
             "rmax": 8.0,
             "fedvr": {
-                "nElements": 8,
-                "nLocals": 12
+                "nElements": 5,
+                "nLocals": 21
             }
         }
     },
     "sysKinetic": {
         "ylm": {
             "laplacian": {
-                "bodyMass": [
-                    1.0,
-                    1.0
-                ],
-                "fedvr": {}
+                "bodyMass": [ 1.0, 1.0 ],
+                "fedvr": { }
             }
         }
     },
@@ -25,7 +22,7 @@
         "ylm": {
             "coulomb": {
                 "charge": 10.0,
-                "stdImpl": {}
+                "stdImpl": { }
             }
         }
     },
@@ -33,27 +30,18 @@
         "ylm": {
             "coulomb": {
                 "strength": 1.0,
-                "blockEq": {}
+                "blockEq": { }
             }
         }
     },
     "method": {
         "mb": {
             "nBodyTypes": 2,
-            "nBodies": [
-                5,
-                5
-            ],
-            "bodyStatistics": [
-                "f",
-                "f"
-            ],
+            "nBodies": [ 5, 5 ],
+            "bodyStatistics": [ "f", "f" ],
             "orbBased": {
-                "nOrbs": [
-                    9,
-                    9
-                ],
-                "mctdhx": {}
+                "nOrbs": [ 9, 9 ],
+                "mctdhx": { }
             }
         }
     },
@@ -64,39 +52,9 @@
         "ylm": {
             "hydrogenLike": {
                 "charge": 10.0,
-                "n": [
-                    1,
-                    2,
-                    2,
-                    2,
-                    2,
-                    3,
-                    3,
-                    3,
-                    3
-                ],
-                "l": [
-                    0,
-                    0,
-                    1,
-                    1,
-                    1,
-                    0,
-                    1,
-                    1,
-                    1
-                ],
-                "m": [
-                    0,
-                    0,
-                    -1,
-                    0,
-                    1,
-                    0,
-                    -1,
-                    0,
-                    1
-                ]
+                "n": [ 1, 2, 2, 2, 2, 3, 3, 3, 3 ],
+                "l": [ 0, 0, 1, 1, 1, 0, 1, 1, 1 ],
+                "m": [ 0, 0, -1, 0, 1, 0, -1, 0, 1 ]
             }
         }
     },
@@ -113,45 +71,45 @@
         }
     },
     "coeffs": {
-        "generic": {}
+        "generic": { }
     },
     "coeffsInit": {
-        "unary": {}
+        "unary": { }
     },
     "diagonalizerList": {
-        "arpackCi": {
-            "nEvals": 1,
+        "lapackCi": { },
+        "arpackL0": {
+            "nEvals": 3,
             "which": "SR",
             "bmat": "I",
-            "nKry": 30,
-            "tol": 1e-12,
+            "nKry": 25,
             "checkConvergenceQ": false,
             "printLevel": 0
         },
-        "arpackOrb": {
-            "nEvals": 9,
+        "arpackL1": {
+            "nEvals": 2,
             "which": "SR",
             "bmat": "I",
-            "nKry": 40,
+            "nKry": 25,
             "checkConvergenceQ": false,
             "printLevel": 0
         }
     },
     "groundSolver": {
         "mcscf": {
-            "stdImpl": {
+            "ylmOpt": {
                 "mixTarget": "potential",
                 "alphaCi": 1.0
             }
         }
     },
-    "program": {
-        "convThresh": 1e-10,
-        "nTimeSteps": 10
-    },
     "mixing": {
         "linear": {
             "alpha": 0.85
         }
+    },
+    "program": {
+        "convThresh": 1e-12,
+        "nTimeSteps": 10
     }
 }

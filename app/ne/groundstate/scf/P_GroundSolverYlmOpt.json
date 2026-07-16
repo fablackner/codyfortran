@@ -98,7 +98,14 @@
     },
     "groundSolver": {
         "scf": {
-            "ylmOpt": { }
+            "ylmOpt": {
+                "mixTarget": "potential"
+            }
+        }
+    },
+    "mixing": {
+        "linear": {
+            "alpha": 0.85
         }
     },
     "program": {
