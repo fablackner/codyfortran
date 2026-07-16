@@ -26,7 +26,7 @@
 !>
 !> 1. Call `GroundSolver_Fabricate()` to bind JSON-selected backend
 !> 2. Call `GroundSolver_Setup()` to allocate backend resources
-!> 3. Loop: Call `GroundSolver_Approach(state, alpha, time)` until convergence
+!> 3. Loop: Call `GroundSolver_Approach(state, time)` until convergence
 !>
 !> ## Available Backends
 !>
@@ -94,29 +94,25 @@ module M_GroundSolver
     !> Implements one iteration of the self-consistent-field cycle:
     !>   1. Build mean-field potentials (Hartree + external) from current orbitals
     !>   2. Diagonalize the effective Fock operator
-    !>   3. Mix new eigenvectors with old orbitals: orbs_new = (1-α)·orbs_old + α·evecs
+    !>   3. Gauge-align the eigenvectors with the old orbitals
+    !>      (`Orbs_AlignOnReference`), then mix via `Mixing_Mix`
     !>   4. Orthonormalize the mixed orbitals
     !>
     !> The caller is responsible for the convergence loop (checking energy change).
     !>
     !> @param[inout] state   Packed state vector (orbitals). Updated in place.
-    !> @param[in]    alpha   Mixing parameter (0 < α ≤ 1). α=1 is pure replacement,
-    !>                       α<1 damps oscillations for difficult convergence.
     !> @param[in]    time    Backend-defined parameter. Typically 0 for ground state;
     !>                       some backends may use it for time-dependent potentials.
     !>
     !> @note For spin-restricted calculations, the spin-up block is copied to
     !>       spin-down after mixing, ensuring identical spatial orbitals.
-    subroutine I_GroundSolver_Approach(state, alpha, time)
+    subroutine I_GroundSolver_Approach(state, time)
       import :: R64
       !> Packed state vector containing orbital coefficients. Updated in place.
       complex(R64), intent(inout), contiguous, target :: state(:)
-      !> Mixing parameter (0 < alpha <= 1). Use alpha < 1 to improve convergence.
-      real(R64), intent(in) :: alpha
       !> Backend-defined step parameter (e.g., physical or imaginary time).
       real(R64), intent(in) :: time
     end subroutine
   end interface
 
 end module
-

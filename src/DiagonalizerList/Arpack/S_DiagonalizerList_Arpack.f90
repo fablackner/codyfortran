@@ -64,6 +64,7 @@ contains
     this % nKry = Json_Get("nKry", min(2 * this % nEvals + 1, this % dim), path_=this % path)
     this % tol = Json_Get("tol", 0.0_R64, path_=this % path)
     this % checkConvergenceQ = Json_Get("checkConvergenceQ", .true., path_=this % path)
+    this % warmStartQ = Json_Get("warmStartQ", .true., path_=this % path)
     this % printLevel = Json_Get("printLevel", 0, path_=this % path)
 
   end subroutine
@@ -108,13 +109,34 @@ contains
     logical, intent(in) :: evecsQ
 
     integer(I32) :: j
-    real(R64) :: resnorm
+    real(R64) :: resnorm, startNorm
     complex(R64), allocatable :: dState(:)
+    complex(R64), allocatable :: startVec(:)
 
     if (this % printLevel > 0) then
       write (*, *)
       write (*, *) "ARPACK Diagonalization started."
       count = 0
+    end if
+
+    ! Warm start: build a deterministic starting vector from the previous
+    ! solution. The sum of the converged eigenvectors has components along all
+    ! requested eigendirections, so the Arnoldi iteration converges in far
+    ! fewer matrix–vector products when the operator changed only slightly
+    ! (e.g., between SCF iterations). Must be built before the wrapper call,
+    ! which deallocates evecs on entry (intent(out)).
+    if (this % warmStartQ .and. allocated(this % evecs) .and. 0 < this % nFound) then
+      allocate (startVec(this % dim))
+      startVec = 0.0_R64
+      do j = 1, this % nFound
+        startVec = startVec + this % evecs(:, j)
+      end do
+      startNorm = BlasLib_CalcNorm(startVec)
+      if (0.0_R64 < startNorm) then
+        startVec = startVec / startNorm
+      else
+        deallocate (startVec)  ! unallocated actual => optional argument absent
+      end if
     end if
 
     ! Call ARPACK library wrapper
@@ -128,7 +150,8 @@ contains
                                this % which, &
                                this % bmat, &
                                this % nKry, &
-                               tol_=this % tol)
+                               tol_=this % tol, &
+                               startVec_=startVec)
 
     ! Verify convergence
     if (this % nFound .ne. this % nEvals) then

@@ -48,6 +48,26 @@ module M_Orbs
     !> initialization.
     module subroutine Orbs_Fabricate()
     end subroutine
+
+    !> Gauge-align a set of orbitals with a reference set.
+    !>
+    !> Eigenvectors returned by a diagonalizer are only defined up to a
+    !> per-vector phase and, inside degenerate spaces, an arbitrary unitary
+    !> rotation. This routine removes that gauge freedom by solving a unitary
+    !> Procrustes problem on the overlap matrix, then rotating `orbs` in place.
+    module subroutine Orbs_AlignOnReference(orbs, refOrbs)
+      complex(R64), intent(inout), contiguous :: orbs(:, :)
+      complex(R64), intent(in), contiguous :: refOrbs(:, :)
+    end subroutine
+
+    !> Mix occupied orbitals using density matrix formulation
+    module subroutine Orbs_MixOccupiedSpace(orbsOld, evecs, alpha, orbsOut, lambdaDiscarded)
+      complex(R64), intent(in), contiguous :: orbsOld(:, :)
+      complex(R64), intent(in), contiguous :: evecs(:, :)
+      real(R64), intent(in) :: alpha
+      complex(R64), intent(out), contiguous :: orbsOut(:, :)
+      real(R64), intent(out), allocatable :: lambdaDiscarded(:)
+    end subroutine
   end interface
 
   !=============================================================================

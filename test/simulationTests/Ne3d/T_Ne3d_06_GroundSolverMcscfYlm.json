@@ -41,7 +41,7 @@
             "bodyStatistics": [ "f", "f" ],
             "orbBased": {
                 "nOrbs": [ 5, 5 ],
-                "tdhx": { }
+                "mctdhx": { }
             }
         }
     },
@@ -79,19 +79,30 @@
         "unary": { }
     },
     "diagonalizerList": {
-        "arpack": {
-            "nEvals": 5,
+        "lapack1": {
+        },
+        "arpack2": {
+            "nEvals": 2,
             "which": "SR",
             "bmat": "I",
-            "nKry": 15,
+            "nKry": 14,
+            "checkConvergenceQ": false,
+            "printLevel": 0
+        },
+        "arpack3": {
+            "nEvals": 1,
+            "which": "SR",
+            "bmat": "I",
+            "nKry": 14,
             "checkConvergenceQ": false,
             "printLevel": 0
         }
     },
     "groundSolver": {
-        "scf": {
-            "stdImpl": {
-                "mixTarget": "potential"
+        "mcscf": {
+            "ylmOpt": {
+                "mixTarget": "potential",
+                "alphaCi": 1.0
             }
         }
     },

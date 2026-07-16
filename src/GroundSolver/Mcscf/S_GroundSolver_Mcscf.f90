@@ -7,6 +7,7 @@
 !> @details
 !> Reads `groundSolver.mcscf.*` and dispatches to:
 !>   - `stdImpl`: Standard implementation (general grids)
+!>   - `ylmOpt`: Ylm-optimized implementation (spherical grids)
 submodule(M_GroundSolver_Mcscf) S_GroundSolver_Mcscf
 
   implicit none
@@ -18,6 +19,7 @@ contains
     use M_Utils_Json
     use M_Utils_Say
     use M_GroundSolver_Mcscf_StdImpl
+    use M_GroundSolver_Mcscf_YlmOpt
 
     call Say_Fabricate("groundSolver.mcscf")
 
@@ -32,8 +34,11 @@ contains
     if (Json_GetExistence("groundSolver.mcscf.stdImpl")) then
       call GroundSolver_Mcscf_StdImpl_Fabricate
 
+    else if (Json_GetExistence("groundSolver.mcscf.ylmOpt")) then
+      call GroundSolver_Mcscf_YlmOpt_Fabricate
+
     else
-      error stop "groundSolver.mcscf is missing one of: stdImpl"
+      error stop "groundSolver.mcscf is missing one of: stdImpl, ylmOpt"
 
     end if
 

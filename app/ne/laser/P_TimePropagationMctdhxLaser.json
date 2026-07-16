@@ -3,9 +3,9 @@
         "ylm": {
             "lmax": 1,
             "rmin": 0.0,
-            "rmax": 5.0,
+            "rmax": 8.0,
             "fedvr": {
-                "nElements": 2,
+                "nElements": 8,
                 "nLocals": 12
             }
         }
@@ -20,8 +20,13 @@
     },
     "sysPotential": {
         "ylm": {
-            "coulomb": {
+            "coulombLaser": {
                 "charge": 10.0,
+                "fieldStrength": 0.0534,
+                "omega": 0.05695,
+                "nCycles": 2.0,
+                "cep": 0.0,
+                "tStart": 0.0,
                 "stdImpl": { }
             }
         }
@@ -40,8 +45,8 @@
             "nBodies": [ 5, 5 ],
             "bodyStatistics": [ "f", "f" ],
             "orbBased": {
-                "nOrbs": [ 5, 5 ],
-                "tdhx": { }
+                "nOrbs": [ 9, 9 ],
+                "mctdhx": { }
             }
         }
     },
@@ -49,26 +54,17 @@
         "restrictedQ": false
     },
     "orbsInit": {
-        "ylm": {
-            "hydrogenLike": {
-                "charge": 10.0,
-                "n": [ 1, 2, 2, 2, 2 ],
-                "l": [ 0, 0, 1, 1, 1 ],
-                "m": [ 0, 0, -1, 0, 1 ]
-            }
-        }
+        "load": { }
     },
     "configList": {
         "allActive1": {
             "fermionic": {
-                "bodyTarget": 1,
-                "nExcitations": 1
+                "bodyTarget": 1
             }
         },
         "allActive2": {
             "fermionic": {
-                "bodyTarget": 2,
-                "nExcitations": 1
+                "bodyTarget": 2
             }
         }
     },
@@ -76,32 +72,27 @@
         "generic": { }
     },
     "coeffsInit": {
-        "unary": { }
+        "load": { }
     },
-    "diagonalizerList": {
-        "arpack": {
-            "nEvals": 5,
-            "which": "SR",
-            "bmat": "I",
-            "nKry": 15,
-            "checkConvergenceQ": false,
-            "printLevel": 0
+    "integratorList": {
+        "sil1": {
+            "krylovDim": 32,
+            "tolerance": 1e-11,
+            "maxRestarts": 8
+        },
+        "rk2": {
+            "o4Expl": { }
         }
     },
-    "groundSolver": {
-        "scf": {
-            "stdImpl": {
-                "mixTarget": "potential"
-            }
-        }
-    },
-    "mixing": {
-        "linear": {
-            "alpha": 0.85
+    "propagator": {
+        "splitStep": {
+            "order2": { }
         }
     },
     "program": {
-        "convThresh": 1e-12,
-        "nTimeSteps": 1
+        "startTime": 0.0,
+        "endTime": 220.7,
+        "outputStep": 0.5,
+        "nTimeStepsPropagation": 50
     }
 }

@@ -235,7 +235,8 @@ module M_Utils_ArpackLib
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine WrapZNAUPD(evals, evecs, nFound, ApplyMatOnVec, dim, evecsQ, nEvals, which, bmat, nKry, tol_)
+  subroutine WrapZNAUPD(evals, evecs, nFound, ApplyMatOnVec, dim, evecsQ, nEvals, which, bmat, nKry, tol_, &
+                        startVec_)
     use M_Utils_Combinatorics
 
     !> Output eigenvalues (real). Allocated to size nFound on exit.
@@ -260,6 +261,9 @@ contains
     integer(I32), intent(in)                         :: nKry
     !> Convergence tolerance for the Ritz values (0 => machine precision).
     real(R64), intent(in), optional                  :: tol_
+    !> Starting vector for the Arnoldi iteration. If absent, ARPACK generates
+    !> a random starting vector (nondeterministic results up to gauge).
+    complex(R64), intent(in), optional               :: startVec_(:)
 
     complex(R64), allocatable :: workl(:), d(:), resid(:)
     complex(R64), allocatable :: v(:, :), workd(:), workev(:)
@@ -288,6 +292,10 @@ contains
     tol = zero
     if (present(tol_)) tol = tol_
     info = 0
+    if (present(startVec_)) then
+      resid = startVec_
+      info = 1  ! info=1 on input: use resid as the starting vector
+    end if
     ido = 0
     ishfts = 1
     maxitr = 300
@@ -357,7 +365,8 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine WrapDSAUPD(evals, evecs, nFound, ApplyMatOnVec, dim, evecsQ, nEvals, which, bmat, nKry, tol_)
+  subroutine WrapDSAUPD(evals, evecs, nFound, ApplyMatOnVec, dim, evecsQ, nEvals, which, bmat, nKry, tol_, &
+                        startVec_)
     use M_Utils_Combinatorics
 
     !> Output eigenvalues (real). Allocated to size nFound on exit.
@@ -382,6 +391,9 @@ contains
     integer(I32), intent(in)                         :: nKry
     !> Convergence tolerance for the Ritz values (0 => machine precision).
     real(R64), intent(in), optional                  :: tol_
+    !> Starting vector for the Lanczos iteration. If absent, ARPACK generates
+    !> a random starting vector (nondeterministic results up to gauge).
+    real(R64), intent(in), optional                  :: startVec_(:)
 
     real(R64), allocatable :: workl(:), d(:), resid(:)
     real(R64), allocatable :: v(:, :), workd(:), workev(:)
@@ -410,6 +422,10 @@ contains
     tol = zero
     if (present(tol_)) tol = tol_
     info = 0
+    if (present(startVec_)) then
+      resid = startVec_
+      info = 1  ! info=1 on input: use resid as the starting vector
+    end if
     ido = 0
     ishfts = 1
     maxitr = 300

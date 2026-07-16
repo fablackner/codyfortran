@@ -19,7 +19,8 @@
 !>   2. Build monopole Hartree potential from |φ_j|² (l=0 component)
 !>   3. Diagonalize per-l radial Fock operators via DiagonalizerList(l+1)
 !>   4. Map eigenvectors back using hydrogen-like quantum numbers (n,l,m)
-!>   5. Mix with old orbitals, copy spin-up → spin-down, orthonormalize
+!>   5. Gauge-align with old orbitals, mix, copy spin-up → spin-down,
+!>      orthonormalize
 !>
 !> **HartreeFockAction** (per l-channel):
 !>   - Radial kinetic + centrifugal: SysKinetic_Ylm_MultiplyWithRadialKineticOp
@@ -47,8 +48,11 @@ submodule(M_GroundSolver_Scf_YlmOpt) S_GroundSolver_Scf_YlmOpt
   !> Combined radial potential (external + Hartree), dimension(Grid_Ylm_nRadial)
   complex(R64), allocatable :: potLm(:)
 
-  !> Temporary for radial potential computation, dimension(Grid_Ylm_nRadial)
-  complex(R64), allocatable :: potLmTmp(:)
+  !> Accepted Hartree (direct) potential on grid, dimension(Grid_Ylm_nRadial)
+  complex(R64), allocatable :: hartreePotentialMixed(:)
+
+  !> Raw Hartree potential built from the current orbitals, dimension(Grid_Ylm_nRadial)
+  complex(R64), allocatable :: hartreePotentialRaw(:)
 
   !> Full angular interaction source density, dimension(potSize)
   complex(R64), allocatable :: src(:)
@@ -68,6 +72,19 @@ submodule(M_GroundSolver_Scf_YlmOpt) S_GroundSolver_Scf_YlmOpt
   !> Full-grid action temporary for exchange, dimension(Grid_nPoints)
   complex(R64), allocatable :: dOrbTmp(:)
 
+  !> Gauge-aligned new orbitals for mixing, dimension(Grid_nPoints, nOrbsInState/2)
+  complex(R64), allocatable, target :: orbsRaw(:, :)
+
+  !-----------------------------------------------------------------------------
+  ! Mixing configuration
+  !-----------------------------------------------------------------------------
+
+  !> What quantity the mixer acts on: "orbitals" or "potential"
+  character(len=:), allocatable :: mixTarget
+
+  !> Whether hartreePotentialMixed already holds an accepted (mixed) potential
+  logical :: hartreePotentialMixedInitializedQ = .false.
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -78,6 +95,15 @@ contains
     use M_GroundSolver_Scf
 
     call Say_Fabricate("groundSolver.scf.ylmOpt")
+
+    !------------------------------------
+    ! read configuration parameters
+    !------------------------------------
+
+    mixTarget = Json_Get("mixTarget", "orbitals", path_="groundSolver.scf.ylmOpt")
+    if (mixTarget .ne. "orbitals" .and. mixTarget .ne. "potential") then
+      error stop "groundSolver.scf.ylmOpt.mixTarget must be one of: orbitals, potential"
+    end if
 
     !------------------------------------
     ! set values and procedure pointers
@@ -100,6 +126,7 @@ contains
     use M_Grid
     use M_Grid_Ylm
     use M_SysInteraction_Ylm
+    use M_Orbs
 
     integer(I32) :: lmaxPot, potSize
 
@@ -113,10 +140,12 @@ contains
     allocate (interactionPotential(potSize))
     allocate (dOrbLmTmp(Grid_Ylm_nRadial))
     allocate (potLm(Grid_Ylm_nRadial))
-    allocate (potLmTmp(Grid_Ylm_nRadial))
+    allocate (hartreePotentialMixed(Grid_Ylm_nRadial))
+    allocate (hartreePotentialRaw(Grid_Ylm_nRadial))
     allocate (srcLm(Grid_Ylm_nRadial))
     allocate (orb(Grid_nPoints))
     allocate (dOrbTmp(Grid_nPoints))
+    allocate (orbsRaw(Grid_nPoints, Orbs_nOrbsInState / 2))
 
   end subroutine
 
@@ -188,16 +217,16 @@ contains
   !>   2. Build monopole Hartree potential from occupied orbitals
   !>   3. Diagonalize each l-channel's radial Fock operator
   !>   4. Map eigenvectors to orbitals using (n,l,m) quantum numbers
-  !>   5. Mix with old orbitals, copy spin-up → spin-down
+  !>   5. Gauge-align with old orbitals, mix, copy spin-up → spin-down
   !>   6. Gram–Schmidt orthonormalize
   !>
   !> The orbital-to-eigenvector mapping uses the radial quantum number nr = n - l - 1
   !> to select the correct eigenvector from the l-channel diagonalization.
   !>
   !> @param[inout] state  Packed orbital state
-  !> @param[in]    alpha  Mixing parameter (0 < α ≤ 1)
   !> @param[in]    time   Time for potential evaluation
-  subroutine Approach(state, alpha, time)
+  subroutine Approach(state, time)
+    use M_Mixing
     use M_Grid
     use M_Grid_Ylm
     use M_DiagonalizerList
@@ -208,10 +237,10 @@ contains
     use M_OrbsInit_Ylm_HydrogenLike
 
     complex(R64), intent(inout), contiguous, target :: state(:)
-    real(R64), intent(in) :: alpha
     real(R64), intent(in) :: time
 
     complex(R64), contiguous, pointer :: orbs(:, :)
+    complex(R64), contiguous, pointer :: orbsRawFlat(:)
     integer(I32) :: nG, nOS, j
     integer(I32) :: n, l, m, nr
 
@@ -229,24 +258,55 @@ contains
       src = src + 2.0_R64 * srcTmp  ! Factor 2 for spin degeneracy
     end do
     call Grid_Ylm_GetLmComponent(srcLm, 0, 0, src)
-    call SysInteraction_Ylm_FillInteractionPotentialRadial(potLmTmp, srcLm, 0, 0, time)
-    potLm = potLm + potLmTmp
+    call SysInteraction_Ylm_FillInteractionPotentialRadial(hartreePotentialRaw, srcLm, 0, 0, time)
+
+    if (mixTarget .eq. "potential") then
+      if (hartreePotentialMixedInitializedQ) then
+        call Mixing_Mix(hartreePotentialMixed, hartreePotentialRaw)
+      else
+        hartreePotentialMixed = hartreePotentialRaw
+        hartreePotentialMixedInitializedQ = .true.
+      end if
+    else
+      hartreePotentialMixed = hartreePotentialRaw
+    end if
+
+    potLm = potLm + hartreePotentialMixed
 
     ! Step 3: Diagonalize each l-channel's radial Fock operator
     do l = 0, Grid_Ylm_lmax
       call DiagonalizerList(l + 1) % e % Diagonalize(time, .true.)
     end do
 
-    ! Steps 4-5: Map eigenvectors to orbitals using (n,l,m), mix, and copy spins
+    ! Step 4: Map eigenvectors to orbitals using (n,l,m)
     do j = 1, nOS / 2
       n = OrbsInit_Ylm_HydrogenLike_n(j)
       l = OrbsInit_Ylm_HydrogenLike_l(j)
       m = OrbsInit_Ylm_HydrogenLike_m(j)
       nr = n - l - 1  ! Radial quantum number (node count)
 
-      dOrbTmp = 0.0_R64
-      call Grid_Ylm_SetLmComponent(dOrbTmp(:), l, m, DiagonalizerList(l + 1) % e % evecs(:, nr + 1))
-      orbs(:, j) = (1.0_R64 - alpha) * orbs(:, j) + alpha * dOrbTmp(:)
+      orbsRaw(:, j) = 0.0_R64
+      call Grid_Ylm_SetLmComponent(orbsRaw(:, j), l, m, DiagonalizerList(l + 1) % e % evecs(:, nr + 1))
+    end do
+
+    ! Step 5: The radial eigenvectors are normalized in the Euclidean metric;
+    ! alignment and mixing require orthonormality with respect to the grid
+    ! metric (Grid_InnerProduct), then gauge-align the new orbitals with the
+    ! old ones (removes the arbitrary phase of the radial eigenvectors),
+    ! then mix and copy spins
+    call Grid_Orthonormalize(orbsRaw)
+    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nOS / 2))
+
+    if (mixTarget .eq. "orbitals") then
+      orbsRawFlat(1:nG * (nOS / 2)) => orbsRaw
+      call Mixing_Mix(state(1:nG * (nOS / 2)), orbsRawFlat)
+    else
+      do j = 1, nOS / 2
+        orbs(:, j) = orbsRaw(:, j)
+      end do
+    end if
+
+    do j = 1, nOS / 2
       orbs(:, nOS / 2 + j) = orbs(:, j)  ! Copy spin-up → spin-down
     end do
 

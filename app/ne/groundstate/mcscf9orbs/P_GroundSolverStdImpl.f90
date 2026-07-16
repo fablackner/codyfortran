@@ -14,6 +14,7 @@ program P_GroundSolverStdImpl
   use M_CoeffsInit
   use M_Method
   use M_DiagonalizerList
+  use M_Mixing
   use M_GroundSolver
   use M_GroundSolver_Mcscf
 
@@ -24,7 +25,6 @@ program P_GroundSolverStdImpl
   real(R64)    :: energyOld
   real(R64)    :: convThresh
   real(R64)    :: time
-  real(R64)    :: alpha
   integer(I32) :: iStep, nTimeSteps, innerStep
   type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(2)
 
@@ -45,6 +45,7 @@ program P_GroundSolverStdImpl
   call ConfigList_Fabricate
   call Coeffs_Fabricate
   call CoeffsInit_Fabricate
+  call Mixing_Fabricate
   call GroundSolver_Fabricate
   DiagonalizerListInput(1) % ApplyMatOnVec => ApplyMatOnVecCi
   DiagonalizerListInput(1) % dim = Coeffs_nCoeffs
@@ -54,7 +55,6 @@ program P_GroundSolverStdImpl
 
   call Say_Fabricate("program")
   convThresh = Json_Get("program.convThresh", 1e-13_R64)
-  alpha = Json_Get("program.alpha", 1.0_R64)
   nTimeSteps = Json_Get("program.nTimeSteps", 10)
 
   call Grid_Setup
@@ -82,7 +82,7 @@ program P_GroundSolverStdImpl
 
     ! Explicit loop to execute approach nTimeSteps times
     do innerStep = 1, nTimeSteps
-      call GroundSolver_Approach(Method_state, alpha, time=0.0_R64)
+      call GroundSolver_Approach(Method_state, time=0.0_R64)
     end do
 
     energyOld = energyNew

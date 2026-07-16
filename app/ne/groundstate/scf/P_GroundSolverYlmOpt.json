@@ -103,7 +103,6 @@
     },
     "program": {
         "convThresh": 1e-12,
-        "alpha": 1.0,
         "nTimeSteps": 1
     }
 }

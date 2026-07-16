@@ -41,7 +41,7 @@
             "bodyStatistics": [ "f", "f" ],
             "orbBased": {
                 "nOrbs": [ 5, 5 ],
-                "tdhx": { }
+                "mctdhx": { }
             }
         }
     },
@@ -79,7 +79,9 @@
         "unary": { }
     },
     "diagonalizerList": {
-        "arpack": {
+        "lapack1": {
+        },
+        "arpack2": {
             "nEvals": 5,
             "which": "SR",
             "bmat": "I",
@@ -89,9 +91,10 @@
         }
     },
     "groundSolver": {
-        "scf": {
+        "mcscf": {
             "stdImpl": {
-                "mixTarget": "potential"
+                "mixTarget": "potential",
+                "alphaCi": 1.0
             }
         }
     },

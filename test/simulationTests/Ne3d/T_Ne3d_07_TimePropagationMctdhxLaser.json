@@ -20,8 +20,13 @@
     },
     "sysPotential": {
         "ylm": {
-            "coulomb": {
+            "coulombLaser": {
                 "charge": 10.0,
+                "fieldStrength": 0.1,
+                "omega": 0.5,
+                "nCycles": 1.0,
+                "cep": 0.0,
+                "tStart": 0.0,
                 "stdImpl": { }
             }
         }
@@ -41,7 +46,7 @@
             "bodyStatistics": [ "f", "f" ],
             "orbBased": {
                 "nOrbs": [ 5, 5 ],
-                "tdhx": { }
+                "mctdhx": { }
             }
         }
     },
@@ -79,19 +84,30 @@
         "unary": { }
     },
     "diagonalizerList": {
-        "arpack": {
-            "nEvals": 5,
+        "lapack1": {
+        },
+        "arpack2": {
+            "nEvals": 2,
             "which": "SR",
             "bmat": "I",
-            "nKry": 15,
+            "nKry": 14,
+            "checkConvergenceQ": false,
+            "printLevel": 0
+        },
+        "arpack3": {
+            "nEvals": 1,
+            "which": "SR",
+            "bmat": "I",
+            "nKry": 14,
             "checkConvergenceQ": false,
             "printLevel": 0
         }
     },
     "groundSolver": {
-        "scf": {
-            "stdImpl": {
-                "mixTarget": "potential"
+        "mcscf": {
+            "ylmOpt": {
+                "mixTarget": "potential",
+                "alphaCi": 1.0
             }
         }
     },
@@ -100,8 +116,27 @@
             "alpha": 0.85
         }
     },
+    "integratorList": {
+        "sil1": {
+            "krylovDim": 24,
+            "tolerance": 1e-12,
+            "maxRestarts": 8
+        },
+        "rk2": {
+            "o4Expl": { }
+        }
+    },
+    "propagator": {
+        "splitStep": {
+            "order2": { }
+        }
+    },
     "program": {
-        "convThresh": 1e-12,
-        "nTimeSteps": 1
+        "convThresh": 1e-10,
+        "nTimeSteps": 1,
+        "startTime": 0.0,
+        "endTime": 1.0,
+        "outputStep": 0.2,
+        "nTimeStepsPropagation": 16
     }
 }

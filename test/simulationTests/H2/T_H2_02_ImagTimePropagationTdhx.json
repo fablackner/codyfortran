@@ -4,9 +4,9 @@
             "R": 1.4,
             "ximax": 16.0,
             "mmax": 0,
-            "nEta": 12,
+            "nEta": 6,
             "fedvr": {
-                "nElements": 8,
+                "nElements": 4,
                 "nLocals": 10
             }
         }
@@ -90,6 +90,6 @@
     "program": {
         "convThresh": 1e-12,
         "outputStep": 5e-1,
-        "nTimeSteps": 2500
+        "nTimeSteps": 100
     }
 }

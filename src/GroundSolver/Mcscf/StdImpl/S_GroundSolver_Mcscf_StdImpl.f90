@@ -22,8 +22,9 @@
 !>         ρ(r) = Σ_{pq} ρ¹_{pq} φ_p*(r)·φ_q(r)
 !>      e. Diagonalize the RDM-weighted Fock operator F̂[ρ¹] via
 !>         DiagonalizerList(2) (FockAction is the matvec callback)
-!>      f. Mix the phase-aligned Fock eigenvectors with the old orbitals,
-!>         copy spin-up → spin-down (restricted), Gram–Schmidt orthonormalize
+!>      f. Gauge-align the Fock eigenvectors with the old orbitals
+!>         (Orbs_AlignOnReference), mix, copy spin-up → spin-down
+!>         (restricted), Gram–Schmidt orthonormalize
 !>
 !> ## Working Arrays
 !>
@@ -57,8 +58,11 @@ submodule(M_GroundSolver_Mcscf_StdImpl) S_GroundSolver_Mcscf_StdImpl
   !> Spin-up block of the correlated 1-RDM, filled in Approach
   complex(R64), allocatable :: rdm1Up(:, :)
 
-  !> Direct (Hartree) potential from the correlated density, dimension(potSize)
-  complex(R64), allocatable :: hartreePotential(:)
+  !> Accepted direct (Hartree) potential from the correlated density
+  complex(R64), allocatable :: hartreePotentialMixed(:)
+
+  !> Raw direct potential from the correlated density
+  complex(R64), allocatable :: hartreePotentialRaw(:)
 
   !> External potential V̂_ext, dimension(Grid_nPoints) - recomputed each Approach
   complex(R64), allocatable :: externalPotential(:)
@@ -81,6 +85,24 @@ submodule(M_GroundSolver_Mcscf_StdImpl) S_GroundSolver_Mcscf_StdImpl
   !> Temporary for operator action results, dimension(Grid_nPoints)
   complex(R64), allocatable :: dOrbTmp(:)
 
+  !> Gauge-aligned new orbitals for mixing, dimension(Grid_nPoints, nOrbsInState/2)
+  complex(R64), allocatable, target :: orbsRaw(:, :)
+
+  !> CI mixing parameter. The CI coefficients are mixed linearly with phase
+  !> alignment: an eigenvector is not a fixed-point iterate in a linear space,
+  !> so DIIS residual extrapolation does not apply to it cleanly.
+  real(R64) :: alphaCi = 1.0_R64
+
+  !-----------------------------------------------------------------------------
+  ! Mixing configuration
+  !-----------------------------------------------------------------------------
+
+  !> What quantity the mixer acts on: "orbitals" or "potential"
+  character(len=:), allocatable :: mixTarget
+
+  !> Whether hartreePotentialMixed already holds an accepted (mixed) potential
+  logical :: hartreePotentialMixedInitializedQ = .false.
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -91,6 +113,17 @@ contains
     use M_GroundSolver_Mcscf
 
     call Say_Fabricate("groundSolver.mcscf.stdImpl")
+
+    !------------------------------------
+    ! read configuration parameters
+    !------------------------------------
+
+    alphaCi = Json_Get("alphaCi", 1.0_R64, path_="groundSolver.mcscf.stdImpl")
+
+    mixTarget = Json_Get("mixTarget", "orbitals", path_="groundSolver.mcscf.stdImpl")
+    if (mixTarget .ne. "orbitals" .and. mixTarget .ne. "potential") then
+      error stop "groundSolver.mcscf.stdImpl.mixTarget must be one of: orbitals, potential"
+    end if
 
     !------------------------------------
     ! set values and procedure pointers
@@ -114,6 +147,7 @@ contains
 
     allocate (dOrbTmp(Grid_nPoints))
     allocate (rdm1Up(Orbs_nOrbsInState / 2, Orbs_nOrbsInState / 2))
+    allocate (orbsRaw(Grid_nPoints, Orbs_nOrbsInState / 2))
 
   end subroutine
 
@@ -177,8 +211,8 @@ contains
     call SysPotential_MultiplyWithExternalPotential(dOrbTmp, externalPotential, orb)
     dOrb = dOrb + dOrbTmp
 
-    ! Direct (Hartree) term: Ĵ[ρ¹]·orb (hartreePotential filled in Approach)
-    call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, hartreePotential, orb)
+    ! Direct (Hartree) term: Ĵ[ρ¹]·orb (hartreePotentialMixed filled in Approach)
+    call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, hartreePotentialMixed, orb)
     dOrb = dOrb + dOrbTmp
 
     ! Exchange term: −K̂[ρ¹]·orb = −Σ_{pq} ρ¹_{pq}·W(φ_p, orb)·φ_q
@@ -212,13 +246,13 @@ contains
   !>   4. Fill the 1-RDM from the updated coefficients and build the direct
   !>      potential from the correlated density
   !>   5. Diagonalize the RDM-weighted Fock operator via DiagonalizerList(2)
-  !>   6. Mix the phase-aligned Fock eigenvectors with the old orbitals, copy
+  !>   6. Gauge-align the Fock eigenvectors with the old orbitals, mix, copy
   !>      spin-up → spin-down, Gram–Schmidt orthonormalize
   !>
   !> @param[inout] state  Packed MCTDHX-style state: coefficients ⊕ orbitals
-  !> @param[in]    alpha  Mixing parameter (0 < α ≤ 1) for both CI and orbitals
   !> @param[in]    time   Time for potential evaluation (typically 0)
-  subroutine Approach(state, alpha, time)
+  subroutine Approach(state, time)
+    use M_Mixing
     use M_Grid
     use M_DiagonalizerList
     use M_Coeffs
@@ -228,11 +262,11 @@ contains
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(inout), contiguous, target :: state(:)
-    real(R64), intent(in) :: alpha
     real(R64), intent(in) :: time
 
     complex(R64), contiguous, pointer :: coeffs(:)
     complex(R64), contiguous, pointer :: orbs(:, :)
+    complex(R64), contiguous, pointer :: orbsRawFlat(:)
     complex(R64), allocatable :: rdm1(:, :)
     complex(R64) :: overlap, phase
     integer(I32) :: nC, nG, nOS, p, q, j
@@ -259,7 +293,7 @@ contains
     phase = (1.0_R64, 0.0_R64)
     if (0.0_R64 < abs(overlap)) phase = overlap / abs(overlap)
 
-    coeffs = (1.0_R64 - alpha) * coeffs + alpha * phase * DiagonalizerList(1) % e % evecs(:, 1)
+    coeffs = (1.0_R64 - alphaCi) * coeffs + alphaCi * phase * DiagonalizerList(1) % e % evecs(:, 1)
     call Coeffs_Normalize(coeffs)
 
     ! Step 4: 1-RDM from updated coefficients; direct potential from the
@@ -279,25 +313,47 @@ contains
       end do
     end do
 
-    call SysInteraction_FillInteractionPotential(hartreePotential, weightedSrc, time)
+    call SysInteraction_FillInteractionPotential(hartreePotentialRaw, weightedSrc, time)
     weightedSrc = 0.0_R64
 
+    if (mixTarget .eq. "potential") then
+      if (hartreePotentialMixedInitializedQ) then
+        call Mixing_Mix(hartreePotentialMixed, hartreePotentialRaw)
+      else
+        hartreePotentialMixed = hartreePotentialRaw
+        hartreePotentialMixedInitializedQ = .true.
+      end if
+    else
+      hartreePotentialMixed = hartreePotentialRaw
+    end if
+
     if (.not. allocated(exchangePotentials)) then
-      allocate (exchangePotentials(size(hartreePotential), nOS / 2))
-      allocate (weightedPotential(size(hartreePotential)))
+      allocate (exchangePotentials(size(hartreePotentialMixed), nOS / 2))
+      allocate (weightedPotential(size(hartreePotentialMixed)))
     end if
 
     ! Step 5: Diagonalize RDM-weighted Fock operator (FockAction is the matvec callback)
     call DiagonalizerList(2) % e % Diagonalize(time, .true.)
 
-    ! Step 6: Mix phase-aligned Fock eigenvectors with old orbitals and copy
-    ! spin-up → spin-down (restricted)
-    do j = 1, nOS / 2
-      overlap = dot_product(DiagonalizerList(2) % e % evecs(:, j), orbs(:, j))
-      phase = (1.0_R64, 0.0_R64)
-      if (0.0_R64 < abs(overlap)) phase = overlap / abs(overlap)
+    ! Step 6: Gauge-align the Fock eigenvectors with the old orbitals (removes
+    ! the arbitrary per-vector phase and the arbitrary rotation within
+    ! degenerate shells), then mix and copy spin-up → spin-down (restricted)
+    orbsRaw = DiagonalizerList(2) % e % evecs(:, 1:nOS / 2)
+    ! ARPACK normalizes in the Euclidean metric; alignment and mixing require
+    ! orthonormality with respect to the grid metric (Grid_InnerProduct)
+    call Grid_Orthonormalize(orbsRaw)
+    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nOS / 2))
 
-      orbs(:, j) = (1.0_R64 - alpha) * orbs(:, j) + alpha * phase * DiagonalizerList(2) % e % evecs(:, j)
+    if (mixTarget .eq. "orbitals") then
+      orbsRawFlat(1:nG * (nOS / 2)) => orbsRaw
+      call Mixing_Mix(state(nC + 1:nC + nG * (nOS / 2)), orbsRawFlat)
+    else
+      do j = 1, nOS / 2
+        orbs(:, j) = orbsRaw(:, j)
+      end do
+    end if
+
+    do j = 1, nOS / 2
       orbs(:, nOS / 2 + j) = orbs(:, j)
     end do
 

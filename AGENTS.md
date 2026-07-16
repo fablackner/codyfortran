@@ -122,8 +122,14 @@ Module doc: `src/IntegratorList/A_IntegratorList.md`.
 **GroundSolver**
 Domain: Dynamics & Propagation.
 Purpose: SCF ground-state solver facade.
-Key interfaces/notes: `GroundSolver_Approach(state, alpha, t)`; supports Hartree-Fock assembly, diagonalization, mixing, and orthonormalization.
+Key interfaces/notes: `GroundSolver_Approach(state, alpha, t)`; supports Hartree-Fock assembly, diagonalization, gauge alignment (`Orbs_AlignOnReference`), mixing (via Mixing), and orthonormalization.
 Module doc: `src/GroundSolver/A_GroundSolver.md`.
+
+**Mixing**
+Domain: Numerical Infrastructure.
+Purpose: Self-consistency mixers (damping/acceleration) for fixed-point iterations.
+Key interfaces/notes: `Mixing_SetupMixer(mixer, dim)`, `Mixing_Mix(mixer, x, xNew, alpha)` on generic complex vectors; Linear and DIIS (Pulay) backends; consumed by GroundSolver (orbital or Hartree-potential/density targets).
+Module doc: `src/Mixing/A_Mixing.md`.
 
 **Reconstruction**
 Domain: RDM Reconstruction & Purification.

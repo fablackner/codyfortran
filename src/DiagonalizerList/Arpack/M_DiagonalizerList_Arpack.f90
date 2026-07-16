@@ -12,7 +12,8 @@
 !>
 !> **Algorithm:**
 !> The ARPACK backend uses the reverse-communication interface:
-!> 1. Initialize Arnoldi iteration with random starting vector
+!> 1. Initialize Arnoldi iteration (warm start from the previous solution if
+!>    `warmStartQ` and eigenvectors are available, else random starting vector)
 !> 2. Build Krylov subspace of dimension `nKry` via repeated matvecs
 !> 3. Extract Ritz values/vectors and restart until convergence
 !> 4. Post-process to obtain final eigenpairs
@@ -42,6 +43,7 @@
 !> | `nKry`              | int    | 2*nEvals+1     | Krylov subspace dimension           |
 !> | `tol`               | real   | 0 (machine eps)| Ritz value convergence tolerance    |
 !> | `checkConvergenceQ` | bool   | true           | Verify residuals after solve        |
+!> | `warmStartQ`        | bool   | true           | Restart from previous eigenvectors  |
 !> | `printLevel`        | int    | 0              | Verbosity level                     |
 !>
 !> **Spectrum selection (`which`):**
@@ -103,6 +105,12 @@ module M_DiagonalizerList_Arpack
     real(R64)     :: tol = 0.0_R64
     !> If true, compute and print residual norms after diagonalization.
     logical       :: checkConvergenceQ = .true.
+    !> If true, start the Arnoldi iteration from the normalized sum of the
+    !> previously converged eigenvectors instead of a random vector. This makes
+    !> repeated diagonalizations deterministic and, when the operator changes
+    !> only slightly between calls (e.g., SCF iterations), substantially
+    !> reduces the number of matrix–vector products.
+    logical       :: warmStartQ = .true.
   contains
     procedure :: Setup      !< Prepare for diagonalization
     procedure :: Fabricate  !< Read JSON parameters

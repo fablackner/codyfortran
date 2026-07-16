@@ -43,6 +43,15 @@
 !>   time-dependent generators the derivative is evaluated at the sub-step
 !>   midpoint (2nd-order accurate).
 !> - **Cost**: One `TimeDerivative` evaluation per Lanczos vector.
+!>
+!> ## Metric
+!>
+!> The Lanczos recursion assumes the generator is self-adjoint with respect
+!> to the inner product in use. On grids whose representation is not
+!> weight-absorbed (e.g., FEDVR), operators are self-adjoint only in the
+!> weighted metric; assign `metricWeights` on the integrator element to make
+!> all inner products (norms, alpha/beta coefficients, reorthogonalization)
+!> use sum(conjg(a) * w * b). Unallocated weights give the Euclidean product.
 submodule(M_IntegratorList_Sil) S_IntegratorList_Sil
 
   implicit none
@@ -125,6 +134,12 @@ contains
     nState = size(state)
     maxDim = max(1, min(this % krylovDim, nState))
 
+    if (allocated(this % metricWeights)) then
+      if (size(this % metricWeights) .ne. nState) then
+        error stop "IntegratorList_Sil: metricWeights size does not match state size"
+      end if
+    end if
+
     allocate (workState, source=state)
     allocate (trialState, mold=state)
     allocate (basis(nState, maxDim))
@@ -163,6 +178,22 @@ contains
 
   contains
 
+    !> Inner product in the metric selected for this integrator: the
+    !> weighted product sum(conjg(a) * w * b) if `metricWeights` is
+    !> allocated, the Euclidean product otherwise.
+    function MetricDot(a, b) result(res)
+      complex(R64), intent(in), contiguous :: a(:)
+      complex(R64), intent(in), contiguous :: b(:)
+      complex(R64) :: res
+
+      if (allocated(this % metricWeights)) then
+        res = sum(conjg(a(:)) * this % metricWeights(:) * b(:))
+      else
+        res = dot_product(a, b)
+      end if
+
+    end function
+
     !> Perform one Lanczos sub-step: grow the Krylov basis until the error
     !> estimate is below tolerance, then apply the exponential in the
     !> reduced basis.
@@ -188,7 +219,7 @@ contains
       integer :: j, k, mDim
       logical :: breakdown
 
-      stateNorm = sqrt(real(dot_product(stateIn, stateIn), kind=R64))
+      stateNorm = sqrt(real(MetricDot(stateIn, stateIn), kind=R64))
       if (stateNorm <= zeroThreshold) then
         stateOut = stateIn
         errEst = 0.0_R64
@@ -209,15 +240,15 @@ contains
         w(:) = eye * deriv(:)
 
         if (j > 1) w(:) = w(:) - beta(j - 1) * basis(:, j - 1)
-        alpha(j) = real(dot_product(vCurrent, w), kind=R64)
+        alpha(j) = real(MetricDot(vCurrent, w), kind=R64)
         w(:) = w(:) - alpha(j) * vCurrent(:)
 
         ! full reorthogonalization against all previous Lanczos vectors
         do k = 1, j
-          w(:) = w(:) - dot_product(basis(:, k), w) * basis(:, k)
+          w(:) = w(:) - MetricDot(basis(:, k), w) * basis(:, k)
         end do
 
-        beta(j) = sqrt(real(dot_product(w, w), kind=R64))
+        beta(j) = sqrt(real(MetricDot(w, w), kind=R64))
         breakdown = beta(j) <= zeroThreshold
 
         call EvaluateExpInSubspace(phi(1:j), errEst, dt, j)

@@ -91,13 +91,13 @@
     "groundSolver": {
         "scf": {
             "stdImpl": {
-                "mixTarget": "potential"
+                "mixTarget": "density"
             }
         }
     },
     "mixing": {
         "linear": {
-            "alpha": 0.85
+            "alpha": 0.95
         }
     },
     "program": {

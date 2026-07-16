@@ -80,6 +80,38 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Gauge-align orbitals with a reference set.
+!>
+!> The overlap matrix M = <orbs_i | refOrbs_j> is decomposed as
+!> M = U * S * V^H, then the unitary W = U * V^H is applied:
+!>   orbs <- orbs * W
+!> This gives the orthonormal basis in span(orbs) closest to refOrbs.
+  module subroutine Orbs_AlignOnReference(orbs, refOrbs)
+    use M_Grid
+    use M_Utils_LapackLib
+
+    complex(R64), intent(inout), contiguous :: orbs(:, :)
+    complex(R64), intent(in), contiguous :: refOrbs(:, :)
+
+    complex(R64), allocatable :: overlap(:, :), u(:, :), vt(:, :)
+    real(R64), allocatable :: singularVals(:)
+    integer(I32) :: nOrbs, iOrb, jOrb
+
+    nOrbs = size(orbs, 2)
+
+    allocate (overlap(nOrbs, nOrbs))
+    do jOrb = 1, nOrbs
+      do iOrb = 1, nOrbs
+        overlap(iOrb, jOrb) = Grid_InnerProduct(orbs(:, iOrb), refOrbs(:, jOrb))
+      end do
+    end do
+
+    call LapackLib_Svd(u, singularVals, vt, overlap)
+    orbs = matmul(orbs, matmul(u, vt))
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Orthonormalize orbital columns independently for each body type.
 !>
 !> Algorithm
@@ -209,6 +241,49 @@ contains
 
       end do
     end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Mix occupied orbitals using density matrix formulation.
+  module subroutine Orbs_MixOccupiedSpace(orbsOld, evecs, alpha, orbsOut, lambdaDiscarded)
+    use M_Grid
+    use M_Utils_LapackLib
+
+    complex(R64), intent(in), contiguous  :: orbsOld(:,:), evecs(:,:)
+    real(R64),    intent(in)  :: alpha
+    complex(R64), intent(out), contiguous :: orbsOut(:,:)
+    real(R64),    intent(out), allocatable :: lambdaDiscarded(:)
+
+    integer(I32) :: n, i, j, k
+    complex(R64), allocatable :: A(:,:), G(:,:), G_evecs(:,:)
+    real(R64),    allocatable :: lambda(:)
+
+    n = size(orbsOld, 2)
+    allocate (A(size(orbsOld, 1), 2 * n))
+    allocate (G(2 * n, 2 * n))
+
+    A(:, 1:n) = sqrt(1.0_R64 - alpha) * orbsOld
+    A(:, n + 1:2 * n) = sqrt(alpha) * evecs
+
+    do j = 1, 2 * n
+      do i = 1, 2 * n
+        G(i, j) = Grid_InnerProduct(A(:, i), A(:, j))
+      end do
+    end do
+
+    call LapackLib_DiagonalizeGeneric(lambda, G_evecs, G, .true.)
+
+    orbsOut = 0.0_R64
+    do i = 1, n
+      k = n + i
+      do j = 1, 2 * n
+        orbsOut(:, i) = orbsOut(:, i) + G_evecs(j, k) * A(:, j)
+      end do
+      orbsOut(:, i) = orbsOut(:, i) / sqrt(lambda(k))
+    end do
+
+    lambdaDiscarded = lambda(1:n)
 
   end subroutine
 

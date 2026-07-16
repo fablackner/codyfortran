@@ -25,9 +25,12 @@ M_GroundSolver.f90              ← Interface: procedure pointers + abstract int
     └── Mcscf/
         ├── M_GroundSolver_Mcscf.f90            ← MCSCF interface
         ├── S_GroundSolver_Mcscf.f90            ← MCSCF dispatch
-        └── StdImpl/
-            ├── M_GroundSolver_Mcscf_StdImpl.f90 ← Standard impl interface
-            └── S_GroundSolver_Mcscf_StdImpl.f90 ← Standard impl (two diagonalizers)
+        ├── StdImpl/
+        │   ├── M_GroundSolver_Mcscf_StdImpl.f90 ← Standard impl interface
+        │   └── S_GroundSolver_Mcscf_StdImpl.f90 ← Standard impl (two diagonalizers)
+        └── YlmOpt/
+            ├── M_GroundSolver_Mcscf_YlmOpt.f90  ← Ylm-optimized interface
+            └── S_GroundSolver_Mcscf_YlmOpt.f90  ← Ylm-optimized impl (spherical grids)
 ```
 
 The module follows the **CodyFortranRDM fabrication pattern**:
@@ -48,9 +51,20 @@ Each `GroundSolver_Approach` call performs one SCF cycle:
    - F̂ = T̂ + V̂_ext + Ĵ − K̂
    - Uses iterative ARPACK solver via DiagonalizerList
 
-3. **Mix eigenvectors with old orbitals**
-   - φ_new = (1−α)·φ_old + α·evec
+3. **Gauge-align and mix eigenvectors with old orbitals**
+   - Eigenvectors are only defined up to a per-vector phase and, within
+     degenerate shells (e.g., Ne 2p), up to an arbitrary unitary rotation of
+     the degenerate subspace; iterative solvers re-randomize this gauge on
+     every call. `Orbs_AlignOnReference` removes the gauge freedom by
+     solving the unitary Procrustes problem: with the occupied overlap matrix
+     M_ij = ⟨evec_i|φ_old,j⟩ and SVD M = U·Σ·V†, apply W = U·V† to the
+     eigenvectors. Without this step, any α < 1 injects a random O(1−α)
+     perturbation per iteration and destroys convergence.
+   - φ_new = (1−α)·φ_old + α·evec_aligned (linear default; the update is
+     delegated to the Mixing module, so DIIS can be selected via JSON)
    - α < 1 damps oscillations for difficult convergence
+   - With `mixTarget: "potential"` (stdImpl) the Hartree potential is mixed
+     instead and the orbitals are replaced outright (see "Mixing Strategies")
 
 4. **Orthonormalize** via Gram–Schmidt
 
@@ -73,8 +87,9 @@ MCTDHX-style state (CI coefficients ⊕ orbitals):
    with Ĵ[ρ¹] the direct potential of the correlated density
    ρ(r) = ∑_{pq} ρ¹_{pq} φ_p*(r) φ_q(r) and
    K̂[ρ¹]·φ = ∑_{pq} ρ¹_{pq} W(φ_p, φ) φ_q the RDM-weighted exchange;
-   diagonalize it via DiagonalizerList(2), mix the phase-aligned eigenvectors
-   with the old orbitals, copy spin-up → spin-down, orthonormalize.
+   diagonalize it via DiagonalizerList(2), gauge-align the eigenvectors with
+   the old orbitals (`Orbs_AlignOnReference`), mix, copy
+   spin-up → spin-down, orthonormalize.
 
 For a single determinant (ρ¹ = identity on the occupied space) the orbital
 step reduces exactly to the SCF Hartree–Fock iteration.
@@ -86,8 +101,9 @@ step reduces exactly to the SCF Hartree–Fock iteration.
 | **scf.stdImpl** | General grids | Any | 1: Fock, nPoints×nPoints |
 | **scf.ylmOpt** | Spherical atoms | Ylm | (lmax+1): per-l, nRadial×nRadial |
 | **mcscf.stdImpl** | Multiconfiguration | Any | 2: CI (nCoeffs) + Fock (nPoints) |
+| **mcscf.ylmOpt** | Multiconfiguration, spherical atoms | Ylm | (lmax+2): CI (nCoeffs) + per-l, nRadial×nRadial |
 
-**ylmOpt** exploits angular symmetry: instead of one large matrix, it diagonalizes smaller per-l-channel matrices. This requires the user to set up multiple diagonalizers with l-specific wrappers.
+**ylmOpt** exploits angular symmetry: instead of one large matrix, it diagonalizes smaller per-l-channel matrices. This requires the user to set up multiple diagonalizers with l-specific wrappers. In the MCSCF variant the per-l operator is the RDM-weighted Fock operator F̂_l[ρ¹] and the direct potential is the monopole (l=0) projection of the correlated density — exact for spherically symmetric (S) states.
 
 ## Public Interface
 
@@ -188,10 +204,52 @@ DiagonalizerListInput(2) % dim = Grid_nPoints
 `app/ne/groundstate/mcscf9orbs/P_GroundSolverStdImpl.f90`
 (neon MCSCF ground state with 9 spatial orbitals per spin).
 
+### MCSCF Ylm-Optimized Implementation (mcscf.ylmOpt)
+
+```json
+{
+    "groundSolver": {
+        "mcscf": {
+            "ylmOpt": {
+                "mixTarget": "potential",
+                "alphaCi": 1.0
+            }
+        }
+    },
+    "diagonalizerList": {
+        "lapack1":  { },
+        "arpack2":  { "nEvals": 2, "which": "SR" },
+        "arpack3":  { "nEvals": 1, "which": "SR" }
+    }
+}
+```
+
+The diagonalizer layout is: entry 1 for the CI space (`dim = Coeffs_nCoeffs`,
+callback wrapping `GroundSolver_Mcscf_HamiltonianAction`), entries l+2 for
+l = 0..lmax over the radial space (`dim = Grid_Ylm_nRadial`, l-specific
+wrappers around `GroundSolver_Mcscf_YlmOpt_FockAction`):
+
+```fortran
+DiagonalizerListInput(1) % ApplyMatOnVec => GroundSolver_Mcscf_HamiltonianAction
+DiagonalizerListInput(1) % dim = Coeffs_nCoeffs
+DiagonalizerListInput(2) % ApplyMatOnVec => ApplyMatOnVecL0  ! wraps FockAction with l=0
+DiagonalizerListInput(2) % dim = Grid_Ylm_nRadial
+DiagonalizerListInput(3) % ApplyMatOnVec => ApplyMatOnVecL1  ! wraps FockAction with l=1
+DiagonalizerListInput(3) % dim = Grid_Ylm_nRadial
+```
+
+Each l-channel's `nEvals` must cover the highest radial quantum number
+nr = n - l - 1 among the orbitals of that channel. Use ARPACK for the radial
+channels: the radial Fock action (exchange enters through the
+`Grid_Ylm_{Set,Get}LmComponent` projection pair) is not symmetric in the
+Euclidean metric that the dense LAPACK solver assumes, so `lapack*` entries
+converge to a wrong fixed point there.
+
 ## Usage Example
 
 ```fortran
 program scf_example
+  use M_Mixing
   use M_GroundSolver
   use M_Method
   
@@ -201,6 +259,7 @@ program scf_example
   
   ! ... setup Grid, SysKinetic, SysPotential, etc. ...
   
+  call Mixing_Fabricate()
   call GroundSolver_Fabricate()
   call GroundSolver_Setup()
   
@@ -266,8 +325,10 @@ Your implementation must bind these procedure pointers:
 |------|-------------|
 | `T_Ne3d_02_GroundSolverScf` | Neon atom (scf.stdImpl), E ≈ −127.74 Ha |
 | `T_Ne3d_03_GroundSolverScfYlm` | Neon atom (scf.ylmOpt), E ≈ −128.55 Ha |
+| `T_Ne3d_04_GroundSolverMcscf` | Neon atom (mcscf.stdImpl), E ≈ −127.74 Ha |
+| `T_Ne3d_06_GroundSolverMcscfYlm` | Neon atom (mcscf.ylmOpt), same grid/energy as T_Ne3d_04 |
 
-Run with: `ctest -R T_Ne3d_0[23]`
+Run with: `ctest -R T_Ne3d_0[2346]`
 
 ## Physical Background
 
@@ -298,17 +359,33 @@ Fock operator depends on the CI vector through ρ¹.
 ## Known Limitations
 
 1. **Restricted calculations only**: Spin-up and spin-down orbitals are assumed identical
-2. **No DIIS acceleration**: Simple linear mixing only; may converge slowly for some systems
-3. **ylmOpt assumes m=0 trials**: The Fock action uses m=0 in the diagonalizer callbacks
-4. **MCSCF orbital step is Fock-canonical**: The orbital update takes the lowest
+2. **ylmOpt assumes m=0 trials**: The Fock action uses m=0 in the diagonalizer callbacks
+3. **MCSCF orbital step is Fock-canonical**: The orbital update takes the lowest
    eigenvectors of F̂[ρ¹]; this is a robust heuristic whose fixed point can
    deviate slightly from the fully variational MCSCF orbitals
+
+## Mixing Strategies
+
+Iterate updates are delegated to the Mixing module (see `src/Mixing/A_Mixing.md`):
+the algorithm (`mixing.linear` / `mixing.diis`) is a top-level JSON choice (no
+block ⇒ linear), and `groundSolver.scf.stdImpl.mixTarget` selects what gets
+mixed:
+
+- `"orbitals"` (default): mix the gauge-aligned eigenvectors into the old
+  orbitals, then orthonormalize
+- `"potential"`: mix the Hartree potential (≡ density mixing) and replace the
+  orbitals outright — often converges in far fewer iterations, since the
+  potential is gauge-invariant and the map is smooth in it
+
+Rule of thumb: `potential` + `linear` with α ≈ 0.5–0.9 is a strong default;
+add DIIS for systems where linear mixing stalls. Avoid DIIS with very small α
+(the exchange operator lags the mixed potential; see A_Mixing.md).
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Slow/no convergence | Reduce α (e.g., 0.3–0.5), increase `nTimeSteps` |
+| Slow/no convergence | Try `mixTarget: "potential"`; reduce α (e.g., 0.3–0.5); try `mixing.diis` |
 | ARPACK convergence failure | Increase `nKry`, check `nEvals` ≤ dim/2 |
 | Wrong energy (ylmOpt) | Verify DiagonalizerList order matches l=0,1,2,... |
 | Degenerate Fock levels (MCSCF) | Use a `lapack*` orbital diagonalizer; ensure `nEvals` covers full shells |

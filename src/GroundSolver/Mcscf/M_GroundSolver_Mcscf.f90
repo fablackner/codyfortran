@@ -30,16 +30,20 @@
 !>
 !> ## Required Diagonalizers
 !>
-!> The program must fabricate two DiagonalizerList entries:
-!>   - DiagonalizerList(1): CI space, `dim = Coeffs_nCoeffs`, callback wrapping
-!>     `GroundSolver_Mcscf_HamiltonianAction`
-!>   - DiagonalizerList(2): orbital space, `dim = Grid_nPoints`, callback
-!>     wrapping `GroundSolver_Mcscf_FockAction`
+!> DiagonalizerList(1) is always the CI space (`dim = Coeffs_nCoeffs`, callback
+!> wrapping `GroundSolver_Mcscf_HamiltonianAction`). The orbital-space entries
+!> depend on the implementation:
+!>   - `stdImpl`: DiagonalizerList(2), `dim = Grid_nPoints`, callback wrapping
+!>     `GroundSolver_Mcscf_FockAction`
+!>   - `ylmOpt`: DiagonalizerList(l+2) for l = 0..lmax, `dim = Grid_Ylm_nRadial`,
+!>     l-specific callbacks wrapping `GroundSolver_Mcscf_YlmOpt_FockAction`
 !>
 !> ## Available Implementations
 !>
 !> - **stdImpl**: General grids; full CI diagonalizer plus one orbital-space
 !>   Fock diagonalizer
+!> - **ylmOpt**: Spherical (Ylm) grids; full CI diagonalizer plus one radial
+!>   Fock diagonalizer per l-channel
 !>
 !> @see M_GroundSolver, M_GroundSolver_Scf, M_DiagonalizerList
 module M_GroundSolver_Mcscf

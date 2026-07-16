@@ -147,9 +147,13 @@ module M_Utils_LapackLib
     procedure WrapZGETRSsingle
   end interface
 
+  interface LapackLib_Svd
+    procedure WrapZGESVD
+  end interface
+
   private WrapZHEEVR, WrapDSYEVR, WrapZHEEV, WrapDSYEV, WrapZGEQRF, WrapDGEQRF
   private WrapZGESV, WrapDGESV, WrapDGETRF, WrapDGETRS, WrapZGETRF, WrapZGETRS
-  private WrapDGETRSsingle, WrapZGETRSsingle, WrapZPOTRF, WrapZPSTRF
+  private WrapDGETRSsingle, WrapZGETRSsingle, WrapZPOTRF, WrapZPSTRF, WrapZGESVD
 
   interface
     subroutine ZHEEVR(JOBZ, RANGE, UPLO, N, A, LDA, VL, VU, IL, IU, ABSTOL, M, W, Z, LDZ, ISUPPZ, WORK, &
@@ -652,6 +656,49 @@ contains
     end if
 
     if (evecsQ) evecs = ATmp
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine WrapZGESVD(u, s, vt, A)
+    !> Output left singular vectors, size (M, min(M,N)).
+    complex(R64), intent(out), allocatable :: u(:, :)
+    !> Output singular values (descending), size min(M,N).
+    real(R64), intent(out), allocatable    :: s(:)
+    !> Output conjugate-transposed right singular vectors, size (min(M,N), N).
+    complex(R64), intent(out), allocatable :: vt(:, :)
+    !> Input matrix; not destroyed (copied internally).
+    complex(R64), intent(in), contiguous   :: A(:, :)
+
+    !local
+    complex(R64), allocatable :: ATmp(:, :)
+    complex(R64), allocatable :: WORK(:)
+    complex(R64)              :: OPT(1)
+    real(R64), allocatable    :: rWORK(:)
+    integer(I32)              :: M, N, minMN, lwork, info
+
+    M = size(A, 1)
+    N = size(A, 2)
+    minMN = min(M, N)
+
+    allocate (u(M, minMN))
+    allocate (s(minMN))
+    allocate (vt(minMN, N))
+    allocate (rWORK(5 * minMN))
+
+    allocate (ATmp, source=A)
+
+    call ZGESVD('S', 'S', M, N, ATmp, M, s, u, M, vt, minMN, OPT, -1, rWORK, info)
+
+    lwork = int(OPT(1))
+    allocate (WORK(lwork))
+
+    call ZGESVD('S', 'S', M, N, ATmp, M, s, u, M, vt, minMN, WORK, lwork, rWORK, info)
+
+    if (info .ne. 0) then
+      write (6, "('LapackLib_Svd: info = ', i20)") info
+      error stop 'error in WrapZGESVD'
+    end if
 
   end subroutine
 

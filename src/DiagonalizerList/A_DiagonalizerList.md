@@ -113,12 +113,23 @@ src/DiagonalizerList/
 | `nKry`              | int    | 2*nEvals+1   | Krylov subspace dimension                |
 | `tol`               | real   | 0 (machine eps) | Ritz value convergence tolerance      |
 | `checkConvergenceQ` | bool   | true         | Verify residuals after solve             |
+| `warmStartQ`        | bool   | true         | Restart from previous eigenvectors       |
 | `printLevel`        | int    | 0            | Verbosity level                          |
 
 **Spectrum selection (`which`):**
 - `"LM"` / `"SM"` : Largest / Smallest Magnitude
 - `"LR"` / `"SR"` : Largest / Smallest Real part ← **use for ground states**
 - `"LI"` / `"SI"` : Largest / Smallest Imaginary part
+
+**Warm start (`warmStartQ`):** on repeated `Diagonalize` calls the Arnoldi
+iteration is started from the normalized sum of the previously converged
+eigenvectors (ARPACK `info=1` with a deterministic `resid`) instead of a
+random vector. This makes repeated solves deterministic and reduces the
+matvec count when the operator changes only slightly between calls (SCF
+iterations). Note the returned eigenvectors are still only defined up to
+gauge (phase / degenerate-subspace rotation); consumers that mix eigenvectors
+with previous state must gauge-align first (see
+`Orbs_AlignOnReference`).
 
 ---
 

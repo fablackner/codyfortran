@@ -104,6 +104,17 @@ module M_IntegratorList
     !> `"integratorList.rk.o4Expl"`). Stored during fabrication for
     !> parameter retrieval and diagnostic messages.
     character(len=:), allocatable :: path
+
+    !> Optional metric weights defining the inner product used by
+    !> metric-aware integrators (currently SIL). When allocated, inner
+    !> products are evaluated as sum(conjg(a) * metricWeights * b); when
+    !> unallocated, the Euclidean product is used. This is required on grids
+    !> whose state representation is not weight-absorbed (e.g., FEDVR),
+    !> where Hermitian operators are self-adjoint only in the weighted
+    !> metric. Assign directly on the registry element after fabrication and
+    !> before the first `Integrate` call (grid weights typically become
+    !> available only after `Grid_Setup`).
+    real(R64), allocatable :: metricWeights(:)
   contains
     !> @brief Read parameters and capture dependencies from configuration.
     !> @details Called once after allocation. Implementations should read

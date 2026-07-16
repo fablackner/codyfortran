@@ -1,4 +1,4 @@
-program P_GroundSolverYlmOpt
+program T_Ne3d_05_GroundSolverScfDensity
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
@@ -19,6 +19,7 @@ program P_GroundSolverYlmOpt
   use M_GroundSolver
   use M_GroundSolver_Scf
   use M_GroundSolver_Scf_YlmOpt
+  use testdrive, only: check, error_type
 
   implicit none
 
@@ -28,14 +29,17 @@ program P_GroundSolverYlmOpt
   real(R64)    :: convThresh
   real(R64)    :: time
   integer(I32) :: iStep, nTimeSteps, innerStep
-  type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(2)
+  type(error_type), allocatable :: error
+  character(len=:), allocatable :: jsonFileName
+  type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(1)
 
   !==========================================
   call Say_Hello
   call Say_Section("start")
   !==========================================
 
-  call Json_LoadJsonFile()
+  jsonFileName = "test/simulationTests/Ne3d/T_Ne3d_05_GroundSolverScfDensity.json"
+  call Json_LoadJsonFile(manualFileName_=jsonFileName, relativeToProjectDirQ_=.true.)
 
   call Grid_Fabricate
   call SysKinetic_Fabricate
@@ -49,10 +53,8 @@ program P_GroundSolverYlmOpt
   call CoeffsInit_Fabricate
   call Mixing_Fabricate
   call GroundSolver_Fabricate
-  DiagonalizerListInput(1) % ApplyMatOnVec => ApplyMatOnVecL0
-  DiagonalizerListInput(1) % dim = Grid_Ylm_nRadial
-  DiagonalizerListInput(2) % ApplyMatOnVec => ApplyMatOnVecL1
-  DiagonalizerListInput(2) % dim = Grid_Ylm_nRadial
+  DiagonalizerListInput(1) % ApplyMatOnVec => GroundSolver_Scf_HartreeFockAction
+  DiagonalizerListInput(1) % dim = Grid_nPoints
   call DiagonalizerList_Fabricate(DiagonalizerListInput)
 
   call Say_Fabricate("program")
@@ -101,34 +103,11 @@ program P_GroundSolverYlmOpt
   print *
   print *, "final energy: ", energyNew
 
+  call check(error, energyNew, -127.7449896_R64, thr=1e-8_R64)
+  if (allocated(error)) error stop "T_Ne3d_05_GroundSolverScfDensity failure"
+
   !==========================================
   call Say_Goodbye
   !==========================================
-
-contains
-
-  subroutine ApplyMatOnVecL0(dOrbLm, orbLm, time)
-    use M_Grid_Ylm
-    use M_GroundSolver_Scf
-
-    complex(R64), intent(out), contiguous, target :: dOrbLm(:)
-    complex(R64), intent(in), contiguous, target :: orbLm(:)
-    real(R64), intent(in) :: time
-
-    call GroundSolver_Scf_YlmOpt_HartreeFockAction(dOrbLm, orbLm, l=0, time=time)
-
-  end subroutine
-
-  subroutine ApplyMatOnVecL1(dOrbLm, orbLm, time)
-    use M_Grid_Ylm
-    use M_GroundSolver_Scf
-
-    complex(R64), intent(out), contiguous, target :: dOrbLm(:)
-    complex(R64), intent(in), contiguous, target :: orbLm(:)
-    real(R64), intent(in) :: time
-
-    call GroundSolver_Scf_YlmOpt_HartreeFockAction(dOrbLm, orbLm, l=1, time=time)
-
-  end subroutine
 
 end program

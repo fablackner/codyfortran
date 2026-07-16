@@ -15,6 +15,7 @@ program T_Ne3d_02_GroundSolverScf
   use M_CoeffsInit
   use M_Method
   use M_DiagonalizerList
+  use M_Mixing
   use M_GroundSolver
   use M_GroundSolver_Scf
   use M_GroundSolver_Scf_YlmOpt
@@ -27,7 +28,6 @@ program T_Ne3d_02_GroundSolverScf
   real(R64)    :: energyOld
   real(R64)    :: convThresh
   real(R64)    :: time
-  real(R64)    :: alpha
   integer(I32) :: iStep, nTimeSteps, innerStep
   type(error_type), allocatable :: error
   character(len=:), allocatable :: jsonFileName
@@ -51,6 +51,7 @@ program T_Ne3d_02_GroundSolverScf
   call ConfigList_Fabricate
   call Coeffs_Fabricate
   call CoeffsInit_Fabricate
+  call Mixing_Fabricate
   call GroundSolver_Fabricate
   DiagonalizerListInput(1) % ApplyMatOnVec => GroundSolver_Scf_HartreeFockAction
   DiagonalizerListInput(1) % dim = Grid_nPoints
@@ -58,7 +59,6 @@ program T_Ne3d_02_GroundSolverScf
 
   call Say_Fabricate("program")
   convThresh = Json_Get("program.convThresh", 1e-13_R64)
-  alpha = Json_Get("program.alpha", 1.0_R64)
   nTimeSteps = Json_Get("program.nTimeSteps", 10)
 
   call Grid_Setup
@@ -86,7 +86,7 @@ program T_Ne3d_02_GroundSolverScf
 
     ! Explicit loop to execute approach nTimeSteps times
     do innerStep = 1, nTimeSteps
-      call GroundSolver_Approach(Method_state, alpha, time=0.0_R64)
+      call GroundSolver_Approach(Method_state, time=0.0_R64)
     end do
 
     energyOld = energyNew

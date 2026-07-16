@@ -98,12 +98,18 @@
     },
     "groundSolver": {
         "scf": {
-            "ylmOpt": { }
+            "ylmOpt": {
+                "mixTarget": "potential"
+            }
+        }
+    },
+    "mixing": {
+        "linear": {
+            "alpha": 0.85
         }
     },
     "program": {
         "convThresh": 1e-12,
-        "outputStep": 0.002,
         "nTimeSteps": 1
     }
 }

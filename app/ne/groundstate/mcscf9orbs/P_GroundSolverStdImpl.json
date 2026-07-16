@@ -128,18 +128,30 @@
             "checkConvergenceQ": false,
             "printLevel": 0
         },
-        "lapackOrb": {
-            "nEvals": 9
+        "arpackOrb": {
+            "nEvals": 9,
+            "which": "SR",
+            "bmat": "I",
+            "nKry": 40,
+            "checkConvergenceQ": false,
+            "printLevel": 0
         }
     },
     "groundSolver": {
         "mcscf": {
-            "stdImpl": {}
+            "stdImpl": {
+                "mixTarget": "potential",
+                "alphaCi": 1.0
+            }
         }
     },
     "program": {
         "convThresh": 1e-10,
-        "alpha": 1.0,
         "nTimeSteps": 10
+    },
+    "mixing": {
+        "linear": {
+            "alpha": 0.85
+        }
     }
 }
