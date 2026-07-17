@@ -96,15 +96,21 @@ contains
     use M_Method_Mb
     use M_Method_Mb_OrbBased
     use M_Grid
+    use M_Orbs
 
     complex(R64), intent(out), contiguous  :: orbs(:, :)
 
     integer(I32) :: ind  ! orbital index within current body type
     integer(I32) :: ibt  ! body type index
     integer(I32) :: i1   ! global orbital column index
+    integer(I32) :: nBt  ! number of body types to initialize
+
+    ! Restricted: only the shared spatial set (body type 1) is stored
+    nBt = Method_Mb_nBodyTypes
+    if (Orbs_restrictedQ) nBt = 1
 
     i1 = 0
-    do ibt = 1, Method_Mb_nBodyTypes
+    do ibt = 1, nBt
       do ind = 1, Method_Mb_OrbBased_nOrbs(ibt)
         i1 = i1 + 1
 

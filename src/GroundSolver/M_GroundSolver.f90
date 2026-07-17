@@ -61,6 +61,20 @@ module M_GroundSolver
     end subroutine
   end interface
 
+  interface GroundSolver_NumberOfSpinUpOrbs
+    !> @brief Number of spin-up (spatial) orbitals in the packed state.
+    !>
+    !> @details
+    !> The ground-state solvers implement spin-restricted physics: one spatial
+    !> orbital per doubly occupied shell is relaxed. For `orbs.restrictedQ`
+    !> the state stores only that shared spatial set, so all stored orbitals
+    !> are spin-up; otherwise the state stores both spin blocks and the
+    !> spin-up half comes first.
+    module function GroundSolver_NumberOfSpinUpOrbs() result(nUp)
+      integer(I32) :: nUp
+    end function
+  end interface
+
   !=============================================================================
   ! module procedures pointers
   !=============================================================================
@@ -104,8 +118,11 @@ module M_GroundSolver
     !> @param[in]    time    Backend-defined parameter. Typically 0 for ground state;
     !>                       some backends may use it for time-dependent potentials.
     !>
-    !> @note For spin-restricted calculations, the spin-up block is copied to
-    !>       spin-down after mixing, ensuring identical spatial orbitals.
+    !> @note The solvers implement spin-restricted physics. Without
+    !>       `orbs.restrictedQ` the state stores both spin blocks and the
+    !>       spin-up block is copied to spin-down after mixing; with
+    !>       `orbs.restrictedQ` only the shared spatial set is stored and no
+    !>       copy is needed (see `GroundSolver_NumberOfSpinUpOrbs`).
     subroutine I_GroundSolver_Approach(state, time)
       import :: R64
       !> Packed state vector containing orbital coefficients. Updated in place.

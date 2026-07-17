@@ -59,6 +59,12 @@ Purpose: Builds/applies two-body interaction potential.
 Key interfaces/notes: `FillInteractionSrc -> FillInteractionPotential -> MultiplyWithInteractionPotential`; includes Linear SoftYukawa, Lattice Hubbard, and Ylm Coulomb-Poisson variants.
 Module doc: `src/SysInteraction/A_SysInteraction.md`.
 
+**SysGauge**
+Domain: Hamiltonian Operators.
+Purpose: Applies the velocity-gauge laser coupling A(t)·p/m + A²/(2m) (non-diagonal, hence not a SysPotential).
+Key interfaces/notes: `SysGauge_MultiplyWithGaugeOp(dOrb, orb, time, bt_)` (SysKinetic-style operator contract); Ylm backend with sin²-envelope vector potential and Δl = ±1 channel coupling on Fedvr/FedvrEcs radial grids; consumed by Method via `Method_Mb_OrbBased_ApplyGaugeOp`.
+Module doc: `src/SysGauge/A_SysGauge.md`.
+
 **Orbs**
 Domain: Quantum State Containers.
 Purpose: Orbital coefficient container and orbital-space operations.

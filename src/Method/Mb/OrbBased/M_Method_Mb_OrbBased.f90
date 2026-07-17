@@ -175,6 +175,22 @@ module M_Method_Mb_OrbBased
     end subroutine
   end interface
 
+  !> Pointer to the procedure for applying the velocity-gauge coupling operator.
+  procedure(I_Method_Mb_OrbBased_ApplyGaugeOp), pointer :: Method_Mb_OrbBased_ApplyGaugeOp
+  abstract interface
+    !> Applies the gauge coupling operator (A(t)·p/m + A²/(2m), velocity gauge)
+    !> to a set of orbitals and accumulates the result in `dOrbs`.
+    subroutine I_Method_Mb_OrbBased_ApplyGaugeOp(dOrbs, orbs, time)
+      import :: R64
+      !> In/out: where the result is added. Initialize before calling.
+      complex(R64), intent(inout), contiguous :: dOrbs(:, :)
+      !> Input: orbitals to which the gauge operator is applied.
+      complex(R64), intent(in), contiguous :: orbs(:, :)
+      !> Current time at which the vector potential is evaluated.
+      real(R64), intent(in) :: time
+    end subroutine
+  end interface
+
   !> Pointer to the procedure for applying the two-body interaction operator.
   procedure(I_Method_Mb_OrbBased_ApplyInteractionOp), pointer :: Method_Mb_OrbBased_ApplyInteractionOp
   abstract interface

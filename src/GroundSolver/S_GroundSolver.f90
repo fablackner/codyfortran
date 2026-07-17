@@ -44,4 +44,18 @@ contains
 
   end subroutine
 
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module function GroundSolver_NumberOfSpinUpOrbs() result(nUp)
+    use M_Orbs
+
+    integer(I32) :: nUp
+
+    if (Orbs_restrictedQ) then
+      nUp = Orbs_nOrbsInState
+    else
+      nUp = Orbs_nOrbsInState / 2
+    end if
+
+  end function
+
 end submodule

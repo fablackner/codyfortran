@@ -90,11 +90,17 @@ contains
     Method_Mb_OrbBased_ApplyHartreeFockOp => ApplyHartreeFockOp
     Method_Mb_OrbBased_ApplySingleBodyOp => ApplySingleBodyOp
 
-    ! Conditionally bind potential/interaction if configured
+    ! Conditionally bind potential/gauge/interaction if configured
     if (Json_GetExistence("sysPotential")) then
       Method_Mb_OrbBased_ApplyPotentialOp => ApplyPotentialOp
     else
       Method_Mb_OrbBased_ApplyPotentialOp => NoOpProcedures_ApplyPotentialOp
+    end if
+
+    if (Json_GetExistence("sysGauge")) then
+      Method_Mb_OrbBased_ApplyGaugeOp => ApplyGaugeOp
+    else
+      Method_Mb_OrbBased_ApplyGaugeOp => NoOpProcedures_ApplyPotentialOp
     end if
 
     if (Json_GetExistence("sysInteraction")) then
@@ -158,7 +164,8 @@ contains
   subroutine FillH1(h1, orbs, time)
     !---------------------------------------------------------------------------
     ! Builds the one-body Hamiltonian matrix in the orbital basis:
-    !   h¹_{ij} = ⟨φ_i| T̂ + V̂_ext |φ_j⟩
+    !   h¹_{ij} = ⟨φ_i| T̂ + V̂_ext + Ĥ_A |φ_j⟩
+    ! where Ĥ_A is the velocity-gauge coupling (zero unless sysGauge is set).
     !
     ! Only computes elements where both orbitals belong to the same body type.
     ! For restricted calculations, duplicates the computed block for spin-down.
@@ -184,12 +191,13 @@ contains
     if (.not. allocated(h1)) allocate (h1(nO, nO))
     h1(:, :) = 0.0_R64
 
-    ! Apply (T̂ + V̂) to all orbitals
+    ! Apply (T̂ + V̂ + Ĥ_A) to all orbitals
     allocate (orbTmps(nG, nOS))
     orbTmps(:, :) = 0.0_R64
 
     call Method_Mb_OrbBased_ApplyKineticOp(orbTmps, orbs, time)
     call Method_Mb_OrbBased_ApplyPotentialOp(orbTmps, orbs, time)
+    call Method_Mb_OrbBased_ApplyGaugeOp(orbTmps, orbs, time)
 
     ! Compute matrix elements via inner products
     !$omp parallel do default(shared) private(i1, j1, i1bt, j1bt) collapse(2)
@@ -367,6 +375,53 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine ApplyGaugeOp(dOrbs, orbs, time)
+    !---------------------------------------------------------------------------
+    ! Applies the velocity-gauge coupling operator to all orbitals:
+    !   dOrbs(:,i) += (A(t)·p̂/m + A²(t)/(2m)) · orbs(:,i)
+    !
+    ! The gauge operator is body-type-dependent through the mass, mirroring
+    ! the kinetic operator.
+    !---------------------------------------------------------------------------
+    use M_Method
+    use M_Grid
+    use M_Orbs
+    use M_SysGauge
+
+    complex(R64), intent(inout), contiguous :: dOrbs(:, :)
+    complex(R64), intent(in), contiguous    :: orbs(:, :)
+    real(R64), intent(in)                  :: time
+
+    complex(R64), allocatable :: orbTmp(:)
+
+    integer(I32) :: nG, nOS
+    integer(I32) :: i1, ibt
+
+    nG = Grid_nPoints
+    nOS = Orbs_nOrbsInState
+
+    !$omp parallel default(shared) private(i1, ibt, orbTmp)
+    allocate (orbTmp(nG))
+
+    !$omp do
+    do i1 = 1, nOS
+
+      ibt = Method_Mb_OrbBased_bodyTypeOfOrb(i1)
+
+      orbTmp(:) = 0.0_R64
+      call SysGauge_MultiplyWithGaugeOp(orbTmp, orbs(:, i1), time, ibt)
+
+      dOrbs(:, i1) = dOrbs(:, i1) + orbTmp(:)
+
+    end do
+    !$omp end do
+
+    deallocate (orbTmp)
+    !$omp end parallel
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyPotentialOp(dOrbs, orbs, time)
     !---------------------------------------------------------------------------
     ! Applies the external potential operator to all orbitals:
@@ -385,13 +440,18 @@ contains
     complex(R64), intent(in), contiguous    :: orbs(:, :)
     real(R64), intent(in) :: time
 
-    integer(I32) :: nG, nOS
+    integer(I32) :: nG, nOS, nBt
     integer(I32) :: iOrb, bt
     complex(R64), allocatable :: orbTmp(:)
     complex(R64), allocatable :: externalPotential(:)
 
     nG = Grid_nPoints
     nOS = Orbs_nOrbsInState
+
+    ! Restricted: only the shared spatial set is stored; the body-type-1
+    ! potential covers all stored orbitals (spin up and down coincide)
+    nBt = Method_Mb_nBodyTypes
+    if (Orbs_restrictedQ) nBt = 1
 
     if (SysPotential_bodyTypeIndependentQ) then
       ! Body-type-independent: compute potential once, apply to all orbitals
@@ -409,7 +469,7 @@ contains
       !$omp end parallel
     else
       ! Body-type-dependent: loop over types and apply to corresponding orbitals
-      do bt = 1, Method_Mb_nBodyTypes
+      do bt = 1, nBt
         call SysPotential_FillExternalPotential(externalPotential, time, bt_=bt)
 
         !$omp parallel default(shared) private(iOrb, orbTmp)
@@ -448,11 +508,16 @@ contains
     integer(I32), intent(in)               :: j2
     real(R64), intent(in)                  :: time
 
-    integer(I32) :: nOS
+    integer(I32) :: nOS, nBt
     integer(I32) :: bt1, bt2
     complex(R64), allocatable :: src(:), interactionPotential(:)
 
     nOS = Orbs_nOrbsInState
+
+    ! Restricted: only the shared spatial set is stored; the body-type-1
+    ! interaction covers all stored orbitals (spin up and down coincide)
+    nBt = Method_Mb_nBodyTypes
+    if (Orbs_restrictedQ) nBt = 1
 
     ! Build source density: ρ(r₂) = φ*_{i2}(r₂) φ_{j2}(r₂)
     call SysInteraction_FillInteractionSrc(src, orbs(:, i2), orbs(:, j2))
@@ -465,7 +530,7 @@ contains
       call MultiplyPotentialOnOrbRange(dOrbs, orbs, interactionPotential, 1, nOS)
     else
       ! Body-type-dependent: loop over target body types
-      do bt1 = 1, Method_Mb_nBodyTypes
+      do bt1 = 1, nBt
         call SysInteraction_FillInteractionPotential(interactionPotential, src, time, bt1, bt2)
         call MultiplyPotentialOnOrbRange(dOrbs, orbs, interactionPotential, &
                                          Method_Mb_OrbBased_nOrbsStart(bt1), Method_Mb_OrbBased_nOrbsEnd(bt1))
@@ -529,7 +594,7 @@ contains
     integer(I32), intent(in)                :: j2
     real(R64), intent(in)                   :: time
 
-    integer(I32) :: nOS, bt1, bt2
+    integer(I32) :: nOS, nBt, bt1, bt2
     complex(R64), allocatable :: src(:), interactionPotential(:), interactionPotentialConjg(:)
 
     if (.not. SysInteraction_conjSymmetricQ) then
@@ -540,6 +605,11 @@ contains
     end if
 
     nOS = Orbs_nOrbsInState
+
+    ! Restricted: only the shared spatial set is stored; the body-type-1
+    ! interaction covers all stored orbitals (spin up and down coincide)
+    nBt = Method_Mb_nBodyTypes
+    if (Orbs_restrictedQ) nBt = 1
 
     call SysInteraction_FillInteractionSrc(src, orbs(:, i2), orbs(:, j2))
 
@@ -554,7 +624,7 @@ contains
       call MultiplyPotentialOnOrbRange(dOrbsA, orbs, interactionPotential, 1, nOS)
       call MultiplyPotentialOnOrbRange(dOrbsB, orbs, interactionPotentialConjg, 1, nOS)
     else
-      do bt1 = 1, Method_Mb_nBodyTypes
+      do bt1 = 1, nBt
         call SysInteraction_FillInteractionPotential(interactionPotential, src, time, bt1, bt2)
 
         if (.not. allocated(interactionPotentialConjg)) then
@@ -718,6 +788,17 @@ contains
       end do
     end do
 
+    ! For restricted calculations, duplicate the h2 blocks for the spin
+    ! combinations (αα, αβ, βα, ββ share the spatial integrals); the Coeffs
+    ! backend consumes h2 in the full spin-orbital basis (matches FillH2)
+    if (present(h2_)) then
+      if (Orbs_restrictedQ) then
+        h2_(nOS + 1:, :nOS, nOS + 1:, :nOS) = h2_(:nOS, :nOS, :nOS, :nOS)
+        h2_(:nOS, nOS + 1:, :nOS, nOS + 1:) = h2_(:nOS, :nOS, :nOS, :nOS)
+        h2_(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:) = h2_(:nOS, :nOS, :nOS, :nOS)
+      end if
+    end if
+
     deallocate (rdm1spatial)
     deallocate (rdm2spatial)
 
@@ -867,17 +948,23 @@ contains
     integer(I32), intent(in)                :: l2
 
     integer(I32) :: j1, j1bt, k2bt, nOS
+    complex(R64) :: rdm1Direct
 
     nOS = Orbs_nOrbsInState
     k2bt = Method_Mb_OrbBased_bodyTypeOfOrb(k2)
+
+    ! Direct (Hartree) density weight; restricted: the stored source pair
+    ! (k2,l2) carries both spins, so sum the spin-up and spin-down blocks
+    rdm1Direct = rdm1(k2, l2)
+    if (Orbs_restrictedQ) rdm1Direct = rdm1Direct + rdm1(nOS + k2, nOS + l2)
 
     do j1 = 1, nOS
       j1bt = Method_Mb_OrbBased_bodyTypeOfOrb(j1)
 
       ! Direct (Hartree) term: all j1 get contribution from ρ_{k2,l2}
-      dOrbs(:, j1) = dOrbs(:, j1) + orbTmps(:, j1) * rdm1(k2, l2)
+      dOrbs(:, j1) = dOrbs(:, j1) + orbTmps(:, j1) * rdm1Direct
 
-      ! Exchange (Fock) term: only same-body-type pairs
+      ! Exchange (Fock) term: only same-body-type (same-spin) pairs
       if (k2bt .ne. j1bt) cycle
       dOrbs(:, k2) = dOrbs(:, k2) - orbTmps(:, j1) * rdm1(j1, l2)
 
@@ -888,8 +975,9 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplySingleBodyOp(dOrbs, orbs, time, h1_)
     !---------------------------------------------------------------------------
-    ! Applies the one-body Hamiltonian (kinetic + external potential) to orbitals:
-    !   dOrbs(:,i) += (T̂ + V̂_ext) · orbs(:,i)
+    ! Applies the one-body Hamiltonian (kinetic + external potential + gauge
+    ! coupling) to orbitals:
+    !   dOrbs(:,i) += (T̂ + V̂_ext + Ĥ_A) · orbs(:,i)
     !
     ! Optionally returns the one-body Hamiltonian matrix h1_ if requested.
     ! For restricted calculations, duplicates the computed block.
@@ -913,6 +1001,7 @@ contains
     ! Apply operators (results accumulate in dOrbs)
     call Method_Mb_OrbBased_ApplyKineticOp(dOrbs, orbs, time)
     call Method_Mb_OrbBased_ApplyPotentialOp(dOrbs, orbs, time)
+    call Method_Mb_OrbBased_ApplyGaugeOp(dOrbs, orbs, time)
 
     ! Optionally compute matrix elements from the accumulated result
     if (present(h1_)) then

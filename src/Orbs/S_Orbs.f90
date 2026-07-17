@@ -60,6 +60,7 @@ contains
   module subroutine Orbs_Fabricate
     use M_Utils_Say
     use M_Utils_Json
+    use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     call Say_Fabricate("orbs")
@@ -73,6 +74,18 @@ contains
     Orbs_SaveOrbs => SaveOrbs
 
     Orbs_restrictedQ = Json_Get("orbs.restrictedQ", .false.)
+
+    ! The restricted representation stores a single spatial orbital set shared
+    ! by spin up and spin down; it is only meaningful for exactly two body
+    ! types (the spins) with identical orbital counts
+    if (Orbs_restrictedQ) then
+      if (Method_Mb_nBodyTypes .ne. 2) then
+        error stop "orbs.restrictedQ requires exactly 2 body types (spin up/down)"
+      end if
+      if (Method_Mb_OrbBased_nOrbs(1) .ne. Method_Mb_OrbBased_nOrbs(2)) then
+        error stop "orbs.restrictedQ requires equal nOrbs for both body types"
+      end if
+    end if
 
     if (Orbs_restrictedQ) Orbs_nOrbsInState = Method_Mb_OrbBased_nOrbsSum / 2
     if (.not. Orbs_restrictedQ) Orbs_nOrbsInState = Method_Mb_OrbBased_nOrbsSum
@@ -138,6 +151,14 @@ contains
 
     integer(I32) :: ibt, startOrb, endOrb
 
+    ! Restricted: the stored columns are the single spatial set shared by both
+    ! spins; orthonormalize them as one block (the body-type partition refers
+    ! to the full spin-orbital set, which is not stored)
+    if (Orbs_restrictedQ) then
+      call Grid_Orthonormalize(orbs)
+      return
+    end if
+
     startOrb = 1
     do ibt = 1, Method_Mb_nBodyTypes
 
@@ -184,6 +205,12 @@ contains
 
     integer(I32) :: ibt, startOrb, endOrb
 
+    ! Restricted: single shared spatial set, project as one block
+    if (Orbs_restrictedQ) then
+      call Grid_ProjectOnSubspace(dOrbs, orbs)
+      return
+    end if
+
     startOrb = 1
     do ibt = 1, Method_Mb_nBodyTypes
 
@@ -228,11 +255,15 @@ contains
 
     complex(R64), intent(in), contiguous  :: orbs(:, :)
 
-    integer(I32) :: index, ibt, i1
+    integer(I32) :: index, ibt, i1, nBt
     character(len=256) :: filename
 
+    ! Restricted: only the shared spatial set exists, save it as body type 1
+    nBt = Method_Mb_nBodyTypes
+    if (Orbs_restrictedQ) nBt = 1
+
     i1 = 0
-    do ibt = 1, Method_Mb_nBodyTypes
+    do ibt = 1, nBt
       do index = 1, Method_Mb_OrbBased_nOrbs(ibt)
         i1 = i1 + 1
 

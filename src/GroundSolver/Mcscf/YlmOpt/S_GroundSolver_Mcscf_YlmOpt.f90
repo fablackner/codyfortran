@@ -168,19 +168,22 @@ contains
     use M_Grid
     use M_Grid_Ylm
     use M_SysInteraction_Ylm
+    use M_GroundSolver
     use M_Orbs
 
-    integer(I32) :: lmaxPot, potSize
+    integer(I32) :: lmaxPot, potSize, nUp
 
     call Say_Setup("groundSolver.mcscf.ylmOpt")
 
     lmaxPot = SysInteraction_Ylm_lmax
     potSize = (2 * lmaxPot + 1)**2 * Grid_Ylm_nRadial
 
+    nUp = GroundSolver_NumberOfSpinUpOrbs()
+
     allocate (src(potSize))
     allocate (weightedSrc(potSize))
     allocate (interactionPotential(potSize))
-    allocate (exchangePotentials(potSize, Orbs_nOrbsInState / 2))
+    allocate (exchangePotentials(potSize, nUp))
     allocate (weightedPotential(potSize))
     allocate (dOrbLmTmp(Grid_Ylm_nRadial))
     allocate (potLm(Grid_Ylm_nRadial))
@@ -189,8 +192,8 @@ contains
     allocate (srcLm(Grid_Ylm_nRadial))
     allocate (orb(Grid_nPoints))
     allocate (dOrbTmp(Grid_nPoints))
-    allocate (orbsRaw(Grid_nPoints, Orbs_nOrbsInState / 2))
-    allocate (rdm1Up(Orbs_nOrbsInState / 2, Orbs_nOrbsInState / 2))
+    allocate (orbsRaw(Grid_nPoints, nUp))
+    allocate (rdm1Up(nUp, nUp))
 
   end subroutine
 
@@ -236,6 +239,7 @@ contains
     use M_Utils_SphericalHarmonics
     use M_SysKinetic_Ylm
     use M_SysInteraction
+    use M_GroundSolver
     use M_Orbs
     use M_Grid_Ylm
 
@@ -247,7 +251,7 @@ contains
     real(R64) :: gVal
     integer(I32) :: p, q, nUp
 
-    nUp = Orbs_nOrbsInState / 2
+    nUp = GroundSolver_NumberOfSpinUpOrbs()
 
     dOrbLm = 0.0_R64
 
@@ -318,6 +322,7 @@ contains
     use M_Grid
     use M_Grid_Ylm
     use M_DiagonalizerList
+    use M_GroundSolver
     use M_Coeffs
     use M_Orbs
     use M_SysInteraction
@@ -333,13 +338,14 @@ contains
     complex(R64), contiguous, pointer :: orbs(:, :)
     complex(R64), contiguous, pointer :: orbsRawFlat(:)
     complex(R64), allocatable :: rdm1(:, :)
-    complex(R64) :: overlap, phase
-    integer(I32) :: nC, nG, nOS, p, q, j
+    complex(R64) :: overlap, phase, rdm1Weight
+    integer(I32) :: nC, nG, nOS, nUp, p, q, j
     integer(I32) :: n, l, m, nr
 
     nC = Coeffs_nCoeffs
     nG = Grid_nPoints
     nOS = Orbs_nOrbsInState
+    nUp = GroundSolver_NumberOfSpinUpOrbs()
 
     coeffs(1:nC) => state(1:nC)
     orbs(1:nG, 1:nOS) => state(nC + 1:)
@@ -365,14 +371,18 @@ contains
     ! potential from the correlated density
     ! ρ(r) = Σ_{pq} ρ¹_{pq}·φ_p*(r)·φ_q(r) (all body types)
     call Coeffs_ApplyH1FillRdm1(coeffs, rdm1_=rdm1)
-    rdm1Up = rdm1(1:nOS / 2, 1:nOS / 2)
+    rdm1Up = rdm1(1:nUp, 1:nUp)
 
     weightedSrc = 0.0_R64
     do p = 1, nOS
       do q = 1, nOS
-        if (abs(rdm1(p, q)) .eq. 0.0_R64) cycle
+        ! Restricted: the stored orbital pair carries both spins, so the
+        ! density weight is the sum of the spin-up and spin-down blocks
+        rdm1Weight = rdm1(p, q)
+        if (Orbs_restrictedQ) rdm1Weight = rdm1Weight + rdm1(nOS + p, nOS + q)
+        if (abs(rdm1Weight) .eq. 0.0_R64) cycle
         call SysInteraction_FillInteractionSrc(src, orbs(:, p), orbs(:, q))
-        weightedSrc = weightedSrc + rdm1(p, q) * src
+        weightedSrc = weightedSrc + rdm1Weight * src
       end do
     end do
 
@@ -401,7 +411,7 @@ contains
     end do
 
     ! Step 6: Map eigenvectors to orbitals using (n,l,m)
-    do j = 1, nOS / 2
+    do j = 1, nUp
       n = OrbsInit_Ylm_HydrogenLike_n(j)
       l = OrbsInit_Ylm_HydrogenLike_l(j)
       m = OrbsInit_Ylm_HydrogenLike_m(j)
@@ -417,20 +427,23 @@ contains
     ! old ones (removes the arbitrary phase of the radial eigenvectors),
     ! then mix and copy spin-up → spin-down (restricted)
     call Grid_Orthonormalize(orbsRaw)
-    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nOS / 2))
+    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nUp))
 
     if (mixTarget .eq. "orbitals") then
-      orbsRawFlat(1:nG * (nOS / 2)) => orbsRaw
-      call Mixing_Mix(state(nC + 1:nC + nG * (nOS / 2)), orbsRawFlat)
+      orbsRawFlat(1:nG * nUp) => orbsRaw
+      call Mixing_Mix(state(nC + 1:nC + nG * nUp), orbsRawFlat)
     else
-      do j = 1, nOS / 2
+      do j = 1, nUp
         orbs(:, j) = orbsRaw(:, j)
       end do
     end if
 
-    do j = 1, nOS / 2
-      orbs(:, nOS / 2 + j) = orbs(:, j)
-    end do
+    ! Restricted: the state holds only the shared spatial set, no copy needed
+    if (.not. Orbs_restrictedQ) then
+      do j = 1, nUp
+        orbs(:, nUp + j) = orbs(:, j)
+      end do
+    end if
 
     ! Gram–Schmidt orthonormalize
     call Orbs_Orthonormalize(orbs)

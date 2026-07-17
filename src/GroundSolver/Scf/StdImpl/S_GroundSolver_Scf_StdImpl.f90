@@ -148,21 +148,24 @@ contains
     use M_Grid
     use M_Grid_Ylm
     use M_SysInteraction_Ylm
+    use M_GroundSolver
     use M_Orbs
 
-    integer(I32) :: lmaxPot, potSize
+    integer(I32) :: lmaxPot, potSize, nUp
 
     call Say_Setup("groundSolver.scf.stdImpl")
 
     lmaxPot = SysInteraction_Ylm_lmax
     potSize = (2 * lmaxPot + 1)**2 * Grid_Ylm_nRadial
 
+    nUp = GroundSolver_NumberOfSpinUpOrbs()
+
     allocate (hartreePotentialMixed(potSize))
     allocate (hartreePotentialRaw(potSize))
     allocate (dOrbTmp(Grid_nPoints))
-    allocate (orbsRaw(Grid_nPoints, Orbs_nOrbsInState / 2))
-    allocate (orbsTmp(Grid_nPoints, Orbs_nOrbsInState / 2))
-    allocate (lambdaDiscarded(Orbs_nOrbsInState / 2))
+    allocate (orbsRaw(Grid_nPoints, nUp))
+    allocate (orbsTmp(Grid_nPoints, nUp))
+    allocate (lambdaDiscarded(nUp))
 
   end subroutine
 
@@ -183,13 +186,16 @@ contains
     use M_SysPotential
     use M_SysInteraction
     use M_Method_Mb_OrbBased
+    use M_GroundSolver
     use M_Orbs
 
     complex(R64), intent(out), contiguous, target :: dOrb(:)
     complex(R64), intent(in), contiguous, target :: orb(:)
     real(R64), intent(in) :: time
 
-    integer(I32) :: j
+    integer(I32) :: j, nUp
+
+    nUp = GroundSolver_NumberOfSpinUpOrbs()
 
     dOrb = 0.0_R64
 
@@ -206,8 +212,8 @@ contains
     dOrb = dOrb + dOrbTmp
 
     ! Exchange term: −K̂·orb = −∑_j W(φ_j, orb)·φ_j
-    ! Loop over occupied orbitals (spin-up only for restricted; factor 2 in Hartree)
-    do j = 1, Orbs_nOrbsInState / 2
+    ! Loop over occupied orbitals (spin-up only; factor 2 in Hartree)
+    do j = 1, nUp
       call SysInteraction_FillInteractionSrc(src, Orbs_orbs(:, j), orb(:))
       call SysInteraction_FillInteractionPotential(interactionPotential, src, time)
       call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, interactionPotential, Orbs_orbs(:, j))
@@ -237,6 +243,7 @@ contains
     use M_Grid
     use M_Grid_Ylm
     use M_DiagonalizerList
+    use M_GroundSolver
     use M_Orbs
     use M_SysPotential
     use M_SysInteraction
@@ -247,10 +254,11 @@ contains
 
     complex(R64), contiguous, pointer :: orbs(:, :)
     complex(R64), contiguous, pointer :: orbsRawFlat(:)
-    integer(I32) :: nG, nOS, j
+    integer(I32) :: nG, nOS, nUp, j
 
     nG = Grid_nPoints
     nOS = Orbs_nOrbsInState
+    nUp = GroundSolver_NumberOfSpinUpOrbs()
     orbs(1:nG, 1:nOS) => state(1:)
 
     ! Step 1: Fill external potential for current time
@@ -259,7 +267,7 @@ contains
     ! Step 2: Build raw Hartree potential from occupied orbitals
     ! Factor 2 accounts for spin degeneracy (restricted: spin-up = spin-down)
     hartreePotentialRaw = 0.0_R64
-    do j = 1, nOS / 2
+    do j = 1, nUp
       call SysInteraction_FillInteractionSrc(src, orbs(:, j), orbs(:, j))
       call SysInteraction_FillInteractionPotential(interactionPotential, 2.0_R64 * src, time)
       hartreePotentialRaw = hartreePotentialRaw + interactionPotential
@@ -284,34 +292,37 @@ contains
     ! Step 4: Gauge-align the eigenvectors with the old orbitals (removes the
     ! arbitrary per-vector phase and the arbitrary rotation within degenerate
     ! shells)
-    orbsRaw = DiagonalizerList(1) % e % evecs(:, 1:nOS / 2)
+    orbsRaw = DiagonalizerList(1) % e % evecs(:, 1:nUp)
     ! ARPACK normalizes in the Euclidean metric; alignment and mixing require
     ! orthonormality with respect to the grid metric (Grid_InnerProduct)
     call Grid_Orthonormalize(orbsRaw)
-    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nOS / 2))
+    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nUp))
 
     ! Step 5: Update the spin-up orbitals and copy spin-up → spin-down
     if (mixTarget .eq. "orbitals") then
-      orbsRawFlat(1:nG * (nOS / 2)) => orbsRaw
-      call Mixing_Mix(state(1:nG * (nOS / 2)), orbsRawFlat)
+      orbsRawFlat(1:nG * nUp) => orbsRaw
+      call Mixing_Mix(state(1:nG * nUp), orbsRawFlat)
     else if (mixTarget .eq. "density") then
       if (hartreePotentialMixedInitializedQ) then
-        call Orbs_MixOccupiedSpace(orbs(:, 1:nOS / 2), orbsRaw, alphaDensity, orbsTmp, lambdaDiscarded)
-        orbs(:, 1:nOS / 2) = orbsTmp
+        call Orbs_MixOccupiedSpace(orbs(:, 1:nUp), orbsRaw, alphaDensity, orbsTmp, lambdaDiscarded)
+        orbs(:, 1:nUp) = orbsTmp
       else
-        orbs(:, 1:nOS / 2) = orbsRaw
+        orbs(:, 1:nUp) = orbsRaw
         hartreePotentialMixedInitializedQ = .true.
       end if
     else
       ! mixTarget="potential": pure replacement, damping happened in Step 2
-      do j = 1, nOS / 2
+      do j = 1, nUp
         orbs(:, j) = orbsRaw(:, j)
       end do
     end if
 
-    do j = 1, nOS / 2
-      orbs(:, nOS / 2 + j) = orbs(:, j)
-    end do
+    ! Restricted: the state holds only the shared spatial set, no copy needed
+    if (.not. Orbs_restrictedQ) then
+      do j = 1, nUp
+        orbs(:, nUp + j) = orbs(:, j)
+      end do
+    end if
 
     ! Step 6: Gram–Schmidt orthonormalize
     call Orbs_Orthonormalize(orbs)

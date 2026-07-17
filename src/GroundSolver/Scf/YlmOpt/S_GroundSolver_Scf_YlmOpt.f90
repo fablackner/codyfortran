@@ -126,6 +126,7 @@ contains
     use M_Grid
     use M_Grid_Ylm
     use M_SysInteraction_Ylm
+    use M_GroundSolver
     use M_Orbs
 
     integer(I32) :: lmaxPot, potSize
@@ -145,7 +146,7 @@ contains
     allocate (srcLm(Grid_Ylm_nRadial))
     allocate (orb(Grid_nPoints))
     allocate (dOrbTmp(Grid_nPoints))
-    allocate (orbsRaw(Grid_nPoints, Orbs_nOrbsInState / 2))
+    allocate (orbsRaw(Grid_nPoints, GroundSolver_NumberOfSpinUpOrbs()))
 
   end subroutine
 
@@ -168,6 +169,7 @@ contains
     use M_SysPotential_Ylm
     use M_SysInteraction
     use M_Method_Mb_OrbBased
+    use M_GroundSolver
     use M_Orbs
     use M_Grid
     use M_Grid_Ylm
@@ -178,7 +180,9 @@ contains
     real(R64), intent(in) :: time
 
     real(R64) :: gVal
-    integer(I32) :: j
+    integer(I32) :: j, nUp
+
+    nUp = GroundSolver_NumberOfSpinUpOrbs()
 
     dOrbLm = 0.0_R64
 
@@ -198,7 +202,7 @@ contains
     ! Exchange: expand to full grid, compute exchange, extract l-component
     orb = 0.0_R64
     call Grid_Ylm_SetLmComponent(orb, l, 0, orbLm)
-    do j = 1, Orbs_nOrbsInState / 2
+    do j = 1, nUp
       call SysInteraction_FillInteractionSrc(src, Orbs_orbs(:, j), orb(:))
       call SysInteraction_FillInteractionPotential(interactionPotential, src, time)
       call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, interactionPotential, Orbs_orbs(:, j))
@@ -230,6 +234,7 @@ contains
     use M_Grid
     use M_Grid_Ylm
     use M_DiagonalizerList
+    use M_GroundSolver
     use M_Orbs
     use M_SysInteraction
     use M_SysInteraction_Ylm
@@ -241,11 +246,12 @@ contains
 
     complex(R64), contiguous, pointer :: orbs(:, :)
     complex(R64), contiguous, pointer :: orbsRawFlat(:)
-    integer(I32) :: nG, nOS, j
+    integer(I32) :: nG, nOS, nUp, j
     integer(I32) :: n, l, m, nr
 
     nG = Grid_nPoints
     nOS = Orbs_nOrbsInState
+    nUp = GroundSolver_NumberOfSpinUpOrbs()
     orbs(1:nG, 1:nOS) => state(1:)
 
     ! Step 1: Extract radial external potential (l=0, m=0 component)
@@ -253,7 +259,7 @@ contains
 
     ! Step 2: Build monopole (l=0) Hartree potential from occupied orbitals
     src = 0.0_R64
-    do j = 1, nOS / 2
+    do j = 1, nUp
       call SysInteraction_FillInteractionSrc(srcTmp, orbs(:, j), orbs(:, j))
       src = src + 2.0_R64 * srcTmp  ! Factor 2 for spin degeneracy
     end do
@@ -279,7 +285,7 @@ contains
     end do
 
     ! Step 4: Map eigenvectors to orbitals using (n,l,m)
-    do j = 1, nOS / 2
+    do j = 1, nUp
       n = OrbsInit_Ylm_HydrogenLike_n(j)
       l = OrbsInit_Ylm_HydrogenLike_l(j)
       m = OrbsInit_Ylm_HydrogenLike_m(j)
@@ -295,20 +301,23 @@ contains
     ! old ones (removes the arbitrary phase of the radial eigenvectors),
     ! then mix and copy spins
     call Grid_Orthonormalize(orbsRaw)
-    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nOS / 2))
+    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nUp))
 
     if (mixTarget .eq. "orbitals") then
-      orbsRawFlat(1:nG * (nOS / 2)) => orbsRaw
-      call Mixing_Mix(state(1:nG * (nOS / 2)), orbsRawFlat)
+      orbsRawFlat(1:nG * nUp) => orbsRaw
+      call Mixing_Mix(state(1:nG * nUp), orbsRawFlat)
     else
-      do j = 1, nOS / 2
+      do j = 1, nUp
         orbs(:, j) = orbsRaw(:, j)
       end do
     end if
 
-    do j = 1, nOS / 2
-      orbs(:, nOS / 2 + j) = orbs(:, j)  ! Copy spin-up → spin-down
-    end do
+    ! Restricted: the state holds only the shared spatial set, no copy needed
+    if (.not. Orbs_restrictedQ) then
+      do j = 1, nUp
+        orbs(:, nUp + j) = orbs(:, j)  ! Copy spin-up → spin-down
+      end do
+    end if
 
     ! Step 6: Gram–Schmidt orthonormalize
     call Orbs_Orthonormalize(orbs)

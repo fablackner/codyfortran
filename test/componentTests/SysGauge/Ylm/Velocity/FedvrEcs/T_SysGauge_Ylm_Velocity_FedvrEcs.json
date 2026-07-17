@@ -1,0 +1,29 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "rmin": 0.0,
+            "rmax": 10.0,
+            "fedvrEcs": {
+                "nElements": 50,
+                "nLocals": 7,
+                "firstEcsElement": 40,
+                "transitionElements": 0,
+                "thetaDeg": 30.0
+            }
+        }
+    },
+    "sysGauge": {
+        "ylm": {
+            "velocity": {
+                "fieldStrength": 0.5,
+                "omega": 0.5,
+                "nCycles": 2.0,
+                "cep": 0.0,
+                "tStart": 0.0,
+                "bodyMass": [ 1.0 ],
+                "fedvrEcs": { }
+            }
+        }
+    }
+}

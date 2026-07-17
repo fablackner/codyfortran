@@ -86,6 +86,29 @@ Key variables from `M_Method_Mb_OrbBased`:
 In restricted mode, spin-up and spin-down electrons share the same spatial
 orbitals, reducing computational cost and exploiting spin symmetry.
 
+Restricted mode requires exactly 2 body types (the spins) with equal
+`nOrbs`; `Orbs_Fabricate` enforces this. Consequences across the codebase:
+
+- **State layout**: only the shared spatial set is stored (`nOrbsSum/2`
+  columns). `OrbsInit`, `Orthonormalize`, `ProjectOnSubspace`, and `SaveOrbs`
+  treat it as a single block (saved as body type 1).
+- **Spin-orbital quantities stay full size**: `h1`/`h2` from
+  `FillH1`/`FillH2`/`ApplySingleBodyOp`/`ApplyCorrelationOp` are
+  `nOrbsSum`-dimensional with the spin blocks duplicated from the spatial
+  block; the CI (Coeffs) layer is unchanged.
+- **Mean fields**: the Hartree (direct) term uses the spin-summed 1-RDM
+  (αα + ββ blocks); exchange remains same-spin only.
+- **Cost**: interaction-potential solves and orbital inner products run over
+  the spatial set only (~4x fewer Poisson solves in `FillH2`,
+  `ApplyCorrelationOp`, and `ApplyHartreeFockOp`); the propagated orbital
+  state is halved.
+- **GroundSolver**: the SCF/MCSCF backends detect the layout via
+  `GroundSolver_NumberOfSpinUpOrbs()` and skip the spin-up → spin-down copy.
+
+End-to-end coverage: `T_He1d_07_ImagTimePropagationMctdhxRestricted` and
+`T_He1d_08_ImagTimePropagationTdhxRestricted` must reproduce the unrestricted
+reference energies exactly.
+
 ---
 
 ## Lifecycle
