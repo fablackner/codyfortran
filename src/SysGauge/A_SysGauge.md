@@ -30,7 +30,7 @@ is included so that the operator is exactly (p̂ + A)²/2m − p̂²/2m.
 
 ## Architecture
 
-The module follows the CodyFortranRDM fabrication pattern:
+The module follows the CodyFortran fabrication pattern:
 
 ```
 ┌────────────────────────────────────────────────────────────────┐

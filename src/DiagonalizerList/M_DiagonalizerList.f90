@@ -7,7 +7,7 @@
 !>
 !> @details
 !> This module defines the public API and abstract type for eigensolvers used
-!> throughout CodyFortranRDM. It implements a **strategy pattern** where the
+!> throughout CodyFortran. It implements a **strategy pattern** where the
 !> concrete eigensolver algorithm (LAPACK, ARPACK, etc.) is selected at runtime
 !> via JSON configuration and bound through polymorphism.
 !>

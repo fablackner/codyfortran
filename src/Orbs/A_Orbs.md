@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Orbs** module manages single-particle orbital coefficients in CodyFortranRDM.
+The **Orbs** module manages single-particle orbital coefficients in CodyFortran.
 It provides the orbital part of the many-body wavefunction ansatz used in MCTDH-type
 methods (MCTDHF, MCTDHB, TD-2RDM, etc.).
 

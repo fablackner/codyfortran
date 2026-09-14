@@ -2,7 +2,7 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief Central API for orbital initialization in the CodyFortranRDM framework.
+!> @brief Central API for orbital initialization in the CodyFortran framework.
 !>
 !> @details
 !> This module exposes procedure pointers that higher-level components use to
@@ -14,7 +14,7 @@
 !> Architecture
 !> ------------
 !> The module follows the Interface/Implementation split pattern used throughout
-!> CodyFortranRDM. This file (M_OrbsInit.f90) defines the public interface via
+!> CodyFortran. This file (M_OrbsInit.f90) defines the public interface via
 !> abstract interfaces and procedure pointers. The companion submodule
 !> (S_OrbsInit.f90) implements the branching logic in `OrbsInit_Fabricate`.
 !>

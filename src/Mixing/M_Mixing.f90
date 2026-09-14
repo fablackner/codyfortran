@@ -13,7 +13,7 @@
 !>
 !> ## Architecture
 !>
-!> The module follows the CodyFortranRDM fabrication pattern:
+!> The module follows the CodyFortran fabrication pattern:
 !>   - **Interface Module** (`M_Mixing.f90`): Declares the procedure pointer
 !>   - **Dispatch Submodule** (`S_Mixing.f90`): Routes JSON to backends
 !>   - **Implementation Submodules**: Provide concrete algorithms

@@ -256,7 +256,7 @@ S₄(Δt) = S₂(γ₁Δt) · S₂(γ₂Δt) · S₂(γ₁Δt)
 
 ---
 
-## Typical Usage in CodyFortranRDM
+## Typical Usage in CodyFortran
 
 ```fortran
 program time_evolution

@@ -1,6 +1,6 @@
 ---
 name: qualityAgent
-description: Run quality checks for CodyFortranRDM by formatting modified Fortran files, linting with fortitude, and executing tests.
+description: Run quality checks for CodyFortran by formatting modified Fortran files, linting with fortitude, and executing tests.
 ---
 
 # Quality Check Agent

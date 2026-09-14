@@ -1,7 +1,7 @@
-# CodyFortranRDM Agent Context
+# CodyFortran Agent Context
 
 ## WHAT
-CodyFortranRDM is a modular Fortran simulation tool for quantum many-body systems. It can compute ground-state properties and time-dependent properties using multiple many-body methods. Methods differ in the representation of the many-body quantum state and/or in the equation of motion. The JSON configuration mirrors the code hierarchy, and a chain of `*_Fabricate` calls binds deferred procedure pointers to concrete implementations at runtime.
+CodyFortran is a modular Fortran simulation tool for quantum many-body systems. It can compute ground-state properties and time-dependent properties using multiple many-body methods. Methods differ in the representation of the many-body quantum state and/or in the equation of motion. The JSON configuration mirrors the code hierarchy, and a chain of `*_Fabricate` calls binds deferred procedure pointers to concrete implementations at runtime.
 
 ## WHY
 The goal is to combine different methods in one modular framework while reusing shared components such as Grid, Coeffs, Diagonalizer, Propagator, SysInteraction, SysKinetic, SysPotential, and Utils. Modularization is enabled by small module interfaces with clear interface contracts.

@@ -2,7 +2,7 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief Central two-body interaction API for the CodyFortranRDM framework.
+!> @brief Central two-body interaction API for the CodyFortran framework.
 !>
 !> @details This module defines the abstract interface for particle-particle
 !> interactions (Ŵ operator) used in many-body quantum simulations. It exposes

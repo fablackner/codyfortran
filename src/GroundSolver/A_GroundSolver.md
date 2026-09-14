@@ -33,7 +33,7 @@ M_GroundSolver.f90              ← Interface: procedure pointers + abstract int
             └── S_GroundSolver_Mcscf_YlmOpt.f90  ← Ylm-optimized impl (spherical grids)
 ```
 
-The module follows the **CodyFortranRDM fabrication pattern**:
+The module follows the **CodyFortran fabrication pattern**:
 - **M_* files**: Declare procedure pointers and abstract interfaces (contracts)
 - **S_* files**: Provide implementations and JSON-based dispatch logic
 

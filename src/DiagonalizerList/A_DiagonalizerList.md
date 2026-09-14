@@ -169,7 +169,7 @@ num_found    =  DiagonalizerList(1)%e%nFound
 
 ---
 
-## Typical Usage in CodyFortranRDM
+## Typical Usage in CodyFortran
 
 ```fortran
 ! 1. Setup fabrication input (callback + dimension)

@@ -3,7 +3,7 @@
 ## Overview
 
 The **Method** module defines the unified dynamics interface for quantum many-body
-simulations in CodyFortranRDM. It provides the time-derivative contract
+simulations in CodyFortran. It provides the time-derivative contract
 `Method_TimeDerivative(dState, state, t)` that all propagators consume, enabling
 the framework to evolve arbitrary quantum states through time.
 

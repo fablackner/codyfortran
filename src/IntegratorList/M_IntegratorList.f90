@@ -7,7 +7,7 @@
 !>
 !> @details
 !> This module defines the abstract API that all time-integration backends
-!> implement. It follows the CodyFortranRDM **Interface Module + Submodule**
+!> implement. It follows the CodyFortran **Interface Module + Submodule**
 !> paradigm where:
 !>
 !> - **Interface modules** (`M_*.f90`) define contracts via abstract types

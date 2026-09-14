@@ -17,7 +17,7 @@
 !>
 !> ## Architecture
 !>
-!> The module follows the CodyFortranRDM fabrication pattern:
+!> The module follows the CodyFortran fabrication pattern:
 !>   - **Interface Module** (`M_GroundSolver.f90`): Declares procedure pointers
 !>   - **Dispatch Submodule** (`S_GroundSolver.f90`): Routes JSON to backends
 !>   - **Implementation Submodules**: Provide concrete algorithms

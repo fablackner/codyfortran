@@ -12,7 +12,7 @@ In atomic units (ℏ = m_e = 1), this simplifies to T̂ = −(1/2m)∇² for a p
 
 ## Architecture
 
-The module follows the **CodyFortranRDM fabrication pattern**:
+The module follows the **CodyFortran fabrication pattern**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐

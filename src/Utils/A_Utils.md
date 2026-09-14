@@ -3,7 +3,7 @@
 ## Overview
 
 The **Utils** module is a collection of 68 utility modules providing the numerical
-and algebraic infrastructure for the CodyFortranRDM framework. These modules are
+and algebraic infrastructure for the CodyFortran framework. These modules are
 **stateless** helper functions—they do not follow the Fabricate/Setup pattern and
 have no JSON configuration. They are imported directly by other modules as needed.
 

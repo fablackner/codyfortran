@@ -3,7 +3,7 @@
 ## Overview
 
 The **IntegratorList** module provides a pluggable ODE integrator framework for
-time-propagating quantum states in CodyFortranRDM. It follows the project's
+time-propagating quantum states in CodyFortran. It follows the project's
 _Interface Module + Implementation Submodule_ paradigm: a single abstract API
 (`M_IntegratorList`) defines the contract, while concrete backends live in
 separate submodules—each implementing a different numerical method.

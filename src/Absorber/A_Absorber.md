@@ -14,7 +14,7 @@ where M(x) = 1 in the interior (physical region) and M(x) → 0 at the domain ed
 
 ## Architecture Overview
 
-The Absorber follows the **Interface Module + Implementation Submodule** pattern used throughout CodyFortranRDM:
+The Absorber follows the **Interface Module + Implementation Submodule** pattern used throughout CodyFortran:
 
 ```
 src/Absorber/

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **OrbsInit** module provides orbital initialization for quantum many-body simulations in CodyFortranRDM. It constructs initial single-particle wavefunctions (orbitals) on various spatial discretizations, serving as the starting point for time-dependent and ground-state calculations.
+The **OrbsInit** module provides orbital initialization for quantum many-body simulations in CodyFortran. It constructs initial single-particle wavefunctions (orbitals) on various spatial discretizations, serving as the starting point for time-dependent and ground-state calculations.
 
 ## Architecture
 

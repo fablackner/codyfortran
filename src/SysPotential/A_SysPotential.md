@@ -3,7 +3,7 @@
 ## Overview
 
 The **SysPotential** module implements external (one-body) potentials for the
-CodyFortranRDM quantum many-body simulation framework. It provides the operator
+CodyFortran quantum many-body simulation framework. It provides the operator
 **V̂_ext** in the many-body Hamiltonian:
 
 ```

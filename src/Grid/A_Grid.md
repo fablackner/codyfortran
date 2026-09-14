@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The **Grid** module provides the spatial discretization layer for quantum many-body simulations in CodyFortranRDM. It abstracts away coordinate-system details so that higher-level code (orbitals, Hamiltonians, propagators) can operate on generic field vectors without knowing whether the underlying representation is a 1D uniform mesh, a 3D spherical-harmonic expansion, or a discrete Hubbard lattice.
+The **Grid** module provides the spatial discretization layer for quantum many-body simulations in CodyFortran. It abstracts away coordinate-system details so that higher-level code (orbitals, Hamiltonians, propagators) can operate on generic field vectors without knowing whether the underlying representation is a 1D uniform mesh, a 3D spherical-harmonic expansion, or a discrete Hubbard lattice.
 
 Key responsibilities:
 

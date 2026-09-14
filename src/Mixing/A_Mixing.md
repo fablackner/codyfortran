@@ -11,7 +11,7 @@ or any other flattened complex quantity.
 
 ## Architecture Overview
 
-Standard CodyFortranRDM fabrication pattern:
+Standard CodyFortran fabrication pattern:
 
 ```
 src/Mixing/

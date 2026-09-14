@@ -3,7 +3,7 @@
 ## Overview
 
 The **SysInteraction** module implements particle-particle (two-body) interactions
-for the CodyFortranRDM quantum many-body simulation framework. It provides the
+for the CodyFortran quantum many-body simulation framework. It provides the
 operator **Ŵ** that appears in the many-body Hamiltonian:
 
 ```
