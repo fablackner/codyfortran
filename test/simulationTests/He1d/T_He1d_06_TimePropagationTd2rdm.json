@@ -1,0 +1,88 @@
+{
+    "grid": {
+        "linear": {
+            "xmin": -20,
+            "xmax": 20,
+            "const": {
+                "nPoints": 21
+            }
+        }
+    },
+    "sysKinetic": {
+        "linear": {
+            "laplacian": {
+                "bodyMass": [ 1.0, 1.0 ],
+                "finDiff": { }
+            }
+        }
+    },
+    "sysPotential": {
+        "linear": {
+            "softYukawa": {
+                "position": [ 0.0 ],
+                "charge": [ 2.0 ],
+                "softening1": [ 0.0 ],
+                "softening2": [ 1.0 ],
+                "dampening": [ 0.0 ],
+                "stdImpl": { }
+            }
+        }
+    },
+    "sysInteraction": {
+        "linear": {
+            "softYukawa": {
+                "strength": 1.0,
+                "softening1": 0.0,
+                "softening2": 1.0,
+                "dampening": 0.0,
+                "fftw": { }
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 1, 1 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 4, 4 ],
+                "td2rdm": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": false
+    },
+    "orbsInit": {
+        "load": { }
+    },
+    "twoRdm": {
+        "fermionic": {
+            "singlet": { }
+        }
+    },
+    "twoRdmInit": {
+        "load": { }
+    },
+    "reconstruction": {
+        "singlet": {
+            "valdemoro": {
+                "ccQ": false
+            }
+        }
+    },
+    "integratorList": {
+        "rk": {
+            "o4Expl": { }
+        }
+    },
+    "propagator": {
+        "single": { }
+    },
+    "program": {
+        "startTime": 0.0,
+        "endTime": 0.001,
+        "outputStep": 0.00002,
+        "nTimeSteps": 2
+    }
+}

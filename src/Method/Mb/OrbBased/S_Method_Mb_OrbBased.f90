@@ -44,6 +44,8 @@ contains
     use M_Method_Mb_OrbBased_Tdci
     use M_Method_Mb_OrbBased_Tdhx
     use M_Method_Mb_OrbBased_Mctdhx
+    use M_Method_Mb_OrbBased_Td2rdm
+    use M_Method_Mb_OrbBased_Td2rdmStaticOrbs
 
     integer(I32) :: i, ibt, index, counter
 
@@ -122,8 +124,14 @@ contains
     else if (Json_GetExistence("method.mb.orbBased.mctdhx")) then
       call Method_Mb_OrbBased_Mctdhx_Fabricate
 
+    else if (Json_GetExistence("method.mb.orbBased.td2rdm")) then
+      call Method_Mb_OrbBased_Td2rdm_Fabricate
+
+    else if (Json_GetExistence("method.mb.orbBased.td2rdmStaticOrbs")) then
+      call Method_Mb_OrbBased_Td2rdmStaticOrbs_Fabricate
+
     else
-      error stop "method.mb.orbBased is missing one of: tdci, tdhx, mctdhx"
+      error stop "method.mb.orbBased is missing one of: tdci, tdhx, mctdhx, td2rdm, td2rdmStaticOrbs"
     end if
 
   end subroutine
