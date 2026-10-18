@@ -131,9 +131,19 @@ function(add_fortran_test file)
     # Set environment variables for tests
     set_tests_properties("${test_name}" PROPERTIES
         ENVIRONMENT "CODY_PROJECT_DIR=${CMAKE_SOURCE_DIR}")
+
+    # Tests in the same folder may consume files written by earlier ones
+    # (e.g. orb*.in, coeffs.in), so run them in sequence; folders stay parallel
+    string(MAKE_C_IDENTIFIER "${src_dir}" dir_key)
+    set(prev_test "${last_test_in_${dir_key}}")
+    if(prev_test)
+        set_tests_properties("${test_name}" PROPERTIES DEPENDS "${prev_test}")
+    endif()
+    set(last_test_in_${dir_key} "${test_name}" PARENT_SCOPE)
 endfunction()
 
 file(GLOB_RECURSE test_sources CONFIGURE_DEPENDS "test/*.f90")
+list(SORT test_sources)
 foreach(test_file ${test_sources})
     add_fortran_test("${test_file}")
     message(STATUS "Added test ${test_file}")

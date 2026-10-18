@@ -136,6 +136,14 @@ cd build
 ctest -R T_
 ```
 
+> **Note**: Each test uses OpenMP with one thread per core by default (or `OMP_NUM_THREADS` if set). Running tests in parallel with `ctest -j` therefore oversubscribes the CPU, which can slow the tests down drastically and trigger timeouts, especially on machines with few cores. Prefer the sequential `ctest -R T_`, or set `OMP_NUM_THREADS` so that `-j` × threads does not exceed the number of cores, e.g. on a 4-core machine:
+>
+> ```bash
+> OMP_NUM_THREADS=2 ctest -R T_ -j2
+> ```
+>
+> Tests in the same folder always run in order, because later tests read files written by earlier ones.
+
 CodyFortran's console output uses ANSI color escape codes and a few non-ASCII characters. If you prefer plain ASCII (for example when redirecting output to a file) or you don't like the styled output, disable the fancy printing by setting
 ```bash
 export CODY_PRETTY_PRINT="OFF"
