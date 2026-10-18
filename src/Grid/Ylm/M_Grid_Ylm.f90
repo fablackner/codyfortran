@@ -27,6 +27,26 @@ module M_Grid_Ylm
   end interface
 
   interface
+    !> Evaluate an axially symmetric (m = 0) field f(r, l), 0 <= l <= lmax, on
+    !> the Gauss-Legendre nodes in cos(theta): fNodes(r, q) = sum_l f_l(r) Y_l0(x_q).
+    !> Requires lmax <= Grid_Ylm_lmaxNodesM0.
+    module subroutine Grid_Ylm_ToNodesM0(fNodes, f, lmax)
+      complex(R64), intent(out), contiguous :: fNodes(:, :)
+      complex(R64), intent(in), contiguous  :: f(:)
+      integer(I32), intent(in)              :: lmax
+    end subroutine
+
+    !> Project a field given on the Gauss-Legendre nodes onto Y_l0, l <= lmax:
+    !> f_l(r) = sum_q Grid_Ylm_nodeWeightsM0(q) Y_l0(x_q) fNodes(r, q). Exact for
+    !> fNodes of total angular degree <= 2 Grid_Ylm_nNodesM0 - 1 - lmax.
+    module subroutine Grid_Ylm_FromNodesM0(f, fNodes, lmax)
+      complex(R64), intent(out), contiguous :: f(:)
+      complex(R64), intent(in), contiguous  :: fNodes(:, :)
+      integer(I32), intent(in)              :: lmax
+    end subroutine
+  end interface
+
+  interface
     !> Number of (l,m) channels of a layout with 0 <= l <= lmax and
     !> |m| <= min(l, mmax). With mmax >= lmax this is the full (lmax+1)**2.
     pure module function Grid_Ylm_NChannels(lmax, mmax) result(res)
@@ -47,6 +67,13 @@ module M_Grid_Ylm
   !> Defaults to lmax (full expansion). Lowering it truncates the angular
   !> basis for problems that conserve m (e.g. linearly polarized lasers).
   integer(I32) :: Grid_Ylm_mmax
+
+  !> Gauss-Legendre representation of axially symmetric (m = 0) fields, set
+  !> up with the grid: number of nodes in cos(theta), largest l covered by
+  !> the tables, and angular weights 2 pi w_q (sum_q weight = 4 pi).
+  integer(I32) :: Grid_Ylm_nNodesM0
+  integer(I32) :: Grid_Ylm_lmaxNodesM0
+  real(R64), allocatable :: Grid_Ylm_nodeWeightsM0(:)
 
   !> Maximum radius value rmax of the radial grid.
   real(R64) :: Grid_Ylm_rmax

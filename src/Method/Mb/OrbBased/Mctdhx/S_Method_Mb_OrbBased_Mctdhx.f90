@@ -196,7 +196,6 @@ contains
     complex(R64), contiguous, pointer :: orbs(:, :)
     complex(R64), contiguous, pointer :: dOrbs(:, :)
 
-    complex(R64), allocatable :: h1(:, :)
     complex(R64), allocatable :: h2(:, :, :, :)
     complex(R64), allocatable :: rdm1(:, :)
     complex(R64), allocatable :: rdm2(:, :, :, :)
@@ -212,10 +211,11 @@ contains
     call Coeffs_ApplyH1FillRdm1(coeffs, rdm1_=rdm1)
     call Coeffs_ApplyH2FillRdm2(coeffs, rdm2_=rdm2)
 
-    call Method_Mb_OrbBased_FillH1(h1, orbs, time)
+    ! Only the interaction: the one-body part is propagated exactly by the
+    ! linear split-step part, which rotates the orbitals with the unprojected
+    ! h at fixed coefficients (applying h1 here as well would count it twice)
     call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, rdm1, rdm2, time, h2_=h2)
 
-    call Coeffs_ApplyH1FillRdm1(coeffs, dCoeffs_=dCoeffs, h1_=h1)
     call Coeffs_ApplyH2FillRdm2(coeffs, dCoeffs_=dCoeffs, h2_=h2)
 
     call Coeffs_ProjectOnSubspace(dCoeffs, coeffs)

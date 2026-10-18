@@ -79,7 +79,17 @@ The velocity-gauge pulse is specified through the **vector potential**
 A(t) = -(E0/ω) · sin²(π (t−t0)/T) · sin(ω (t−t0−T/2) + cep),  T = 2π nCycles/ω
 ```
 
-zero outside [t0, t0+T]. A(t) vanishes identically at both pulse edges. The
+zero outside [t0, t0+T]. A(t) vanishes identically at both pulse edges.
+
+With `"envelope": "field"` the sin² envelope sits on the electric field
+instead (the usual few-cycle convention, e.g. Lackner et al., PRA 95, 033414):
+
+```
+E(t) = E0 · sin²(π (t−t0)/T) · cos(ω (t−t0) + cep),   A(t) = −∫_{t0}^{t} E dt'
+```
+
+evaluated analytically; for integer nCycles A(t0+T) = 0. The carrier phase is
+then measured from the pulse start. The
 physical electric field E(t) = −dA/dt equals the CoulombLaser length-gauge
 field `E0 sin² cos` **plus an envelope-derivative correction of relative size
 1/nCycles** — observables from the two gauges therefore agree only in the
@@ -140,6 +150,7 @@ call SysGauge_Setup        ! Copies radial/contour coordinates
         "nCycles": 1.0,
         "cep": 0.0,
         "tStart": 0.0,
+        "envelope": "vectorPotential",
         "bodyMass": [ 1.0 ],
         "fedvr": { }
       }
@@ -174,6 +185,7 @@ contains `sysGauge` (no-op otherwise) and applies it inside
 | `SysGauge_Ylm_ApplyRadialFirstDerivative` | pointer | `(dfLm, fLm)` per-channel d/dr |
 | `SysGauge_Ylm_radialCoordinates` | `complex(:)` | r (Fedvr) or z(r) (ECS) |
 | `SysGauge_Ylm_Velocity_VectorPotentialAmplitude` | function | A(t) of the pulse |
+| `SysGauge_Ylm_Velocity_FieldAmplitude` | function | E(t) = −dA/dt of the pulse |
 
 ## Tests
 

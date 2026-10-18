@@ -452,4 +452,9 @@ call Grid_ProjectOnSubspace(dOrbs, Orbs_orbs)
 - **Linear grids**: Inner product is O(N) with vectorized `sum()`.
 - **Lattice grids**: Uses intrinsic `dot_product` (no weights needed), typically BLAS-optimized.
 - **Ylm spatial product**: O(l_max⁴ × N_radial) due to Gaunt coefficient loops; precompute where possible.
+  When all three operands are axially symmetric (`mMax*_ = 0`, e.g. `grid.ylm.mmax = 0`
+  with a z-polarized laser) an exact Gauss–Legendre quadrature in cos θ is used instead:
+  both factors are evaluated on the nodes, multiplied pointwise and projected back
+  (O(l_max² × N_radial), matrix products). Tables cover l ≤ 2 lmax + 2 and products of
+  total degree ≤ 4 lmax + 5; larger layouts fall back to the Gaunt sum.
 - **FEDVR grids**: Sparse structure can be exploited by kinetic operators but inner products remain dense.

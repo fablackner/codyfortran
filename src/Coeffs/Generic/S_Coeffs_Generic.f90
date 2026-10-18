@@ -23,6 +23,17 @@
 !> Simultaneously builds RDM while applying H. The linearized `orbCode` packs
 !> orbital indices into a single integer for cache-efficient accumulation.
 !>
+!> **Index Convention:**
+!> A connection (orbCode(i,j), factor, jC) of configuration iC stores
+!> factor·|jC⟩ = a†_i a_j |iC⟩, so the accumulation loops naturally act with
+!> the transposed index order. The packing helpers (`FillH1Lin`, `FillH2Lin`,
+!> `FillRdm1FromRdm1Lin`, `FillRdm2FromRdm2Lin`) translate between this
+!> internal order and the public convention of M_Coeffs:
+!>   h1(i,j) = ⟨i|h|j⟩,  rdm1(i,j) = ⟨a†_j a_i⟩,
+!>   rdm2(i1,i2,j1,j2) = ⟨a†_j1 a†_j2 a_i2 a_i1⟩.
+!> The transposition is invisible for real orbitals and Hamiltonians but
+!> essential for complex ones (e.g., velocity-gauge laser coupling).
+!>
 !> **Excitation Application:**
 !> Exploits tensor-product structure: only the affected body-type slice changes.
 !> Uses a reusable buffer (`coeffsBuffer`) to avoid repeated allocation.
@@ -90,11 +101,12 @@ contains
 !>
 !> This routine uses precomputed `singles` connectivity from ConfigList:
 !> for each configuration iCoeff, iterate over allowed single excitations
-!> (p→q) and accumulate:
-!>   dCoeffs(iCoeff) += h1(p,q) × factor × coeffs(jCoeff)
+!> factor·|jCoeff⟩ = a†_p a_q |iCoeff⟩ and accumulate:
+!>   dCoeffs(iCoeff) += h1(q,p) × factor × coeffs(jCoeff)
 !>
 !> If `rdm1_` is requested, simultaneously accumulates:
-!>   rdm1(p,q) += factor × conj(coeffs(jCoeff)) × coeffs(iCoeff)
+!>   rdm1(q,p) += factor × conj(coeffs(jCoeff)) × coeffs(iCoeff)
+!> (the transposition is done by the packing helpers, see Index Convention)
 !>
 !> @param[in]    coeffs   CI coefficient vector
 !> @param[out]   rdm1_    (optional) 1-RDM output, allocated if present
@@ -321,7 +333,8 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Unpack linearized 1-RDM into standard 2D matrix form.
 !>
-!> Maps `orbCode = (i-1)*nO + j` back to rdm1(i,j).
+!> The accumulator at `orbCode = (i-1)*nO + j` holds ⟨a†_i a_j⟩, which is
+!> rdm1(j,i) in the public convention rdm1(i,j) = ⟨a†_j a_i⟩.
   subroutine FillRdm1FromRdm1Lin(rdm1_, rdm1Lin)
     use M_Method_Mb
     use M_Method_Mb_OrbBased
@@ -341,7 +354,7 @@ contains
         orbCode = (orbCode - 1) * nO + i1
         orbCode = (orbCode - 1) * nO + j1
 
-        rdm1_(i1, j1) = rdm1Lin(orbCode)
+        rdm1_(j1, i1) = rdm1Lin(orbCode)
 
       end do
     end do
@@ -359,6 +372,10 @@ contains
 !>
 !> Inter-body terms (different body types) use antisymmetric convention via
 !> Klein transformation for consistent handling of distinguishable particles.
+!>
+!> The accumulators hold ⟨a†_i1 a†_i2 a_j2 a_j1⟩; the creator and annihilator
+!> index pairs are swapped at the end to return the public convention
+!> rdm2(i1,i2,j1,j2) = ⟨a†_j1 a†_j2 a_i2 a_i1⟩.
   subroutine FillRdm2FromRdm2Lin(rdm2_, rdm2Lin)
     use M_Method_Mb
     use M_Method_Mb_OrbBased
@@ -368,6 +385,7 @@ contains
 
     integer(I32) :: i1, i2, j1, j2, i1bt, i2bt, j1bt, j2bt
     integer(I32) :: nO, orbCode
+    complex(R64), allocatable :: rdm2Tmp(:, :, :, :)
 
     nO = Method_Mb_OrbBased_nOrbsSum
 
@@ -431,12 +449,26 @@ contains
       end do
     end do
 
+    ! Swap creator and annihilator index pairs (public convention)
+    allocate (rdm2Tmp, source=rdm2_)
+    do j2 = 1, nO
+      do j1 = 1, nO
+        do i2 = 1, nO
+          do i1 = 1, nO
+            rdm2_(i1, i2, j1, j2) = rdm2Tmp(j1, j2, i1, i2)
+          end do
+        end do
+      end do
+    end do
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Pack 2D 1-body Hamiltonian into linearized form for fast lookup.
 !>
-!> Uses same encoding as `FillRdm1FromRdm1Lin`: orbCode = (i-1)*nO + j.
+!> Uses same encoding as `FillRdm1FromRdm1Lin`: orbCode = (i-1)*nO + j. The
+!> connection a†_i a_j of configuration iC couples to ⟨iC|Ĥ₁|jC⟩ through
+!> h1(j,i), so the transposed element is stored.
   subroutine FillH1Lin(h1Lin, h1_)
     use M_Method_Mb
     use M_Method_Mb_OrbBased
@@ -456,7 +488,7 @@ contains
         orbCode = (orbCode - 1) * nO + i1
         orbCode = (orbCode - 1) * nO + j1
 
-        h1Lin(orbCode) = h1_(i1, j1)
+        h1Lin(orbCode) = h1_(j1, i1)
 
       end do
     end do
@@ -475,17 +507,33 @@ contains
 !>
 !> Same body type with bosonic statistics uses symmetrized form (with diagonal fix).
 !> Different body types use antisymmetric convention via Klein transformation.
-  subroutine FillH2Lin(h2Lin, h2_)
+!>
+!> As for `FillH1Lin`, the connections act with the transposed index order, so
+!> the creator and annihilator index pairs of h2 are swapped before folding.
+  subroutine FillH2Lin(h2Lin, h2In)
     use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(out), contiguous  :: h2Lin(:)
-    complex(R64), intent(in), contiguous   :: h2_(:, :, :, :)
+    complex(R64), intent(in), contiguous   :: h2In(:, :, :, :)
 
     integer(I32) :: i1, i2, j1, j2, i1bt, i2bt, j1bt, j2bt
     integer(I32) :: nO, orbCode
+    complex(R64), allocatable :: h2_(:, :, :, :)
 
     nO = Method_Mb_OrbBased_nOrbsSum
+
+    ! Swap creator and annihilator index pairs (internal convention)
+    allocate (h2_, mold=h2In)
+    do j2 = 1, nO
+      do j1 = 1, nO
+        do i2 = 1, nO
+          do i1 = 1, nO
+            h2_(i1, i2, j1, j2) = h2In(j1, j2, i1, i2)
+          end do
+        end do
+      end do
+    end do
 
     do j2 = 1, nO
       do j1 = 1, j2

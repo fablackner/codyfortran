@@ -123,6 +123,16 @@ stride_bt = ∏_{bt' < bt} nConfigurations(bt')
 | `Coeffs_ApplyH1FillRdm1` | Apply Ĥ₁ = Σ h¹_{pq} a†_p a_q; optionally compute 1-RDM |
 | `Coeffs_ApplyH2FillRdm2` | Apply Ĥ₂ = ½Σ h²_{pqrs} a†_p a†_q a_s a_r; optionally compute 2-RDM |
 
+Index convention (shared with `Method_Mb_OrbBased_FillH1/H2`, TwoRdm and the
+orbital equations of motion): h¹_{pq} = ⟨p|h|q⟩, rdm1(p,q) = ⟨a†_q a_p⟩ and
+rdm2(p,q,r,s) = ⟨a†_r a†_s a_q a_p⟩. The Generic backend's connectivity loops
+act with the transposed index order internally; the packing helpers
+(`FillH1Lin`, `FillH2Lin`, `FillRdm{1,2}FromRdm{1,2}Lin`) translate. The
+distinction only matters for complex orbitals or Hamiltonians (e.g., the
+velocity-gauge laser coupling), where the transposed matrices are the complex
+conjugates. The body-type-resolved `FillRdm{1,2,3}Bt` keep their documented
+a†-first ordering.
+
 These are the performance-critical routines. They simultaneously:
 1. Compute `dCoeffs = H|coeffs⟩` for time propagation
 2. Accumulate RDM elements for observables

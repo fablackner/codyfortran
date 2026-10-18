@@ -36,6 +36,13 @@ contains
       Json_Get("sysGauge.ylm.velocity.tStart", 0.0_R64)
     SysGauge_Ylm_Velocity_bodyMass = &
       Json_Get("sysGauge.ylm.velocity.bodyMass", [1.0_R64])
+    SysGauge_Ylm_Velocity_envelope = &
+      Json_Get("sysGauge.ylm.velocity.envelope", "vectorPotential")
+
+    if (SysGauge_Ylm_Velocity_envelope .ne. "vectorPotential" .and. &
+        SysGauge_Ylm_Velocity_envelope .ne. "field") then
+      error stop "sysGauge.ylm.velocity.envelope must be one of: vectorPotential, field"
+    end if
 
     SysGauge_timeIndependentQ = .false.
     SysGauge_bodyTypeIndependentQ = .true.
@@ -59,7 +66,7 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Vector potential A(t) of the sin²-envelope pulse (zero outside the pulse).
+  !> Vector potential A(t) of the sin²-envelope pulse (zero before the pulse).
   module function SysGauge_Ylm_Velocity_VectorPotentialAmplitude(time) result(res)
     use M_Utils_Constants
 
@@ -67,21 +74,90 @@ contains
     real(R64) :: res
 
     real(R64) :: tRel, duration, envelope, carrier
+    real(R64) :: omega, omegaEnv, cep
 
     res = 0.0_R64
 
-    if (SysGauge_Ylm_Velocity_omega <= 0.0_R64) return
+    omega = SysGauge_Ylm_Velocity_omega
+    cep = SysGauge_Ylm_Velocity_cep
 
-    duration = 2.0_R64 * PI * SysGauge_Ylm_Velocity_nCycles / SysGauge_Ylm_Velocity_omega
+    if (omega <= 0.0_R64) return
+
+    duration = 2.0_R64 * PI * SysGauge_Ylm_Velocity_nCycles / omega
+    tRel = time - SysGauge_Ylm_Velocity_tStart
+
+    if (tRel < 0.0_R64) return
+
+    if (SysGauge_Ylm_Velocity_envelope .eq. "field") then
+      ! A(t) = -E0 int_0^tRel sin²(omegaEnv s / 2) cos(omega s + cep) ds,
+      ! with sin² = (1 - cos(omegaEnv s)) / 2 and omegaEnv = 2 pi / T
+      tRel = min(tRel, duration)
+      omegaEnv = 2.0_R64 * PI / duration
+
+      res = (sin(omega * tRel + cep) - sin(cep)) / (2.0_R64 * omega) &
+            - 0.25_R64 * SinIntegral(omega + omegaEnv) &
+            - 0.25_R64 * SinIntegral(omega - omegaEnv)
+      res = -SysGauge_Ylm_Velocity_fieldStrength * res
+      return
+    end if
+
+    if (tRel > duration) return
+
+    envelope = sin(PI * tRel / duration)**2
+    carrier = sin(omega * (tRel - 0.5_R64 * duration) + cep)
+
+    res = -SysGauge_Ylm_Velocity_fieldStrength / omega * envelope * carrier
+
+  contains
+
+    !> int_0^tRel cos(w s + cep) ds (limit tRel cos(cep) for w = 0).
+    pure function SinIntegral(w) result(val)
+      real(R64), intent(in) :: w
+      real(R64) :: val
+
+      if (abs(w) < 1.0e-12_R64) then
+        val = tRel * cos(cep)
+      else
+        val = (sin(w * tRel + cep) - sin(cep)) / w
+      end if
+
+    end function
+
+  end function
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Electric field E(t) = -dA/dt of the pulse (zero outside the pulse).
+  module function SysGauge_Ylm_Velocity_FieldAmplitude(time) result(res)
+    use M_Utils_Constants
+
+    real(R64), intent(in) :: time
+    real(R64) :: res
+
+    real(R64) :: tRel, duration, omega, cep, phaseEnv
+
+    res = 0.0_R64
+
+    omega = SysGauge_Ylm_Velocity_omega
+    cep = SysGauge_Ylm_Velocity_cep
+
+    if (omega <= 0.0_R64) return
+
+    duration = 2.0_R64 * PI * SysGauge_Ylm_Velocity_nCycles / omega
     tRel = time - SysGauge_Ylm_Velocity_tStart
 
     if (tRel < 0.0_R64 .or. tRel > duration) return
 
-    envelope = sin(PI * tRel / duration)**2
-    carrier = sin(SysGauge_Ylm_Velocity_omega * (tRel - 0.5_R64 * duration) &
-                  + SysGauge_Ylm_Velocity_cep)
+    phaseEnv = PI * tRel / duration
 
-    res = -SysGauge_Ylm_Velocity_fieldStrength / SysGauge_Ylm_Velocity_omega * envelope * carrier
+    if (SysGauge_Ylm_Velocity_envelope .eq. "field") then
+      res = SysGauge_Ylm_Velocity_fieldStrength * sin(phaseEnv)**2 * cos(omega * tRel + cep)
+    else
+      ! -d/dt of A = -(E0/omega) sin²(phaseEnv) sin(omega (tRel - T/2) + cep)
+      res = SysGauge_Ylm_Velocity_fieldStrength / omega * &
+            (2.0_R64 * PI / duration * sin(phaseEnv) * cos(phaseEnv) &
+             * sin(omega * (tRel - 0.5_R64 * duration) + cep) &
+             + omega * sin(phaseEnv)**2 * cos(omega * (tRel - 0.5_R64 * duration) + cep))
+    end if
 
   end function
 

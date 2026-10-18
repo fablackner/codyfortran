@@ -176,6 +176,12 @@ soon as the residual error estimate drops below `tolerance` (up to
 and retried up to `maxRestarts` times. Requires a Hermitian generator
 (TimeDerivative = −i Ĥ ψ with Ĥ Hermitian).
 
+With `"imagTimeQ": true` the same Lanczos basis gives the imaginary-time
+propagator exp(−Δτ Ĥ)ψ (the callback keeps the real-time convention
+−i Ĥ ψ). The result is not normalized; e.g. for stiff one-body operators of
+FEDVR grids this replaces an explicit imaginary-time integrator with a tiny
+step size.
+
 ---
 
 ## Adding a New Integrator

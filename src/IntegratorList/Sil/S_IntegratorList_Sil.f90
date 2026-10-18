@@ -34,6 +34,11 @@
 !> | `krylovDim`   | integer | 32      | Maximum Krylov subspace dimension  |
 !> | `tolerance`   | real    | 1e-10   | Error tolerance per sub-step       |
 !> | `maxRestarts` | integer | 8       | Max step-halving retries           |
+!> | `imagTimeQ`   | logical | false   | Imaginary time: exp(−Δτ Ĥ)         |
+!>
+!> With `imagTimeQ` the same Lanczos basis yields exp(−Δτ Ĥ)|ψ⟩ (the callback
+!> keeps the real-time convention −i Ĥ v). The result is not normalized; the
+!> caller renormalizes (e.g., orbital orthonormalization) as usual.
 !>
 !> ## Properties
 !>
@@ -86,6 +91,7 @@ contains
     this % krylovDim = Json_Get("krylovDim", 32, path_=this % path)
     this % tolerance = Json_Get("tolerance", 1.0e-10_R64, path_=this % path)
     this % maxRestarts = Json_Get("maxRestarts", 8, path_=this % path)
+    this % imagTimeQ = Json_Get("imagTimeQ", .false., path_=this % path)
 
   end subroutine
 
@@ -300,9 +306,15 @@ contains
 
       call LapackLib_DiagonalizeGeneric(eigVals, eigVecs, triDiag, .true.)
 
-      do j = 1, mDim
-        coeffs(j) = eigVecs(1, j) * exp(-eye * dt * eigVals(j))
-      end do
+      if (this % imagTimeQ) then
+        do j = 1, mDim
+          coeffs(j) = eigVecs(1, j) * exp(-dt * eigVals(j))
+        end do
+      else
+        do j = 1, mDim
+          coeffs(j) = eigVecs(1, j) * exp(-eye * dt * eigVals(j))
+        end do
+      end if
       phiOut(:) = matmul(eigVecs, coeffs)
 
       errEst = beta(mDim) * abs(phiOut(mDim))

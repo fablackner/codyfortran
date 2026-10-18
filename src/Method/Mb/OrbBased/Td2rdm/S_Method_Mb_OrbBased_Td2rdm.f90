@@ -31,6 +31,8 @@ contains
     Method_Mb_OrbBased_FillRdm1 => FillRdm1
     Method_Mb_OrbBased_FillRdm2 => FillRdm2
     Method_TimeDerivative => TimeDerivative
+    Method_Mb_OrbBased_TimeDerivativeOrbsLin => TimeDerivativeOrbsLin
+    Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin => TimeDerivativeTwoRdmPlusOrbsNonLin
 
   end subroutine
 
@@ -112,6 +114,83 @@ contains
     call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, rdm1, rdm2, time, h2_=h2)
 
     call TwoRdm_ApplyCommutatorH1(dTwoRdmState, twoRdmState, h1)
+    call TwoRdm_ApplyCommutatorH2(dTwoRdmState, twoRdmState, h2)
+    call Reconstruction_AddCollisionOp(dTwoRdmState, twoRdmState, h2)
+
+    call Orbs_ProjectOnSubspace(dOrbs, orbs)
+
+    dState(:) = -IU * dState(:) ! out is the time-derivative!
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Linear split-step part: the one-body operator on the orbitals only (the
+  !> 2-RDM is constant), dOrbs = -i h orbs without projection.
+  subroutine TimeDerivativeOrbsLin(dState, state, time)
+    use M_Utils_Constants
+    use M_Grid
+    use M_TwoRdm
+    use M_Orbs
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(out), contiguous, target :: dState(:)
+    complex(R64), intent(in), contiguous, target  :: state(:)
+    real(R64), intent(in)             :: time
+
+    complex(R64), contiguous, pointer :: orbs(:, :)
+    complex(R64), contiguous, pointer :: dOrbs(:, :)
+
+    dState(:) = 0.0_R64
+
+    call GetOrbs(orbs, state)
+    call GetOrbs(dOrbs, dState)
+
+    call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time)
+
+    dState(:) = -IU * dState(:) ! out is the time-derivative!
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Non-linear split-step part: the two-body interaction only. The 2-RDM
+  !> evolves with [h2, D2] plus the collision operator, the orbitals with the
+  !> projected correlation term. The one-body commutator is absent because the
+  !> linear part rotates the orbitals with the full (unprojected) h.
+  subroutine TimeDerivativeTwoRdmPlusOrbsNonLin(dState, state, time)
+    use M_Utils_Constants
+    use M_Grid
+    use M_Reconstruction
+    use M_TwoRdm
+    use M_Orbs
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(out), contiguous, target :: dState(:)
+    complex(R64), intent(in), contiguous, target  :: state(:)
+    real(R64), intent(in)             :: time
+
+    complex(R64), contiguous, pointer :: twoRdmState(:)
+    complex(R64), contiguous, pointer :: dTwoRdmState(:)
+
+    complex(R64), contiguous, pointer :: orbs(:, :)
+    complex(R64), contiguous, pointer :: dOrbs(:, :)
+
+    complex(R64), allocatable :: h2(:, :, :, :)
+    complex(R64), allocatable :: rdm1(:, :)
+    complex(R64), allocatable :: rdm2(:, :, :, :)
+
+    dState(:) = 0.0_R64
+
+    call GetTwoRdmState(twoRdmState, state)
+    call GetTwoRdmState(dTwoRdmState, dState)
+
+    call GetOrbs(orbs, state)
+    call GetOrbs(dOrbs, dState)
+
+    call TwoRdm_FillRdm1FromTwoRdmState(rdm1, twoRdmState)
+    call TwoRdm_FillRdm2FromTwoRdmState(rdm2, twoRdmState)
+
+    call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, rdm1, rdm2, time, h2_=h2)
+
     call TwoRdm_ApplyCommutatorH2(dTwoRdmState, twoRdmState, h2)
     call Reconstruction_AddCollisionOp(dTwoRdmState, twoRdmState, h2)
 

@@ -6,6 +6,18 @@ submodule(M_Grid_Ylm) S_Grid_Ylm
 
   implicit none
 
+  !=============================================================================
+  ! local data
+  !=============================================================================
+
+  !> Gauss-Legendre tables for the m = 0 fast path of SpatialProduct (Setup):
+  !> quadY(l, q) = Y_l0(x_q) and quadWY(q, l) = 2 pi w_q Y_l0(x_q) for
+  !> 0 <= l <= quadLcap on the quadNq Gauss-Legendre nodes x_q in cos(theta).
+  integer(I32) :: quadLcap = -1
+  integer(I32) :: quadNq = 0
+  real(R64), allocatable :: quadY(:, :)
+  real(R64), allocatable :: quadWY(:, :)
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -111,6 +123,49 @@ contains
       end do
     end do
 
+    call SetupQuadratureM0
+
+  end subroutine
+
+  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Tabulate Y_l0 on Gauss-Legendre nodes for the m = 0 fast path of
+  !> SpatialProduct. The tables cover l <= 2 lmax + 2 (orbitals, densities and
+  !> potentials of the default interaction layout, multiplicative operators)
+  !> and integrate products of total degree <= 4 lmax + 5 exactly.
+  subroutine SetupQuadratureM0
+    use M_Utils_Constants
+    use M_Grid_Ylm
+    use stdlib_quadrature, only: gauss_legendre
+
+    real(R64), allocatable :: x(:), w(:), p(:, :)
+    integer(I32) :: l
+
+    quadLcap = 2 * Grid_Ylm_lmax + 2
+    quadNq = 2 * Grid_Ylm_lmax + 3
+
+    allocate (x(quadNq), w(quadNq), p(0:quadLcap, quadNq))
+    call gauss_legendre(x, w)
+
+    ! Legendre polynomials by the Bonnet recurrence
+    p(0, :) = 1.0_R64
+    if (quadLcap >= 1) p(1, :) = x(:)
+    do l = 1, quadLcap - 1
+      p(l + 1, :) = ((2 * l + 1) * x(:) * p(l, :) - l * p(l - 1, :)) / (l + 1)
+    end do
+
+    if (allocated(quadY)) deallocate (quadY)
+    if (allocated(quadWY)) deallocate (quadWY)
+    allocate (quadY(0:quadLcap, quadNq), quadWY(quadNq, 0:quadLcap))
+
+    do l = 0, quadLcap
+      quadY(l, :) = sqrt((2 * l + 1) / (4.0_R64 * PI)) * p(l, :)
+      quadWY(:, l) = 2.0_R64 * PI * w(:) * quadY(l, :)
+    end do
+
+    Grid_Ylm_nNodesM0 = quadNq
+    Grid_Ylm_lmaxNodesM0 = quadLcap
+    Grid_Ylm_nodeWeightsM0 = 2.0_R64 * PI * w(:)
+
   end subroutine
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -179,6 +234,20 @@ contains
     if (present(mMax_)) mMax = mMax_
 
     nRad = Grid_Ylm_nRadial
+
+    ! Axially symmetric operands: exact Gauss-Legendre quadrature in cos(theta)
+    ! (O(lmax^2) per radial point instead of the O(lmax^3) Gaunt sum)
+    if (mMaxOut .eq. 0 .and. mMaxConjg .eq. 0 .and. mMax .eq. 0 .and. &
+        max(lMaxOut, lMaxConjg, lMax) <= quadLcap .and. lMaxOut + lMaxConjg + lMax < 2 * quadNq) then
+      call SpatialProductM0(fOut, fConjg, f, conjgQ, lMaxOut, lMaxConjg, lMax)
+      if (withWeightsQ) then
+        do iCh = 1, lMaxOut + 1
+          iOut = (iCh - 1) * nRad + 1
+          fOut(iOut:iOut + nRad - 1) = fOut(iOut:iOut + nRad - 1) * Grid_Ylm_radialMetricWeights(:)
+        end do
+      end if
+      return
+    end if
 
     allocate (lmTmpConjg(nRad))
 
@@ -259,6 +328,85 @@ contains
     end if
 
     deallocate (lmTmpConjg, nonZeroQ)
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Spatial product of axially symmetric (m = 0) fields by quadrature.
+  !>
+  !> With m = 0 the layout is a matrix f(r, l). Both factors are evaluated on
+  !> the Gauss-Legendre nodes in cos(theta), multiplied pointwise and projected
+  !> back onto Y_l0, l <= lMaxOut. The node count makes the angular integral
+  !> exact, so the result equals the Gaunt-coefficient expansion.
+  pure subroutine SpatialProductM0(fOut, fConjg, f, conjgQ, lMaxOut, lMaxConjg, lMax)
+    complex(R64), intent(out), contiguous :: fOut(:)
+    complex(R64), intent(in), contiguous  :: fConjg(:)
+    complex(R64), intent(in), contiguous  :: f(:)
+    logical, intent(in)                   :: conjgQ
+    integer(I32), intent(in)              :: lMaxOut
+    integer(I32), intent(in)              :: lMaxConjg
+    integer(I32), intent(in)              :: lMax
+
+    integer(I32) :: nRad
+    real(R64), allocatable :: aRe(:, :), aIm(:, :), bRe(:, :), bIm(:, :), pRe(:, :), pIm(:, :)
+
+    nRad = Grid_Ylm_nRadial
+
+    fOut = (0.0_R64, 0.0_R64)
+
+    ! First factor on the angular nodes (conjugation commutes with real Y_l0)
+    aRe = matmul(reshape(real(fConjg(1:nRad * (lMaxConjg + 1))), [nRad, lMaxConjg + 1]), quadY(0:lMaxConjg, :))
+    aIm = matmul(reshape(aimag(fConjg(1:nRad * (lMaxConjg + 1))), [nRad, lMaxConjg + 1]), quadY(0:lMaxConjg, :))
+    if (conjgQ) aIm = -aIm
+
+    ! Second factor on the angular nodes
+    bRe = matmul(reshape(real(f(1:nRad * (lMax + 1))), [nRad, lMax + 1]), quadY(0:lMax, :))
+    bIm = matmul(reshape(aimag(f(1:nRad * (lMax + 1))), [nRad, lMax + 1]), quadY(0:lMax, :))
+
+    ! Pointwise product, then projection onto Y_l0
+    pRe = aRe * bRe - aIm * bIm
+    pIm = aRe * bIm + aIm * bRe
+
+    fOut(1:nRad * (lMaxOut + 1)) = reshape(cmplx(matmul(pRe, quadWY(:, 0:lMaxOut)), &
+                                                 matmul(pIm, quadWY(:, 0:lMaxOut)), kind=R64), &
+                                           [nRad * (lMaxOut + 1)])
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Grid_Ylm_ToNodesM0(fNodes, f, lmax)
+    complex(R64), intent(out), contiguous :: fNodes(:, :)
+    complex(R64), intent(in), contiguous  :: f(:)
+    integer(I32), intent(in)              :: lmax
+
+    integer(I32) :: nRad
+
+    if (lmax > quadLcap) error stop "Grid_Ylm_ToNodesM0: lmax exceeds the quadrature tables"
+
+    nRad = Grid_Ylm_nRadial
+
+    fNodes(:, :) = cmplx(matmul(reshape(real(f(1:nRad * (lmax + 1))), [nRad, lmax + 1]), quadY(0:lmax, :)), &
+                         matmul(reshape(aimag(f(1:nRad * (lmax + 1))), [nRad, lmax + 1]), quadY(0:lmax, :)), &
+                         kind=R64)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Grid_Ylm_FromNodesM0(f, fNodes, lmax)
+    complex(R64), intent(out), contiguous :: f(:)
+    complex(R64), intent(in), contiguous  :: fNodes(:, :)
+    integer(I32), intent(in)              :: lmax
+
+    integer(I32) :: nRad
+
+    if (lmax > quadLcap) error stop "Grid_Ylm_FromNodesM0: lmax exceeds the quadrature tables"
+
+    nRad = Grid_Ylm_nRadial
+
+    f = (0.0_R64, 0.0_R64)
+    f(1:nRad * (lmax + 1)) = reshape(cmplx(matmul(real(fNodes), quadWY(:, 0:lmax)), &
+                                           matmul(aimag(fNodes), quadWY(:, 0:lmax)), kind=R64), &
+                                     [nRad * (lmax + 1)])
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

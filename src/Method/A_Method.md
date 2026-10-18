@@ -164,6 +164,35 @@ Provides orbital indexing, RDM storage, and operator-application interfaces:
 | **TD-2RDM**      | Dynamic    | 2-RDM        | Propagates 2-RDM with adaptive orbitals    |
 | **TD-2RDM-Static**| Static    | 2-RDM        | Propagates 2-RDM only; fixed basis         |
 
+### Split-Step Propagation (MCTDHX, TD-2RDM)
+
+`Method_Mb_OrbBased_TimeDerivativeOrbsLin` and
+`Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin` split the time
+derivative for `propagator.splitStep` (stiff linear part by SIL, the rest by
+an explicit integrator):
+
+- **linear**: dφ = −i h φ for every orbital, *unprojected*; the many-body part
+  (CI coefficients or 2-RDM) is constant. Propagating all orbitals with
+  exp(−i h t) at fixed many-body part is the exact one-body evolution.
+- **non-linear**: only the interaction — CI coefficients with h², or the
+  2-RDM with [h², D²] plus the collision operator; orbitals with the projected
+  correlation term.
+
+The sum is a gauge transform of the full derivative (in-space orbital rotation
+by h¹, compensated in the many-body part). Adding h¹ to the many-body part of
+the non-linear step would count the one-body Hamiltonian twice.
+
+### Axially Symmetric Ylm Fast Path
+
+For Hermitian Ylm grids with `grid.ylm.mmax = 0` and a body-type-independent
+Ylm interaction, `Method_Mb_OrbBased_ApplyCorrelationOp` is bound to
+`ApplyCorrelationOpYlmM0`: orbitals, pair densities and pair potentials are
+evaluated on the Gauss–Legendre nodes in cos θ (`Grid_Ylm_ToNodesM0`), the
+2-RDM-weighted orbital combinations are formed before multiplying with the
+potential, and every product is pointwise. The node count makes all angular
+integrals exact, so results equal the generic operator to round-off while the
+cost per pair drops from n spatial products to O(1) transforms.
+
 ---
 
 ## GridBased Methods

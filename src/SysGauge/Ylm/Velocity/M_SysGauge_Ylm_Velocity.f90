@@ -15,6 +15,14 @@
 !> length-gauge field E0 sin² cos plus the envelope-derivative correction of
 !> relative size 1/nCycles; A(t) vanishes identically at both pulse edges.
 !>
+!> With `envelope = "field"` the sin² envelope is instead put on the electric
+!> field, matching the common convention for few-cycle pulses,
+!>   E(t) = E0 * sin²(pi (t - t0)/T) * cos(omega (t - t0) + cep),
+!> and A(t) = -int_t0^t E(t') dt' is evaluated analytically. For an integer
+!> number of cycles A vanishes again at t0 + T; otherwise A(t0 + T) is kept
+!> for t > t0 + T (zero field after the pulse). Note that here the carrier
+!> phase is measured from the pulse start, not from the envelope maximum.
+!>
 !> The spatially uniform A²/(2m) term only contributes a global time-dependent
 !> phase; it is included so that the operator is exactly (p + A)²/2m − p²/2m.
 module M_SysGauge_Ylm_Velocity
@@ -36,6 +44,12 @@ module M_SysGauge_Ylm_Velocity
       real(R64), intent(in) :: time
       real(R64) :: res
     end function
+
+    !> Electric field amplitude E(t) = -dA/dt of the pulse along z (a.u.).
+    module function SysGauge_Ylm_Velocity_FieldAmplitude(time) result(res)
+      real(R64), intent(in) :: time
+      real(R64) :: res
+    end function
   end interface
 
   !=============================================================================
@@ -52,6 +66,8 @@ module M_SysGauge_Ylm_Velocity
   real(R64) :: SysGauge_Ylm_Velocity_cep
   !> Start time t0 of the pulse (a.u.).
   real(R64) :: SysGauge_Ylm_Velocity_tStart
+  !> Quantity carrying the sin² envelope: "vectorPotential" (default) or "field".
+  character(len=:), allocatable :: SysGauge_Ylm_Velocity_envelope
   !> Mass per body type entering A·p/m and A²/(2m).
   real(R64), allocatable :: SysGauge_Ylm_Velocity_bodyMass(:)
 

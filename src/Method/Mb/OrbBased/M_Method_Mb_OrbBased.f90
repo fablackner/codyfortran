@@ -268,12 +268,14 @@ module M_Method_Mb_OrbBased
     end subroutine
   end interface
 
-  !> Pointer to the procedure for computing the time derivative with static orbitals.
+  !> Pointer to the linear part of a split-step time derivative: the one-body
+  !> operator acting on the orbitals only.
   procedure(I_Method_Mb_OrbBased_TimeDerivativeOrbsLin), pointer :: &
     Method_Mb_OrbBased_TimeDerivativeOrbsLin
   abstract interface
-    !> Computes the right-hand side of the TDSE with static orbitals,
-    !> returning `-i * H(state)` in `dState`.
+    !> Linear split-step part: dOrbs = -i h orbs (unprojected), zero for the
+    !> many-body part (CI coefficients or 2-RDM). Evolving every orbital with
+    !> exp(-i h t) at a fixed many-body part is the exact one-body evolution.
     subroutine I_Method_Mb_OrbBased_TimeDerivativeOrbsLin(dState, state, time)
       import :: R64
       !> Output: time derivative (multiplied by -i).
@@ -285,8 +287,13 @@ module M_Method_Mb_OrbBased
     end subroutine
   end interface
 
-  !> Pointer to the procedure for computing the non-linear part of the time derivative
-  !> when both coefficients and orbitals evolve (e.g., in MCTDHX-like schemes).
+  !> Pointer to the non-linear part of a split-step time derivative when both the
+  !> many-body part and the orbitals evolve (MCTDHX, TD-2RDM): only the
+  !> two-body interaction, i.e. the many-body part evolves with h2 (plus the
+  !> collision term for TD-2RDM) and the orbitals with Q (W D^-1 terms).
+  !> Together with `TimeDerivativeOrbsLin` it is a gauge transform of the full
+  !> time derivative (in-space orbital rotation by h1, compensated in the
+  !> many-body part).
   procedure(I_Method_Mb_OrbBased_TimeDerivativeOrbsLin), pointer :: &
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin
 

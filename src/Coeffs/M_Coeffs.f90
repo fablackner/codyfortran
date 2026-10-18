@@ -114,14 +114,16 @@ module M_Coeffs
     !> Apply the one-body Hamiltonian to `coeffs` and optionally compute the
     !> one-body reduced density matrix (RDM1).
     !> \[
-    !> H1 = \sum_{i,j} \langle j|H1|i \rangle a^\dagger_j a_i
+    !> H1 = \sum_{i,j} h1(i,j) a^\dagger_i a_j, \quad h1(i,j) = \langle i|h|j \rangle
     !> \]
+    !> (the convention of Method_Mb_OrbBased_FillH1, TwoRdm and the orbital
+    !> equations of motion).
     subroutine I_Coeffs_ApplyH1FillRdm1(coeffs, rdm1_, dCoeffs_, h1_)
       import :: R64
       !> Input CI coefficients representing the current quantum state.
       complex(R64), intent(in), contiguous, target :: coeffs(:)
       !> on presence, allocate and fill RDM1 with the convention
-      !> RDM1(p,q) = <Psi| a^\dagger_p a_q |Psi> consistent with the active basis.
+      !> RDM1(p,q) = <Psi| a^\dagger_q a_p |Psi> consistent with the active basis.
       complex(R64), intent(out), allocatable, optional :: rdm1_(:, :)
       !> in-place accumulator for H1|coeffs>. If present, the result is
       !> added to `dCoeffs_` (AXPY-style). Caller must pre-initialize the array.
@@ -138,14 +140,15 @@ module M_Coeffs
     !> Apply the two-body Hamiltonian to `coeffs` and optionally compute the
     !> two-body reduced density matrix (RDM2).
     !> \[
-    !> H2 = \sum_{i1,i2,j1,j2} \langle j1,j2|H2|i1,i2 \rangle a^\dagger_{j1} a^\dagger_{j2} a_{i2} a_{i1}
+    !> H2 = \sum_{i1,i2,j1,j2} h2(i1,i2,j1,j2) a^\dagger_{i1} a^\dagger_{i2} a_{j2} a_{j1},
+    !> \quad h2(i1,i2,j1,j2) = \tfrac12 \langle i1,i2|W|j1,j2 \rangle
     !> \]
     subroutine I_Coeffs_ApplyH2FillRdm2(coeffs, rdm2_, dCoeffs_, h2_)
       import :: R64
       !> Input CI coefficients representing the current quantum state.
       complex(R64), intent(in), contiguous, target :: coeffs(:)
       !> on presence, allocate and fill RDM2 with the convention
-      !> RDM2(p,q,r,s) = <Psi| a^\dagger_p a^\dagger_q a_s a_r |Psi>.
+      !> RDM2(p,q,r,s) = <Psi| a^\dagger_r a^\dagger_s a_q a_p |Psi>.
       complex(R64), intent(out), allocatable, optional :: rdm2_(:, :, :, :)
       !> in-place accumulator for H2|coeffs>. If present, the result is
       !> added to `dCoeffs_` (AXPY-style). Caller must pre-initialize the array.

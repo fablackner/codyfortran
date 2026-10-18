@@ -232,8 +232,8 @@ contains
       return
     end if
 
-    If (nDim <= 4) Write (*, *) 'WARNING! WARNING! WARNING! WARNING! WARNING! '
-    If (nDim <= 4) Write (*, *) 'Contraction consistent Reconstruction is not possible!'
+    ! The expansion coefficients below are singular for nDim <= 4
+    if (nDim <= 4) error stop "RdmEnforceTraceM3aab: contraction consistency requires more than 4 orbitals"
 
     x = dble(nDim)
 

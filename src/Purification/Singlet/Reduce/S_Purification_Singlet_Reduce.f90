@@ -46,7 +46,8 @@ contains
   !> blocks and both D²- and Q²-conditions are enforced simultaneously.
   !>
   !> @param[inout] twoRdmState  Packed 2-RDM (Singlet layout: α-β block).
-  !> @param[in]    h2           Two-body Hamiltonian for optional energy conservation.
+  !> @param[in]    h2           Two-body Hamiltonian for optional energy conservation
+  !>                            ((up,down) block or full spin-orbital tensor).
   subroutine PurifyTwoRdmState(twoRdmState, h2)
     use M_TwoRdm_Fermionic_Singlet
     use M_Utils_RdmHole
@@ -76,7 +77,8 @@ contains
     complex(R64), allocatable :: qrdm2tripletDefectiveTr0(:, :, :, :)
 
     ! Energy conservation workspace
-    complex(R64), allocatable :: h2Tr0(:, :, :, :)         !< Trace-free h² for projection
+    complex(R64), allocatable :: h2ab(:, :, :, :)          !< (up,down) block of h²
+    complex(R64), allocatable :: h2Tr0(:, :, :, :)         !< Trace-free energy functional
     complex(R64), allocatable :: correction(:, :, :, :)    !< Accumulated correction
     complex(R64), allocatable :: tmp(:, :, :, :)           !< Temporary workspace
 
@@ -87,6 +89,7 @@ contains
 
     integer(I32) :: i               !< Iteration counter
     integer(I32) :: nNegative       !< Count of negative eigenvalues (diagnostic)
+    integer(I32) :: nOa             !< Number of spin-up orbitals
 
     !---------------------------------------------------------------------------
     ! Step 1: Unpack the 2-RDM from the compressed state vector
@@ -97,17 +100,32 @@ contains
     ! Optional: Prepare trace-free h² for energy-conserving projection
     !---------------------------------------------------------------------------
     if (conserveEnergyQ) then
-      allocate (h2Tr0, source=h2)
+      ! The (up,down) block of h2; a full spin-orbital h2 is reduced to it
+      nOa = size(rdm2ab, 1)
+      if (size(h2, 1) .eq. nOa) then
+        allocate (h2ab, source=h2)
+      else if (size(h2, 1) .eq. 2 * nOa) then
+        h2ab = h2(1:nOa, nOa + 1:2 * nOa, 1:nOa, nOa + 1:2 * nOa)
+      else
+        error stop "Purification_Singlet_Reduce: h2 matches neither the (up,down) block nor the spin-orbital basis"
+      end if
+
+      ! For a singlet the up-up block follows from the (up,down) block,
+      ! D_aa = D_ab - P12 D_ab, so the two-body energy as a functional of
+      ! D_ab is <4 h2 - 2 P12 h2 | D_ab> = <2 h2_singlet + 6 h2_triplet | D_ab>.
+      ! Corrections orthogonal to (trace-free) h2_singlet + 3 h2_triplet
+      ! therefore conserve the energy (the 1-RDM is unchanged anyway).
+      allocate (h2Tr0, mold=h2ab)
       h2Tr0 = 0.0_R64
 
-      ! Make h² trace-free in both singlet and triplet channels
-      call RdmAlgebra_FillSingletPart(tmp, h2)
+      call RdmAlgebra_FillSingletPart(tmp, h2ab)
       call RdmEnforceTraceM2sym_Apply(tmp)
       h2Tr0 = h2Tr0 + tmp
+      deallocate (tmp)
 
-      call RdmAlgebra_FillTripletPart(tmp, h2)
+      call RdmAlgebra_FillTripletPart(tmp, h2ab)
       call RdmEnforceTraceM2anti_Apply(tmp)
-      h2Tr0 = h2Tr0 + tmp
+      h2Tr0 = h2Tr0 + 3.0_R64 * tmp
 
       if (allocated(tmp)) deallocate (tmp)
     end if
