@@ -44,6 +44,7 @@ contains
     real(R64), intent(out), optional :: dipole_
 
     integer(I32), parameter :: lmaxOp = 1
+    integer(I32), parameter :: mmaxOp = 0
 
     integer(I32) :: i1, j1
     complex(R64) :: dipole
@@ -65,17 +66,17 @@ contains
     if (.not. needDipole) return
 
     ! Assemble z = r sqrt(4 pi / 3) Y_10 as a potential-like Ylm array
-    allocate (zOp((2 * lmaxOp + 1)**2 * nRad))
+    allocate (zOp(Grid_Ylm_NChannels(lmaxOp, mmaxOp) * nRad))
     allocate (zLm(nRad))
     zOp(:) = 0.0_R64
 
     zLm(:) = sqrt(4.0_R64 * PI / 3.0_R64) * Grid_Ylm_radialPoints(:)
-    call Grid_Ylm_SetLmComponent(zOp, 1, 0, zLm)
+    call Grid_Ylm_SetLmComponent(zOp, 1, 0, zLm, mmax_=mmaxOp)
 
     allocate (zOrbs(nG, nOS))
 
     do i1 = 1, nOS
-      call Grid_Ylm_SpatialProduct(zOrbs(:, i1), zOp, orbs(:, i1), Grid_Ylm_lmax, lmaxOp, Grid_Ylm_lmax)
+      call Grid_Ylm_SpatialProduct(zOrbs(:, i1), zOp, orbs(:, i1), lMaxConjg_=lmaxOp, mMaxConjg_=mmaxOp)
     end do
 
     dipole = 0.0_R64

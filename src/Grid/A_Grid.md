@@ -182,7 +182,26 @@ src/Grid/
 | Path | Type | Default | Description |
 |------|------|---------|-------------|
 | `grid.ylm.lmax` | int | 1 | Maximum angular momentum |
+| `grid.ylm.mmax` | int | `lmax` | Maximum \|m\| of orbitals (clamped to `lmax`) |
 | `grid.ylm.rmax` | real | 20.0 | Radial box size |
+
+**m truncation.** Orbitals store the channels 0 ≤ l ≤ lmax, |m| ≤ min(l, mmax),
+l-major with m ascending and radial points innermost
+(`Grid_nPoints = nRadial · Grid_Ylm_NChannels(lmax, mmax)`). Lowering `mmax`
+is useful when the dynamics conserves the orbital m quantum numbers, e.g. a
+linearly z-polarized laser acting on an atom whose initial orbitals have
+|m| ≤ mmax. Potential-like fields carry their own caps, just like their own
+lmax: `SysInteraction_Ylm_mmax` (`sysInteraction.ylm.mmax`, default
+min(2·mmax, lmaxPot), exact since a product of two orbitals has |m| ≤ 2·mmax)
+and `SysPotential_Ylm_mmax` (set by the model; models with mmax > 0 refuse to
+run when `grid.ylm.mmax < lmax`).
+
+`Grid_Ylm_{Get,Set,Add}LmComponent` take `mmax_`; `Grid_Ylm_SpatialProduct`
+takes `lMaxOut_`, `lMaxConjg_`, `lMax_`, `mMaxOut_`, `mMaxConjg_`, `mMax_`.
+All default to the orbital layout (`Grid_Ylm_lmax`, `Grid_Ylm_mmax`); pass only
+the caps of non-orbital operands. The accessors do not range-check: callers
+must request |m| ≤ min(l, cap), which is guaranteed by validating inputs at
+fabrication (e.g. OrbsInit checks every |m| ≤ mmax).
 
 ### Prolate Grid (Homonuclear Diatomic Molecules)
 

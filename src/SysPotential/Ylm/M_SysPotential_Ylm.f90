@@ -30,6 +30,8 @@ module M_SysPotential_Ylm
 
   !> Maximum spherical-harmonics degree used to represent the potential.
   integer(I32) :: SysPotential_Ylm_lmax
+  !> Maximum |m| used to represent the potential (|m| <= min(l, mmax)).
+  integer(I32) :: SysPotential_Ylm_mmax
   !> True if the potential is independent of the magnetic quantum number m.
   logical      :: SysPotential_Ylm_mIndependentQ
 

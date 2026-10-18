@@ -141,8 +141,8 @@ contains
   !>
   !> @details
   !> Allocates potentials and temporaries based on the configured grid size.
-  !> For Ylm grids, the potential size is (2·lmax_pot+1)² × nRadial to accommodate
-  !> all angular momentum channels of the interaction.
+  !> For Ylm grids, the potential holds all (l,m) channels of the interaction
+  !> expansion × nRadial.
   subroutine Setup
     use M_Utils_Say
     use M_Grid
@@ -151,12 +151,11 @@ contains
     use M_GroundSolver
     use M_Orbs
 
-    integer(I32) :: lmaxPot, potSize, nUp
+    integer(I32) :: potSize, nUp
 
     call Say_Setup("groundSolver.scf.stdImpl")
 
-    lmaxPot = SysInteraction_Ylm_lmax
-    potSize = (2 * lmaxPot + 1)**2 * Grid_Ylm_nRadial
+    potSize = Grid_Ylm_NChannels(SysInteraction_Ylm_lmax, SysInteraction_Ylm_mmax) * Grid_Ylm_nRadial
 
     nUp = GroundSolver_NumberOfSpinUpOrbs()
 

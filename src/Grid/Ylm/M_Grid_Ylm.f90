@@ -26,12 +26,27 @@ module M_Grid_Ylm
     end subroutine
   end interface
 
+  interface
+    !> Number of (l,m) channels of a layout with 0 <= l <= lmax and
+    !> |m| <= min(l, mmax). With mmax >= lmax this is the full (lmax+1)**2.
+    pure module function Grid_Ylm_NChannels(lmax, mmax) result(res)
+      integer(I32), intent(in) :: lmax
+      integer(I32), intent(in) :: mmax
+      integer(I32) :: res
+    end function
+  end interface
+
   !=============================================================================
   ! module data
   !=============================================================================
 
   !> Maximum angular momentum quantum number lmax (0 <= l <= lmax).
   integer(I32) :: Grid_Ylm_lmax
+
+  !> Maximum magnetic quantum number of orbitals (|m| <= min(l, mmax)).
+  !> Defaults to lmax (full expansion). Lowering it truncates the angular
+  !> basis for problems that conserve m (e.g. linearly polarized lasers).
+  integer(I32) :: Grid_Ylm_mmax
 
   !> Maximum radius value rmax of the radial grid.
   real(R64) :: Grid_Ylm_rmax
@@ -76,21 +91,29 @@ module M_Grid_Ylm
   abstract interface
     !> Compute fOut = sum_r fConjg(r,theta,phi)^* f(r,theta,phi) expanded in Y_lm.
     !>
-    !> Produces the spherical-harmonic coefficients up to lMaxOut from the
-    !> product of two fields that may each be represented with their own lmax.
-    !> Optional flags:
+    !> Produces the spherical-harmonic coefficients of the product of two
+    !> fields that may each be represented with their own channel layout.
+    !> Optional arguments:
     !>  - conjgQ_: when true, treats fConjg as already conjugated (skips extra).
     !>  - withWeightsQ_: when true, includes the appropriate metric weights.
-    pure subroutine I_Grid_Ylm_SpatialProduct(fOut, fConjg, f, lMaxOut, lMaxConjg, lMax, conjgQ_, withWeightsQ_)
+    !>  - lMaxOut_, lMaxConjg_, lMax_: l cap of fOut, fConjg and f.
+    !>  - mMaxOut_, mMaxConjg_, mMax_: |m| cap of fOut, fConjg and f.
+    !> Layout caps default to the orbital layout (Grid_Ylm_lmax, Grid_Ylm_mmax);
+    !> pass only those of non-orbital operands (potentials, sources).
+    pure subroutine I_Grid_Ylm_SpatialProduct(fOut, fConjg, f, conjgQ_, withWeightsQ_, &
+                                              lMaxOut_, lMaxConjg_, lMax_, mMaxOut_, mMaxConjg_, mMax_)
       import :: I32, R64
       complex(R64), intent(out), contiguous :: fOut(:)
       complex(R64), intent(in), contiguous  :: fConjg(:)
       complex(R64), intent(in), contiguous  :: f(:)
-      integer(I32), intent(in)              :: lMaxOut
-      integer(I32), intent(in)              :: lMaxConjg
-      integer(I32), intent(in)              :: lMax
       logical, intent(in), optional         :: conjgQ_
       logical, intent(in), optional         :: withWeightsQ_
+      integer(I32), intent(in), optional    :: lMaxOut_
+      integer(I32), intent(in), optional    :: lMaxConjg_
+      integer(I32), intent(in), optional    :: lMax_
+      integer(I32), intent(in), optional    :: mMaxOut_
+      integer(I32), intent(in), optional    :: mMaxConjg_
+      integer(I32), intent(in), optional    :: mMax_
     end subroutine
   end interface
 
@@ -106,7 +129,7 @@ module M_Grid_Ylm
   procedure(I_Grid_Ylm_GetLmComponent), pointer :: Grid_Ylm_GetLmComponent
   abstract interface
     !> Extract the radial function f_lm(r) from a full Ylm-represented field.
-    pure subroutine I_Grid_Ylm_GetLmComponent(fLmOut, l, m, f)
+    pure subroutine I_Grid_Ylm_GetLmComponent(fLmOut, l, m, f, mmax_)
       import :: I32, R64
       !> Output radial function for the specified (l,m) component.
       complex(R64), intent(out) :: fLmOut(:)
@@ -116,6 +139,8 @@ module M_Grid_Ylm
       integer(I32), intent(in) :: m
       !> The full function defined on the Ylm grid (flattened order).
       complex(R64), intent(in) :: f(:)
+      !> |m| cap of the layout of f (default Grid_Ylm_mmax); requires |m| <= mmax_.
+      integer(I32), intent(in), optional :: mmax_
     end subroutine
   end interface
 
@@ -123,7 +148,7 @@ module M_Grid_Ylm
   procedure(I_Grid_Ylm_SetLmComponent), pointer :: Grid_Ylm_SetLmComponent
   abstract interface
     !> Set f_out so that its (l,m) channel equals the provided radial function.
-    pure subroutine I_Grid_Ylm_SetLmComponent(fOut, l, m, fLm)
+    pure subroutine I_Grid_Ylm_SetLmComponent(fOut, l, m, fLm, mmax_)
       import :: I32, R64
       !> The full function on the Ylm grid after setting the component.
       complex(R64), intent(out) :: fOut(:)
@@ -133,6 +158,8 @@ module M_Grid_Ylm
       integer(I32), intent(in) :: m
       !> The input radial function for the specified (l,m) component.
       complex(R64), intent(in) :: fLm(:)
+      !> |m| cap of the target layout (default Grid_Ylm_mmax); requires |m| <= mmax_.
+      integer(I32), intent(in), optional :: mmax_
     end subroutine
   end interface
 
@@ -140,7 +167,7 @@ module M_Grid_Ylm
   procedure(I_Grid_Ylm_AddLmComponent), pointer :: Grid_Ylm_AddLmComponent
   abstract interface
     !> Add the provided radial function into the (l,m) channel of fInOut.
-    pure subroutine I_Grid_Ylm_AddLmComponent(fInOut, l, m, fLm)
+    pure subroutine I_Grid_Ylm_AddLmComponent(fInOut, l, m, fLm, mmax_)
       import :: I32, R64
       !> The full function on the Ylm grid to which the component is added.
       complex(R64), intent(inout) :: fInOut(:)
@@ -150,6 +177,8 @@ module M_Grid_Ylm
       integer(I32), intent(in) :: m
       !> The input radial function for the specified (l,m) component.
       complex(R64), intent(in) :: fLm(:)
+      !> |m| cap of the target layout (default Grid_Ylm_mmax); requires |m| <= mmax_.
+      integer(I32), intent(in), optional :: mmax_
     end subroutine
   end interface
 

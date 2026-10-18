@@ -14,6 +14,7 @@ contains
   module subroutine OrbsInit_Ylm_HydrogenLike_Fabricate
     use M_Utils_Json
     use M_Utils_Say
+    use M_Grid_Ylm
     use M_OrbsInit_Ylm
 
     implicit none
@@ -30,6 +31,12 @@ contains
     OrbsInit_Ylm_HydrogenLike_n = Json_Get("orbsInit.ylm.hydrogenLike.n", [1])
     OrbsInit_Ylm_HydrogenLike_l = Json_Get("orbsInit.ylm.hydrogenLike.l", [0])
     OrbsInit_Ylm_HydrogenLike_m = Json_Get("orbsInit.ylm.hydrogenLike.m", [0])
+
+    ! Every orbital must fit into the truncated (l,m) expansion of the grid
+    if (any(OrbsInit_Ylm_HydrogenLike_l > Grid_Ylm_lmax)) &
+      error stop "orbsInit.ylm.hydrogenLike: l exceeds grid.ylm.lmax"
+    if (any(abs(OrbsInit_Ylm_HydrogenLike_m) > Grid_Ylm_mmax)) &
+      error stop "orbsInit.ylm.hydrogenLike: |m| exceeds grid.ylm.mmax"
 
     OrbsInit_Ylm_InitFunction => InitFunction
 

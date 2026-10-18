@@ -268,10 +268,14 @@ When `timeIndependentQ = .true.` and `bodyTypeIndependentQ = .true.`:
 2. **Wrong `lmax` for Ylm:** The potential expansion needs `lmax_pot ≥ 2×lmax_orb`
    to capture the full density product.
 
-3. **Missing quadrature weights:** Linear/Ylm source terms include weights;
+3. **Ylm `mmax`:** `sysInteraction.ylm.mmax` caps |m| of sources/potentials
+   (default min(2·`grid.ylm.mmax`, lmax_pot), which is exact). Smaller values
+   truncate the m-transfer of the interaction.
+
+4. **Missing quadrature weights:** Linear/Ylm source terms include weights;
    Lattice does not (discrete sum).
 
-4. **Body type arguments:** Pass `bt1_`, `bt2_` if simulating multiple species
+5. **Body type arguments:** Pass `bt1_`, `bt2_` if simulating multiple species
    with different interactions.
 
 ---

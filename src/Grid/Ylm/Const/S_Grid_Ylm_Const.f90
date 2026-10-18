@@ -25,7 +25,7 @@ contains
     Grid_Ylm_nRadial = Json_Get("grid.ylm.const.nRad", 100)
 
     ! Update total grid size to include the radial component
-    Grid_nPoints = Grid_Ylm_nRadial * (Grid_Ylm_lmax + 1)**2
+    Grid_nPoints = Grid_Ylm_nRadial * Grid_Ylm_NChannels(Grid_Ylm_lmax, Grid_Ylm_mmax)
 
     ! Set the procedure pointer for radial grid setup
     Grid_Ylm_Setup => Setup

@@ -32,6 +32,7 @@ contains
     SysPotential_timeIndependentQ = .true.
     SysPotential_bodyTypeIndependentQ = .true.
     SysPotential_Ylm_lmax = 0
+    SysPotential_Ylm_mmax = 0
     SysPotential_Ylm_mIndependentQ = .true.
 
     !------------------------------------

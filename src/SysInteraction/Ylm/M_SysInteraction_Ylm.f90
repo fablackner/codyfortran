@@ -46,6 +46,10 @@ module M_SysInteraction_Ylm
 
   !> Maximum angular momentum L included in the expansion.
   integer(I32) :: SysInteraction_Ylm_lmax
+  !> Maximum |m| included in the expansion (sources and potentials store
+  !> |m| <= min(l, mmax)). Defaults to min(2*Grid_Ylm_mmax, lmax): a product
+  !> of two orbitals carries at most |m| = 2*Grid_Ylm_mmax.
+  integer(I32) :: SysInteraction_Ylm_mmax
   !> If true, the interaction does not depend on the magnetic quantum number m
   !> (only |m| or l matters), enabling additional optimizations.
   logical      :: SysInteraction_Ylm_mIndependentQ

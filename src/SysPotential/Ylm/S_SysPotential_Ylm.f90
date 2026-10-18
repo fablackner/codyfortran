@@ -52,6 +52,12 @@ contains
       error stop "sysPotential.ylm is missing one of: coulomb, coulombLaser"
     end if
 
+    ! A potential with m /= 0 components couples different orbital m, which a
+    ! truncated m expansion of the orbitals cannot represent
+    if (SysPotential_Ylm_mmax > 0 .and. Grid_Ylm_mmax < Grid_Ylm_lmax) then
+      error stop "sysPotential.ylm: model couples different m; requires grid.ylm.mmax = lmax"
+    end if
+
     ! Precompute Gaunt coefficients for the potential multiply
     ! (l1 <= lmaxPot, l2,l3 <= lmax)
     call SphericalHarmonics_EnsureGauntTable(max(Grid_Ylm_lmax, SysPotential_Ylm_lmax), &
@@ -75,12 +81,13 @@ contains
     integer(I32), intent(in), optional :: bt_
 
     integer(I32) :: l, m, potSize, nRad
-    integer(I32) :: lmaxPot
+    integer(I32) :: lmaxPot, mmaxPot
     complex(R64), allocatable :: potLm(:)
 
     nRad = Grid_Ylm_nRadial
     lmaxPot = SysPotential_Ylm_lmax
-    potSize = (2 * lmaxPot + 1)**2 * Grid_Ylm_nRadial
+    mmaxPot = SysPotential_Ylm_mmax
+    potSize = Grid_Ylm_NChannels(lmaxPot, mmaxPot) * Grid_Ylm_nRadial
 
     if (.not. allocated(externalPotential)) allocate (externalPotential(potSize))
     externalPotential = 0.0_R64
@@ -88,9 +95,9 @@ contains
     allocate (potLm(nRad))
 
     do l = 0, lmaxPot
-      do m = -l, l
+      do m = -min(l, mmaxPot), min(l, mmaxPot)
         call SysPotential_Ylm_FillExternalPotentialRadial(potLm, l, m, time, bt_)
-        call Grid_Ylm_SetLmComponent(externalPotential, l, m, potLm)
+        call Grid_Ylm_SetLmComponent(externalPotential, l, m, potLm, mmax_=mmaxPot)
       end do
     end do
 
@@ -111,12 +118,8 @@ contains
     complex(R64), intent(in), contiguous :: externalPotential(:)
     complex(R64), intent(in), contiguous :: orb(:)
 
-    integer(I32) :: lmax, lmaxPot
-
-    lmax = Grid_Ylm_lmax
-    lmaxPot = SysPotential_Ylm_lmax
-
-    call Grid_Ylm_SpatialProduct(dOrb, externalPotential, orb, lmax, lmaxPot, lmax)
+    call Grid_Ylm_SpatialProduct(dOrb, externalPotential, orb, &
+                                 lMaxConjg_=SysPotential_Ylm_lmax, mMaxConjg_=SysPotential_Ylm_mmax)
 
   end subroutine
 

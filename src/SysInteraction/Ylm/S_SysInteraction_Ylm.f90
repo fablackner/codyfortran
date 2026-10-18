@@ -37,6 +37,10 @@ contains
     !------------------------------------
 
     SysInteraction_Ylm_lmax = Json_Get("sysInteraction.ylm.lmax", 2 * Grid_Ylm_lmax)
+    SysInteraction_Ylm_mmax = Json_Get("sysInteraction.ylm.mmax", &
+                                       min(2 * Grid_Ylm_mmax, SysInteraction_Ylm_lmax))
+    if (SysInteraction_Ylm_mmax < 0) error stop "sysInteraction.ylm.mmax must be >= 0"
+    SysInteraction_Ylm_mmax = min(SysInteraction_Ylm_mmax, SysInteraction_Ylm_lmax)
 
     ! Precompute Gaunt coefficients covering both SpatialProduct usages:
     ! source fill (l1,l2 <= lmax, l3 <= lmaxPot) and potential multiply
@@ -89,25 +93,26 @@ contains
     integer(I32), intent(in), optional :: bt2_
 
     integer(I32) :: l, m, potSize, nRad
-    integer(I32) :: lmaxPot
+    integer(I32) :: lmaxPot, mmaxPot
     integer(I32) :: iCh, nCh
     integer(I32), allocatable :: lOfCh(:), mOfCh(:)
     complex(R64), allocatable :: srcLm(:), potLm(:)
 
     nRad = Grid_Ylm_nRadial
     lmaxPot = SysInteraction_Ylm_lmax
-    potSize = (2 * lmaxPot + 1)**2 * Grid_Ylm_nRadial
+    mmaxPot = SysInteraction_Ylm_mmax
+    potSize = Grid_Ylm_NChannels(lmaxPot, mmaxPot) * Grid_Ylm_nRadial
 
     if (.not. allocated(interactionPotential)) allocate (interactionPotential(potSize))
     interactionPotential = 0.0_R64
 
     ! Flatten the (l,m) channels so the independent radial Poisson solves can
     ! run in parallel; each channel writes a disjoint slice of the potential
-    nCh = (lmaxPot + 1)**2
+    nCh = Grid_Ylm_NChannels(lmaxPot, mmaxPot)
     allocate (lOfCh(nCh), mOfCh(nCh))
     iCh = 0
     do l = 0, lmaxPot
-      do m = -l, l
+      do m = -min(l, mmaxPot), min(l, mmaxPot)
         iCh = iCh + 1
         lOfCh(iCh) = l
         mOfCh(iCh) = m
@@ -120,10 +125,10 @@ contains
     do iCh = 1, nCh
       l = lOfCh(iCh)
       m = mOfCh(iCh)
-      call Grid_Ylm_GetLmComponent(srcLm, l, m, src)
+      call Grid_Ylm_GetLmComponent(srcLm, l, m, src, mmax_=mmaxPot)
       if (all(abs(srcLm) < 1.0e-14_R64)) cycle
       call SysInteraction_Ylm_FillInteractionPotentialRadial(potLm, srcLm, l, m, time, bt1_, bt2_)
-      call Grid_Ylm_SetLmComponent(interactionPotential, l, m, potLm)
+      call Grid_Ylm_SetLmComponent(interactionPotential, l, m, potLm, mmax_=mmaxPot)
     end do
     !$omp end do
     deallocate (srcLm, potLm)
@@ -151,18 +156,17 @@ contains
     complex(R64), intent(in), contiguous :: orbConjg(:)
     complex(R64), intent(in), contiguous :: orb(:)
 
-    integer(I32) :: lmax, srcSize, lmaxPot
+    integer(I32) :: srcSize
 
-    lmax = Grid_Ylm_lmax
-    lmaxPot = SysInteraction_Ylm_lmax
-    srcSize = (2 * lmaxPot + 1)**2 * Grid_Ylm_nRadial
+    srcSize = Grid_Ylm_NChannels(SysInteraction_Ylm_lmax, SysInteraction_Ylm_mmax) * Grid_Ylm_nRadial
 
     if (.not. allocated(src)) allocate (src(srcSize))
 
     ! Under a c-product metric (rotated ECS contour) the source is the
     ! bilinear product phi_i(z) phi_j(z) without conjugation of the bra
-    call Grid_Ylm_SpatialProduct(src, orbConjg, orb, lmaxPot, lmax, lmax, &
-                                 conjgQ_=.not. Grid_Ylm_cProductQ, withWeightsQ_=.true.)
+    call Grid_Ylm_SpatialProduct(src, orbConjg, orb, &
+                                 conjgQ_=.not. Grid_Ylm_cProductQ, withWeightsQ_=.true., &
+                                 lMaxOut_=SysInteraction_Ylm_lmax, mMaxOut_=SysInteraction_Ylm_mmax)
 
   end subroutine
 
@@ -183,12 +187,8 @@ contains
     complex(R64), intent(in), contiguous :: interactionPotential(:)
     complex(R64), intent(in), contiguous :: orb(:)
 
-    integer(I32) :: lmax, lmaxPot
-
-    lmax = Grid_Ylm_lmax
-    lmaxPot = SysInteraction_Ylm_lmax
-
-    call Grid_Ylm_SpatialProduct(dOrb, interactionPotential, orb, lmax, lmaxPot, lmax)
+    call Grid_Ylm_SpatialProduct(dOrb, interactionPotential, orb, &
+                                 lMaxConjg_=SysInteraction_Ylm_lmax, mMaxConjg_=SysInteraction_Ylm_mmax)
 
   end subroutine
 
@@ -204,26 +204,27 @@ contains
     complex(R64), intent(out), contiguous :: potOut(:)
     complex(R64), intent(in), contiguous  :: potIn(:)
 
-    integer(I32) :: l, m, phase, nRad, lmaxPot
+    integer(I32) :: l, m, phase, nRad, lmaxPot, mmaxPot
     complex(R64), allocatable :: potLm(:)
 
     nRad = Grid_Ylm_nRadial
     lmaxPot = SysInteraction_Ylm_lmax
+    mmaxPot = SysInteraction_Ylm_mmax
 
     potOut(:) = (0.0_R64, 0.0_R64)
 
     allocate (potLm(nRad))
 
     do l = 0, lmaxPot
-      do m = -l, l
-        call Grid_Ylm_GetLmComponent(potLm, l, -m, potIn)
+      do m = -min(l, mmaxPot), min(l, mmaxPot)
+        call Grid_Ylm_GetLmComponent(potLm, l, -m, potIn, mmax_=mmaxPot)
         if (mod(abs(m), 2) .eq. 0) then
           phase = 1
         else
           phase = -1
         end if
         potLm(:) = phase * conjg(potLm(:))
-        call Grid_Ylm_SetLmComponent(potOut, l, m, potLm)
+        call Grid_Ylm_SetLmComponent(potOut, l, m, potLm, mmax_=mmaxPot)
       end do
     end do
 

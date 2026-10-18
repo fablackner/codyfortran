@@ -29,7 +29,7 @@ contains
     Grid_Ylm_nRadial = Grid_Ylm_Fedvr_nElements * (Grid_Ylm_Fedvr_nLocals - 1)
 
     ! Update total grid size to include the radial component
-    Grid_nPoints = Grid_Ylm_nRadial * (Grid_Ylm_lmax + 1)**2
+    Grid_nPoints = Grid_Ylm_nRadial * Grid_Ylm_NChannels(Grid_Ylm_lmax, Grid_Ylm_mmax)
 
     ! Set the setup procedure
     Grid_Ylm_Setup => Setup

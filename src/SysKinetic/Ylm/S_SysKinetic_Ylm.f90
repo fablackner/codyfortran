@@ -73,7 +73,7 @@ contains
 
     ! Process each (l,m) channel separately
     do l = 0, lmax
-      do m = -l, l
+      do m = -min(l, Grid_Ylm_mmax), min(l, Grid_Ylm_mmax)
         ! Extract radial points for this (l,m) channel
         call Grid_Ylm_GetLmComponent(orbLm, l, m, orb)
 

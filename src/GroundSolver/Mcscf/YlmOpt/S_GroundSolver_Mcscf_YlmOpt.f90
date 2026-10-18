@@ -162,7 +162,7 @@ contains
   !>
   !> @details
   !> Allocates radial potentials and full-grid temporaries. The potential size
-  !> is (2·lmax_pot+1)² × nRadial to accommodate all angular momentum channels.
+  !> holds all (l,m) channels of the interaction expansion × nRadial.
   subroutine Setup
     use M_Utils_Say
     use M_Grid
@@ -171,12 +171,11 @@ contains
     use M_GroundSolver
     use M_Orbs
 
-    integer(I32) :: lmaxPot, potSize, nUp
+    integer(I32) :: potSize, nUp
 
     call Say_Setup("groundSolver.mcscf.ylmOpt")
 
-    lmaxPot = SysInteraction_Ylm_lmax
-    potSize = (2 * lmaxPot + 1)**2 * Grid_Ylm_nRadial
+    potSize = Grid_Ylm_NChannels(SysInteraction_Ylm_lmax, SysInteraction_Ylm_mmax) * Grid_Ylm_nRadial
 
     nUp = GroundSolver_NumberOfSpinUpOrbs()
 
@@ -386,7 +385,7 @@ contains
       end do
     end do
 
-    call Grid_Ylm_GetLmComponent(srcLm, 0, 0, weightedSrc)
+    call Grid_Ylm_GetLmComponent(srcLm, 0, 0, weightedSrc, mmax_=SysInteraction_Ylm_mmax)
     call SysInteraction_Ylm_FillInteractionPotentialRadial(hartreePotentialRaw, srcLm, 0, 0, time)
 
     if (mixTarget .eq. "potential") then

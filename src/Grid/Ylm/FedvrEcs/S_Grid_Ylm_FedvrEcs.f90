@@ -42,7 +42,7 @@ contains
     Grid_Ylm_nRadial = Grid_Ylm_FedvrEcs_nElements * (Grid_Ylm_FedvrEcs_nLocals - 1)
 
     ! Update total grid size to include the radial component
-    Grid_nPoints = Grid_Ylm_nRadial * (Grid_Ylm_lmax + 1)**2
+    Grid_nPoints = Grid_Ylm_nRadial * Grid_Ylm_NChannels(Grid_Ylm_lmax, Grid_Ylm_mmax)
 
     ! Set the setup procedure
     Grid_Ylm_Setup => Setup
@@ -126,7 +126,7 @@ contains
     ! Repeat the complex volume weights over all (l,m) channels; the flattened
     ! layout is (l,m) outer, radial inner (see S_Grid_Ylm Setup)
     iGrid = 0
-    do iChannel = 1, (Grid_Ylm_lmax + 1)**2
+    do iChannel = 1, Grid_Ylm_NChannels(Grid_Ylm_lmax, Grid_Ylm_mmax)
       do iRad = 1, Grid_Ylm_nRadial
         iGrid = iGrid + 1
         Grid_Ylm_FedvrEcs_weights(iGrid) = Grid_Ylm_FedvrEcs_volumeWeights(iRad)
