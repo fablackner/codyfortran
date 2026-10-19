@@ -23,6 +23,15 @@ set(THIRD_PARTY_INCLUDE "${THIRD_PARTY_DIR}/include")
 # Added CONFIGURE_DEPENDS so CMake re-runs if files are added/removed
 file(GLOB_RECURSE sources CONFIGURE_DEPENDS "src/*.f90")
 
+# Optional cuBLAS backend (M_Utils_CublasLib, method.mb.orbBased.exactFieldFreeGpuQ):
+# compile exactly one implementation submodule of M_Utils_CublasLib
+option(CODY_USE_CUDA "Build the cuBLAS GPU backend (needs the CUDA toolkit, no CUDA compiler)" OFF)
+if(CODY_USE_CUDA)
+    list(FILTER sources EXCLUDE REGEX ".*/S_Utils_CublasLib_Stub\\.f90$")
+else()
+    list(FILTER sources EXCLUDE REGEX ".*/S_Utils_CublasLib_Cuda\\.f90$")
+endif()
+
 # Main library target
 add_library(CodyFortran ${sources})
 
@@ -66,6 +75,11 @@ target_link_libraries(CodyFortran PRIVATE
     fortran_stdlib_core
     #ftorch
 )
+
+if(CODY_USE_CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    target_link_libraries(CodyFortran PRIVATE CUDA::cublas CUDA::cudart)
+endif()
 
 # Conditionally link compiler-specific libraries
 if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")

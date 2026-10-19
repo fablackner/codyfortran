@@ -183,6 +183,47 @@ The sum is a gauge transform of the full derivative (in-space orbital rotation
 by h¹, compensated in the many-body part). Adding h¹ to the many-body part of
 the non-linear step would count the one-body Hamiltonian twice.
 
+### Exact Field-Free One-Body Propagation
+
+With `"exactFieldFreeQ": true` in `method.mb.orbBased` (MCTDHX, TD-2RDM), the
+linear step is split once more: the field-free h0 = T + V_ext is propagated
+exactly and the linear integrator only sees the gauge coupling
+(`Method_Mb_OrbBased_ApplyLinOp` binds the gauge operator instead of the full
+one-body operator). The methods bind `Method_PropagateExactPart`, and the
+split-step propagators compose every linear step as
+exp(−i h0 Δt/2) · integrator 1(Δt) · exp(−i h0 Δt/2) (local error O(Δt³), as
+the outer Strang splitting).
+
+`S_Method_Mb_OrbBased_FieldFree.f90` builds h0 on the first call: it applies
+the kinetic and potential operators to radial unit vectors placed in all
+(l,m) channels at once, symmetrizes each block with the radial metric
+weights (w r² on FEDVR) and diagonalizes it per l (real symmetric, m
+independent). Propagation is then two real GEMMs per l on all orbitals and m,
+with phases exp(−i E Δt) (or exp(−E Δτ) in imaginary time).
+
+Why: on FEDVR grids h0 is very stiff (centrifugal term l(l+1)/2r² at the
+first radial point, ~10⁵–10⁶ a.u. at lmax = 32), so SIL needs hundreds of
+Krylov vectors per step; the gauge coupling alone needs about ten. For the Be
+HHG runs this is 5–8× faster per time step with the default Strang
+composition, but its splitting error ([h0, A·p] = iA ∂zV, largest near the
+nucleus) is 7–35× larger than the SIL time-step error at the peak of a
+4×10¹⁴ W/cm² pulse. Use the fourth-order composition
+`propagator.splitStep.exactPartScheme = "blanesMoan6"` (A_Propagator.md): its
+errors coincide with those of SIL at the same Δt (the outer Strang error
+dominates) at 2.5–5× lower cost; see `app/be/README.md`.
+
+`"exactFieldFreeGpuQ": true` runs the two GEMMs per l on the GPU with cuBLAS
+(`M_Utils_CublasLib`, build with `cmake -DCODY_USE_CUDA=ON`): the eigenvectors
+stay on the device, each call gathers all blocks on the host, sends them once,
+applies the phases on the host between the two transformations and returns
+them. Results agree with the CPU path to round-off.
+
+Requirements (checked at setup): Hermitian (non-ECS) Ylm grid, time- and
+body-type-independent kinetic and potential, central potential
+(`SysPotential_Ylm_lmax = 0`), no TD-2RDM weak orbitals. Memory: one real
+nRadial² matrix per l. T_Ne3d_09 (Strang) and T_Ne3d_10 (Blanes–Moan) check
+the agreement with the SIL scheme of T_Ne3d_08.
+
 ### TD-2RDM Active/Weak Natural-Orbital Split
 
 The TD-2RDM orbital equations contain the inverse 1-RDM, so weakly occupied
@@ -409,6 +450,7 @@ i ∂D²/∂t = [h¹, D²] + [Ŵ, D³]   (D³ approximated via reconstruction)
 | `Mb/S_Method_Mb.f90`                  | Many-body fabricate dispatcher            |
 | `Mb/OrbBased/M_Method_Mb_OrbBased.f90`| Orbital-based shared data & interfaces    |
 | `Mb/OrbBased/S_Method_Mb_OrbBased.f90`| Orbital-based operator implementations    |
+| `Mb/OrbBased/S_Method_Mb_OrbBased_FieldFree.f90` | Exact field-free one-body propagation (Ylm) |
 | `Mb/OrbBased/Tdci/*`                  | Full CI with static orbitals              |
 | `Mb/OrbBased/Tdhx/*`                  | Time-dependent Hartree–Fock/Exchange      |
 | `Mb/OrbBased/Mctdhx/*`                | Multiconfiguration TDHX                   |

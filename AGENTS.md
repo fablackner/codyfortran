@@ -110,13 +110,13 @@ Module doc: `src/ConfigList/A_ConfigList.md`.
 **Method**
 Domain: Dynamics & Propagation.
 Purpose: Unified method time-derivative interface for propagators.
-Key interfaces/notes: `Method_TimeDerivative(dState, state, t)`; includes Sb, TDHX, TDCI, MCTDHX, and TD-2RDM variants.
+Key interfaces/notes: `Method_TimeDerivative(dState, state, t)`; includes Sb, TDHX, TDCI, MCTDHX, and TD-2RDM variants; optional exact field-free one-body propagation on Ylm grids (`method.mb.orbBased.exactFieldFreeQ`, `Method_PropagateExactPart`, cuBLAS via `exactFieldFreeGpuQ`).
 Module doc: `src/Method/A_Method.md`.
 
 **Propagator**
 Domain: Dynamics & Propagation.
 Purpose: Time-evolution facade for state propagation.
-Key interfaces/notes: `Propagator_Propagate(state, t0, t1)`; supports single integrator, split-step (order2/order4), and eigen-expansion modes.
+Key interfaces/notes: `Propagator_Propagate(state, t0, t1)`; supports single integrator, split-step (order2/order4), and eigen-expansion modes; split-step linear steps compose an exactly propagated part with integrator 1 (`exactPartScheme`: strang, yoshida4, blanesMoan6).
 Module doc: `src/Propagator/A_Propagator.md`.
 
 **IntegratorList**
@@ -164,7 +164,7 @@ Module doc: `src/Absorber/A_Absorber.md`.
 **Utils**
 Domain: Numerical Infrastructure.
 Purpose: Stateless numerical/algebra utility modules.
-Key interfaces/notes: Includes types, BLAS/LAPACK/ARPACK/FFT/GSL wrappers, RDM algebra utilities, derivatives/convolutions, JSON/data I/O, and logging.
+Key interfaces/notes: Includes types, BLAS/LAPACK/ARPACK/FFT/GSL wrappers, optional cuBLAS GPU layer (`M_Utils_CublasLib`, CMake `CODY_USE_CUDA`), RDM algebra utilities, derivatives/convolutions, JSON/data I/O, and logging.
 Module doc: `src/Utils/A_Utils.md`.
 
 ---

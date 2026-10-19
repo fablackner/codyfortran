@@ -403,6 +403,34 @@ module M_Utils_LapackLib
     end subroutine
   end interface
 
+  interface
+    subroutine ZGESVD(JOBU, JOBVT, M, N, A, LDA, S, U, LDU, VT, LDVT, WORK, LWORK, RWORK, INFO)
+      import :: I32, R64
+      !> Which left/right singular vectors to compute ('A', 'S', 'O' or 'N').
+      character(len=1), intent(in) :: JOBU
+      character(len=1), intent(in) :: JOBVT
+      !> Matrix dimensions and leading dimensions of A, U and VT.
+      integer(I32), intent(in)     :: M
+      integer(I32), intent(in)     :: N
+      integer(I32), intent(in)     :: LDA
+      integer(I32), intent(in)     :: LDU
+      integer(I32), intent(in)     :: LDVT
+      !> Input matrix (destroyed on exit).
+      complex(R64), intent(inout)  :: A(LDA, *)
+      !> Singular values in descending order.
+      real(R64), intent(out)       :: S(*)
+      !> Left and right (conjugate-transposed) singular vectors.
+      complex(R64), intent(out)    :: U(LDU, *)
+      complex(R64), intent(out)    :: VT(LDVT, *)
+      !> Workspace (optimal LWORK in WORK(1) for a query with LWORK = -1).
+      complex(R64), intent(out)    :: WORK(*)
+      integer(I32), intent(in)     :: LWORK
+      real(R64), intent(out)       :: RWORK(*)
+      !> Status info (0 on success).
+      integer(I32), intent(out)    :: INFO
+    end subroutine
+  end interface
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

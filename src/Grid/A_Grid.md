@@ -457,4 +457,11 @@ call Grid_ProjectOnSubspace(dOrbs, Orbs_orbs)
   both factors are evaluated on the nodes, multiplied pointwise and projected back
   (O(l_max² × N_radial), matrix products). Tables cover l ≤ 2 lmax + 2 and products of
   total degree ≤ 4 lmax + 5; larger layouts fall back to the Gaunt sum.
+  A spherically symmetric first factor (`lMaxConjg_ = 0`, e.g. a central external
+  potential) takes precedence: Y₀₀ Y_lm = Y_lm/√(4π), so the product is an exact
+  radial scaling of every channel of the second factor (O(N), no transforms).
+- **Gaunt table** (`M_Utils_SphericalHarmonics`): SysInteraction and SysPotential
+  tabulate only |m| ≤ max(grid mmax, operator mmax) in a compact (l, m) index;
+  other m fall back to the direct Wigner-3j evaluation. With `mmax = 0` and
+  lmax = 32 this is ~1 MB built in milliseconds instead of 2.4 GB and minutes.
 - **FEDVR grids**: Sparse structure can be exploited by kinetic operators but inner products remain dense.

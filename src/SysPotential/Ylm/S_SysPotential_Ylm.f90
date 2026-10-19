@@ -62,7 +62,8 @@ contains
     ! (l1 <= lmaxPot, l2,l3 <= lmax)
     call SphericalHarmonics_EnsureGauntTable(max(Grid_Ylm_lmax, SysPotential_Ylm_lmax), &
                                              Grid_Ylm_lmax, &
-                                             Grid_Ylm_lmax)
+                                             Grid_Ylm_lmax, &
+                                             mmax_=max(Grid_Ylm_mmax, SysPotential_Ylm_mmax))
 
   end subroutine
 

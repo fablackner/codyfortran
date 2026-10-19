@@ -55,6 +55,50 @@ for TD-2RDM and MCTDHF alike. With 6 or more orbitals dt = 0.01 is unstable for
 TD-2RDM (the inverse 1-RDM makes the orbital equations stiff, ~1/n_min) and
 lets the MCTDHF energy drift (1.8e-4 in 10 a.u. vs. 9e-7 at dt = 0.0025).
 
+**Exact field-free propagation (default; `--no-exact-field-free` to switch
+off).** The one-body split step is stiff (centrifugal term l(l+1)/2r² ≈ 4e6
+a.u. at the first FEDVR point for l = 32), so SIL needs ~250 Krylov vectors
+per half step. With `method.mb.orbBased.exactFieldFreeQ` the field-free h0 is
+propagated exactly per l (diagonalized once) and SIL only sees the gauge
+coupling A·p. A plain Strang splitting of h0 and A·p adds a large error near
+the nucleus ([h0, A·p] = iA ∂zV); the fourth-order Blanes–Moan composition
+(`propagator.splitStep.exactPartScheme = "blanesMoan6"`, 7 exact and 6 SIL
+substeps per linear step) removes it. MCTDHF, strong2c pulse, 0.2 a.u. at the
+peak vector potential, maximal error against the Richardson-extrapolated
+reference, one thread:
+
+| linear step | dt | ⟨z⟩ | −Z⟨z/r³⟩ (acceleration) | energy | wall time |
+|---|---|---|---|---|---|
+| SIL (previous default) | 0.0025 | 1.0e-6 | 6.7e-4 | 8.9e-6 | 3014 s |
+| SIL | 0.00125 | 2.5e-7 | 1.7e-4 | 2.2e-6 | 2030 s |
+| exact h0, Strang | 0.0025 | 7.5e-6 | 2.3e-2 | 2.0e-4 | 366 s |
+| exact h0, Strang | 0.000625 | 4.7e-7 | 1.3e-3 | 1.2e-5 | 1648 s* |
+| exact h0, Yoshida-4 | 0.0025 | 1.1e-6 | 1.0e-2 | 1.1e-4 | 579 s |
+| **exact h0, Blanes–Moan** | 0.0025 | 1.0e-6 | 6.7e-4 | 9.4e-6 | 678 s |
+| **exact h0, Blanes–Moan** | 0.00125 | 2.5e-7 | 1.7e-4 | 2.2e-6 | 1247 s |
+
+(*shared the two cores with other runs part of the time.) With Blanes–Moan the
+errors coincide with SIL at the same dt: what remains is the outer
+(one-body/interaction) Strang error common to both. TD-2RDM agrees with the
+SIL run to 7e-10 in ⟨z⟩ (627 s vs. 3185 s). Per step early in the pulse (weak
+field, one thread): 17.4 s with SIL, 4.9 s with Blanes–Moan, 3.1 s with the
+GPU. The imaginary-time relaxation (`relax/P_ImagTimeMctdhf`, no field) uses
+exp(−h0 dτ) directly: one check of stage B takes 157 s instead of 278 s
+(including ~45 s one-time diagonalization) with the same energy to 3e-14.
+
+**GPU (`--gpu`).** The exact h0 transformations (two dense GEMMs per l, 14 per
+time step) can run on an NVIDIA GPU with cuBLAS; the eigenvectors stay on the
+device (227 MiB). Build once with the cuBLAS backend (no CUDA compiler needed,
+the toolkit libraries suffice):
+
+```bash
+cmake -B build -DCODY_USE_CUDA=ON      # then cody build app as usual
+python3 make_inputs.py --gpu
+```
+
+On a GTX 1050 Ti (FP64 at 1/32 rate) this gives 1.6× per step over the CPU
+path; results agree with the CPU to round-off.
+
 **Purification.** With `conserveEnergyQ` the D/Q correction is orthogonal to
 h2, so `laser/P_LaserTd2rdm` rebuilds h2 from the current orbitals before
 every purification (previously h2 was refreshed only at output steps). With
@@ -73,7 +117,7 @@ threshold; without `conserveEnergyQ` the energy shifts by ~1e-3).
 | angular basis | spherical harmonics, L_max = 47 | L_max = 32, **m = 0 only** |
 | orbitals | not stated | 6 spatial orbitals (m = 0), restricted |
 | reconstruction | contraction-consistent Nakatsuji–Yasuda | same |
-| propagation | 2nd-order split step | same (SIL for the one-body part, RK4 for the rest) |
+| propagation | 2nd-order split step | same (one-body part: exact h0 with Blanes–Moan composition of the gauge SIL; RK4 for the rest) |
 | initial state | MCTDHF ground state by imaginary time; TD-2RDM: field-free time average (T = 40 a.u.) | same |
 
 Restricting the orbitals to m = 0 is exact for the dynamics of m = 0 orbitals
@@ -108,6 +152,19 @@ Building this comparison exposed and required several changes in `src/`:
 - **TD-2RDM active/weak natural-orbital split**
   (`method.mb.orbBased.td2rdm.nWeakOrbs`, off by default): stabilizes TD-2RDM
   with weakly occupied natural orbitals; see `src/Method/A_Method.md`.
+- **CPU performance** (results unchanged to round-off, 1.8× per step on one
+  thread, 2.1× on four): the m = 0 correlation operator
+  `ApplyCorrelationOpYlmM0` was never selected because the Ylm Coulomb
+  interaction did not declare itself body-type independent; central
+  potentials multiply as a radial scaling instead of the angular quadrature;
+  SIL reorthogonalizes with two `ZGEMV` sweeps; the FEDVR element operator
+  avoids `matmul` temporaries.
+- **Gaunt table** restricted to the m of the grid and operators: setup takes
+  milliseconds and ~1 MB instead of ~3.5 min and 2.4 GB per program start.
+- **Exact field-free one-body propagation** with a fourth-order composition
+  (`method.mb.orbBased.exactFieldFreeQ`, `propagator.splitStep.exactPartScheme`)
+  and an optional cuBLAS backend (`exactFieldFreeGpuQ`, CMake `CODY_USE_CUDA`),
+  default for this project, see "Time step" above.
 - **Contraction-consistent trace constraints** (bug fix): the
   `M_Utils_RdmEnforceTrace*` coefficients were computed for the first
   dimension only and silently reused for other dimensions.

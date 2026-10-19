@@ -55,6 +55,15 @@ PRODUCTION = {
     # TD-2RDM: number of weak spatial natural orbitals (active/weak split,
     # src/Method/A_Method.md; 0 = off)
     "nWeakOrbs": 0,
+    # exact field-free one-body propagation: exp(-i h0 dt) per l, SIL only for
+    # the gauge coupling, fourth-order Blanes-Moan composition inside every
+    # linear split step (method.mb.orbBased.exactFieldFreeQ,
+    # src/Method/A_Method.md); same accuracy as SIL at this dt, 2.5-5x faster
+    # (README); not available with weak orbitals
+    "exactFieldFree": True,
+    # run the exact field-free transformations with cuBLAS (requires a build
+    # with cmake -DCODY_USE_CUDA=ON)
+    "gpu": False,
     # purify the time-averaged initial state once (P_Td2rdmTimeAverage)
     "purifyAverageQ": False,
     "pulses": PULSES,
@@ -80,14 +89,29 @@ def method(p, kind):
     opts = {}
     if kind == "td2rdm" and p["nWeakOrbs"] > 0:
         opts["nWeakOrbs"] = p["nWeakOrbs"]
+    orb_based = {"nOrbs": [n, n], kind: opts}
+    if p["exactFieldFree"]:
+        orb_based["exactFieldFreeQ"] = True
+        if p["gpu"]:
+            orb_based["exactFieldFreeGpuQ"] = True
     return {"mb": {"nBodyTypes": 2, "nBodies": [2, 2], "bodyStatistics": ["f", "f"],
-                   "orbBased": {"nOrbs": [n, n], kind: opts}}}
+                   "orbBased": orb_based}}
 
 
 def purification():
     # D- and Q-condition purification of the paper (40 iterations)
     return {"singlet": {"reduce": {"nSteps": 40, "threshold": -1e-5,
                                    "conserveEnergyQ": False}}}
+
+
+def propagator(p):
+    # second-order split step; with the exact field-free propagator the linear
+    # step is the fourth-order Blanes-Moan composition of exp(-i h0 dt) and
+    # the gauge SIL (src/Propagator/A_Propagator.md)
+    split = {"order2": {}}
+    if p["exactFieldFree"]:
+        split["exactPartScheme"] = "blanesMoan6"
+    return {"splitStep": split}
 
 
 def ci():
@@ -151,7 +175,7 @@ def time_average(p):
     d["orbsInit"] = {"load": {}}
     d.update(two_rdm())
     d.update(split_step())
-    d["propagator"] = {"splitStep": {"order2": {}}}
+    d["propagator"] = propagator(p)
     if p["purifyAverageQ"]:
         d["purification"] = purification()
     d["program"] = {"averagingTime": p["averagingTime"], "outputStep": p["outputStep"],
@@ -176,7 +200,7 @@ def laser(p, pulse, kind):
         if pulse["purification"]:
             d["purification"] = purification()
     d.update(split_step())
-    d["propagator"] = {"splitStep": {"order2": {}}}
+    d["propagator"] = propagator(p)
     d["absorber"] = {"ylm": {"cosinus": {"onset": p["absorberOnset"],
                                          "order": p["absorberOrder"]}}}
     duration = 2.0 * math.pi * pulse["nCycles"] / OMEGA
@@ -204,12 +228,26 @@ def main():
     ap.add_argument("--nweak-orbs", type=int, default=PRODUCTION["nWeakOrbs"],
                     help="TD-2RDM weak natural orbitals, time average and laser "
                          "inputs (default: 0, off)")
+    ap.add_argument("--no-exact-field-free", action="store_true",
+                    help="propagate the whole one-body part with SIL instead of "
+                         "the exact field-free propagator")
+    ap.add_argument("--gpu", action="store_true",
+                    help="exact field-free transformations on the GPU (cuBLAS; "
+                         "build with cmake -DCODY_USE_CUDA=ON)")
     args = ap.parse_args()
 
     p = copy.deepcopy(PRODUCTION)
     if args.norbs:
         p["orbitals"] = p["orbitals"][:args.norbs]
     p["nWeakOrbs"] = args.nweak_orbs
+    if args.no_exact_field_free:
+        p["exactFieldFree"] = False
+    if args.gpu:
+        p["gpu"] = True
+    if p["nWeakOrbs"] > 0 and p["exactFieldFree"]:
+        # TD-2RDM weak orbitals replace h by H_L; keep both methods on one scheme
+        print("note: --nweak-orbs switches off the exact field-free propagator")
+        p["exactFieldFree"] = False
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inputs")
     if args.test:
         out = args.test

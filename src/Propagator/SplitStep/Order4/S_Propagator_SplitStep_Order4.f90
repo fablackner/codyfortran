@@ -59,6 +59,7 @@ contains
   subroutine Propagate(state, t0, t1)
     use M_IntegratorList
     use M_Propagator
+    use M_Propagator_SplitStep
 
     complex(R64), intent(inout), contiguous :: state(:)
     real(R64), intent(in)    :: t0
@@ -90,13 +91,13 @@ contains
     time6 = time5 + b3 * dt
 
     ! 7-stage symmetric sequence: A B A B A B A
-    call IntegratorList(1) % e % Integrate(state, time1, time1 + a1 * dt)
+    call Propagator_SplitStep_IntegrateLin(state, time1, time1 + a1 * dt)
     call IntegratorList(2) % e % Integrate(state, time1, time1 + b1 * dt)
-    call IntegratorList(1) % e % Integrate(state, time2, time2 + a2 * dt)
+    call Propagator_SplitStep_IntegrateLin(state, time2, time2 + a2 * dt)
     call IntegratorList(2) % e % Integrate(state, time3, time3 + b2 * dt)
-    call IntegratorList(1) % e % Integrate(state, time4, time4 + a3 * dt)
+    call Propagator_SplitStep_IntegrateLin(state, time4, time4 + a3 * dt)
     call IntegratorList(2) % e % Integrate(state, time5, time5 + b3 * dt)
-    call IntegratorList(1) % e % Integrate(state, time6, time6 + a4 * dt)
+    call Propagator_SplitStep_IntegrateLin(state, time6, time6 + a4 * dt)
 
   end subroutine
 

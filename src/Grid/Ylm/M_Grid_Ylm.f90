@@ -177,8 +177,8 @@ module M_Grid_Ylm
     !> Set f_out so that its (l,m) channel equals the provided radial function.
     pure subroutine I_Grid_Ylm_SetLmComponent(fOut, l, m, fLm, mmax_)
       import :: I32, R64
-      !> The full function on the Ylm grid after setting the component.
-      complex(R64), intent(out) :: fOut(:)
+      !> The full function on the Ylm grid; only the (l,m) channel is overwritten.
+      complex(R64), intent(inout) :: fOut(:)
       !> The angular momentum quantum number.
       integer(I32), intent(in) :: l
       !> The magnetic quantum number.

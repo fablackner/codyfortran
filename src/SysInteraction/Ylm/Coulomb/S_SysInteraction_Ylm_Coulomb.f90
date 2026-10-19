@@ -38,6 +38,9 @@ contains
     SysInteraction_Ylm_Coulomb_Strength = Json_Get("sysInteraction.ylm.coulomb.strength", 1.0_R64)
     SysInteraction_Ylm_mIndependentQ = .true.
 
+    ! The radial solvers ignore the body types: one potential serves all
+    SysInteraction_bodyTypeIndependentQ = .true.
+
     ! Real Coulomb kernel: swapped source pairs give the conjugated potential,
     ! but only on a real radial contour (an actively rotated c-product contour
     ! breaks the symmetry; the grid back-end declares its metric)

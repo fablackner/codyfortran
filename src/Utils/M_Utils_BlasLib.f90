@@ -431,7 +431,7 @@ contains
     if (size(inputVectorX, 1) .ne. n) error stop "WrapZGEMV wrong input vector size"
     if (size(outputVector, 1) .ne. m) error stop "WrapZGEMV wrong result vector size"
 
-    call ZGEMV(transA, m, n, ALPHA, inputMatrixA, mA, inputVectorX, INCX, BETA, outputVector, INCY)
+    call ZGEMV(transA, mA, nA, ALPHA, inputMatrixA, mA, inputVectorX, INCX, BETA, outputVector, INCY)
 
   end subroutine
 
@@ -467,7 +467,7 @@ contains
     if (size(inputVectorX, 1) .ne. n) error stop "WrapDGEMV wrong input vector size"
     if (size(outputVector, 1) .ne. m) error stop "WrapDGEMV wrong result vector size"
 
-    call DGEMV(transA, m, n, ALPHA, inputMatrixA, mA, inputVectorX, INCX, BETA, outputVector, INCY)
+    call DGEMV(transA, mA, nA, ALPHA, inputMatrixA, mA, inputVectorX, INCX, BETA, outputVector, INCY)
 
   end subroutine
 
@@ -509,7 +509,7 @@ contains
 
     if (.not. allocated(outputVector)) allocate (outputVector(m))
 
-    call ZGEMV(transA, m, n, ALPHA, inputMatrixA, mA, inputVectorX, INCX, BETA, outputVector, INCY)
+    call ZGEMV(transA, mA, nA, ALPHA, inputMatrixA, mA, inputVectorX, INCX, BETA, outputVector, INCY)
 
   end subroutine
 
@@ -551,7 +551,7 @@ contains
 
     if (.not. allocated(outputVector)) allocate (outputVector(m))
 
-    call DGEMV(transA, m, n, ALPHA, inputMatrixA, mA, inputVectorX, INCX, BETA, outputVector, INCY)
+    call DGEMV(transA, mA, nA, ALPHA, inputMatrixA, mA, inputVectorX, INCX, BETA, outputVector, INCY)
 
   end subroutine
 

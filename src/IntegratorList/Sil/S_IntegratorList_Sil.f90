@@ -129,7 +129,7 @@ contains
 
     complex(R64), allocatable :: workState(:), trialState(:)
     complex(R64), allocatable, target :: basis(:, :)
-    complex(R64), allocatable :: deriv(:), w(:), phi(:)
+    complex(R64), allocatable :: deriv(:), w(:), phi(:), wMetric(:), proj(:)
     real(R64), allocatable :: alpha(:), beta(:)
     real(R64) :: dtRemaining, dtStep, tCurrent, errorEstimate
     integer :: nState, maxDim, restartCount
@@ -151,6 +151,8 @@ contains
     allocate (basis(nState, maxDim))
     allocate (deriv(nState))
     allocate (w(nState))
+    allocate (wMetric(nState))
+    allocate (proj(maxDim))
     allocate (phi(maxDim))
     allocate (alpha(maxDim))
     allocate (beta(maxDim))
@@ -200,6 +202,29 @@ contains
 
     end function
 
+    !> Project v onto the orthogonal complement of basis(:, 1:nBasis) in the
+    !> integrator metric: v <- v - B (B^H W v) with one classical Gram-Schmidt
+    !> pass.
+    subroutine ReorthogonalizeOnBasis(v, nBasis)
+      use M_Utils_BlasLib, only: ZGEMV
+
+      complex(R64), intent(inout), contiguous :: v(:)
+      integer, intent(in) :: nBasis
+
+      complex(R64), parameter :: one = (1.0_R64, 0.0_R64)
+      complex(R64), parameter :: zero = (0.0_R64, 0.0_R64)
+
+      if (allocated(this % metricWeights)) then
+        wMetric(:) = this % metricWeights(:) * v(:)
+      else
+        wMetric(:) = v(:)
+      end if
+
+      call ZGEMV('C', nState, nBasis, one, basis, nState, wMetric, 1, zero, proj, 1)
+      call ZGEMV('N', nState, nBasis, -one, basis, nState, proj, 1, one, v, 1)
+
+    end subroutine
+
     !> Perform one Lanczos sub-step: grow the Krylov basis until the error
     !> estimate is below tolerance, then apply the exponential in the
     !> reduced basis.
@@ -222,7 +247,7 @@ contains
 
       complex(R64), pointer :: vCurrent(:)
       real(R64) :: stateNorm, timeEval
-      integer :: j, k, mDim
+      integer :: j, mDim
       logical :: breakdown
 
       stateNorm = sqrt(real(MetricDot(stateIn, stateIn), kind=R64))
@@ -249,10 +274,11 @@ contains
         alpha(j) = real(MetricDot(vCurrent, w), kind=R64)
         w(:) = w(:) - alpha(j) * vCurrent(:)
 
-        ! full reorthogonalization against all previous Lanczos vectors
-        do k = 1, j
-          w(:) = w(:) - MetricDot(basis(:, k), w) * basis(:, k)
-        end do
+        ! full reorthogonalization against all previous Lanczos vectors; after
+        ! the three-term recurrence w is orthogonal up to round-off, so one
+        ! classical Gram-Schmidt pass (two BLAS sweeps over the basis instead
+        ! of j sweeps) is as accurate as the modified variant
+        call ReorthogonalizeOnBasis(w, j)
 
         beta(j) = sqrt(real(MetricDot(w, w), kind=R64))
         breakdown = beta(j) <= zeroThreshold

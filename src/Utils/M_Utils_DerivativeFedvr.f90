@@ -122,8 +122,10 @@ contains
     integer(I32), intent(in) :: dxPower
 
     integer(I32) :: iE, iStart, iEnd, nLoc, nE
-    integer(I32) :: iLocalStart, iLocalEnd
+    integer(I32) :: iLocalStart, iLocalEnd, iLoc, jLoc, offset
     real(R64) :: dx
+    complex(R64) :: fj
+    complex(R64) :: elementRes(fedvrCtx % nLocals)
 
     nLoc = fedvrCtx % nLocals
     nE = fedvrCtx % nElements
@@ -141,10 +143,17 @@ contains
         if (fedvrCtx % xminExcludedQ .and. iE .eq. 1) iLocalStart = 2
         if (fedvrCtx % xmaxExcludedQ .and. iE .eq. nE) iLocalEnd = nLoc - 1
 
-        ! Apply operator matrix to f for this element
-        res(iStart:iEnd) = res(iStart:iEnd) + &
-                           matmul(operatorMatrix(iLocalStart:iLocalEnd, iLocalStart:iLocalEnd), &
-                                  f(iStart:iEnd)) / dx**dxPower
+        ! Apply operator matrix to f for this element (column-wise real x
+        ! complex update; avoids the temporaries of matmul on array sections)
+        offset = iStart - iLocalStart
+        elementRes(iLocalStart:iLocalEnd) = (0.0_R64, 0.0_R64)
+        do jLoc = iLocalStart, iLocalEnd
+          fj = f(offset + jLoc)
+          do iLoc = iLocalStart, iLocalEnd
+            elementRes(iLoc) = elementRes(iLoc) + operatorMatrix(iLoc, jLoc) * fj
+          end do
+        end do
+        res(iStart:iEnd) = res(iStart:iEnd) + elementRes(iLocalStart:iLocalEnd) / dx**dxPower
       end associate
     end do
 

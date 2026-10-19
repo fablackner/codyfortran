@@ -181,7 +181,7 @@ contains
 
     integer(I32) :: iSub
 
-    call integratorList(1) % e % Integrate(Method_state, 0.0_R64, 0.5_R64 * dtauStep)
+    call ImagTimeLin(0.5_R64 * dtauStep)
     call LowdinKeepingState(Coeffs_coeffs, Orbs_orbs)
 
     ! The non-linear part is stiff for weakly occupied orbitals (inverse
@@ -191,10 +191,26 @@ contains
       call LowdinKeepingState(Coeffs_coeffs, Orbs_orbs)
     end do
 
-    call integratorList(1) % e % Integrate(Method_state, 0.0_R64, 0.5_R64 * dtauStep)
+    call ImagTimeLin(0.5_R64 * dtauStep)
     call LowdinKeepingState(Coeffs_coeffs, Orbs_orbs)
 
     call Coeffs_Normalize(Coeffs_coeffs)
+
+  end subroutine
+
+  !> Linear part exp(-h dtau) with integrator 1; with
+  !> method.mb.orbBased.exactFieldFreeQ the field-free h0 is applied exactly
+  !> around it (integrator 1 then only sees the vanishing gauge coupling).
+  subroutine ImagTimeLin(dtauLin)
+    real(R64), intent(in) :: dtauLin
+
+    if (associated(Method_PropagateExactPart)) then
+      call Method_PropagateExactPart(Method_state, 0.0_R64, 0.5_R64 * dtauLin, imagTimeQ_=.true.)
+      call integratorList(1) % e % Integrate(Method_state, 0.0_R64, dtauLin)
+      call Method_PropagateExactPart(Method_state, 0.0_R64, 0.5_R64 * dtauLin, imagTimeQ_=.true.)
+    else
+      call integratorList(1) % e % Integrate(Method_state, 0.0_R64, dtauLin)
+    end if
 
   end subroutine
 

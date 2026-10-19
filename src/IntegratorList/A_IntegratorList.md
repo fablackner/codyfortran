@@ -176,6 +176,13 @@ soon as the residual error estimate drops below `tolerance` (up to
 and retried up to `maxRestarts` times. Requires a Hermitian generator
 (TimeDerivative = −i Ĥ ψ with Ĥ Hermitian).
 
+Each new Lanczos vector is fully reorthogonalized against the basis by one
+classical Gram–Schmidt pass done as two `ZGEMV` sweeps (B^H W w, then
+w − B h). After the three-term recurrence the projections are at round-off
+level, so this matches modified Gram–Schmidt while reading the basis twice
+instead of once per basis vector; it is the dominant cost of SIL besides
+the operator applications.
+
 With `"imagTimeQ": true` the same Lanczos basis gives the imaginary-time
 propagator exp(−Δτ Ĥ)ψ (the callback keeps the real-time convention
 −i Ĥ ψ). The result is not normalized; e.g. for stiff one-body operators of

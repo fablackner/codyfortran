@@ -77,6 +77,20 @@ complex(R64), intent(inout), contiguous :: A2(:,:,:,:)
 
 ---
 
+## GPU Linear Algebra: `M_Utils_CublasLib`
+
+Minimal double-precision cuBLAS layer (`src/Utils/CublasLib/`): device memory
+as `type(c_ptr)` plus element offsets, `CublasLib_AvailableQ`,
+`CublasLib_Allocate`/`Deallocate`, `CublasLib_CopyToDevice`/`CopyToHost` and
+`CublasLib_Dgemm` (column-major, 'N'/'T'). The CUDA runtime and cuBLAS are
+called through `bind(C)`, so no CUDA compiler is needed. CMake compiles
+exactly one implementation submodule: `S_Utils_CublasLib_Cuda` with
+`-DCODY_USE_CUDA=ON` (links `CUDA::cublas`, `CUDA::cudart`), otherwise
+`S_Utils_CublasLib_Stub` (no device; every call except `AvailableQ` stops).
+Used by the exact field-free propagation (`method.mb.orbBased.exactFieldFreeGpuQ`).
+
+---
+
 ## M_Utils_RdmAlgebra Deep Dive
 
 ### Purpose

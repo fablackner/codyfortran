@@ -118,6 +118,25 @@ Symmetric Strang splitting: A(½Δt) · B(Δt) · A(½Δt)
 
 **Requires 2 integrators:** IntegratorList(1) for Â, IntegratorList(2) for B̂.
 
+Every Â step goes through `Propagator_SplitStep_IntegrateLin` (both orders):
+if the method propagates part of Â exactly (`Method_PropagateExactPart`
+associated, e.g. `method.mb.orbBased.exactFieldFreeQ`), the step is
+exact(Δt/2) · IntegratorList(1)(Δt) · exact(Δt/2); otherwise it is
+IntegratorList(1) alone.
+
+`"exactPartScheme"` in `propagator.splitStep` selects the composition of the
+exact part and IntegratorList(1) inside that step:
+
+| scheme | order | exact / integrator substeps |
+|---|---|---|
+| `"strang"` (default) | 2 | 2 / 1 |
+| `"yoshida4"` | 4 | 4 / 3 (negative middle steps) |
+| `"blanesMoan6"` | 4 | 7 / 6 (Blanes & Moan 2002, PRK S6; ~250× smaller error constant than Yoshida) |
+
+The exact substeps carry the time; every integrator substep is centred on the
+time reached, so its midpoint evaluation of a time-dependent part (e.g. the
+vector potential) stays consistent with the symmetric composition.
+
 ### Split-Step (4th Order)
 
 Yoshida composition with 7 stages and O(Δt⁴) global error:

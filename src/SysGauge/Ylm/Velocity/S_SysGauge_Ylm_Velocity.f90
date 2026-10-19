@@ -195,7 +195,7 @@ contains
     dOrb = 0.0_R64
 
     aPot = SysGauge_Ylm_Velocity_VectorPotentialAmplitude(time)
-    if (aPot .eq. 0.0_R64) return
+    if (abs(aPot) < tiny(1.0_R64)) return
 
     bt = 1
     if (present(bt_)) bt = bt_

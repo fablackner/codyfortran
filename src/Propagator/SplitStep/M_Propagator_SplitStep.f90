@@ -33,6 +33,22 @@ module M_Propagator_SplitStep
     !> `M_Propagator::Propagator_Setup` and then `Propagator_Propagate`.
     module subroutine Propagator_SplitStep_Fabricate
     end subroutine
+
+    !> Linear split step Â from `t0` to `t1` with integrator 1. If the method
+    !> propagates part of the linear generator exactly
+    !> (`Method_PropagateExactPart`), the step is a symmetric composition of
+    !> exact and integrator-1 substeps selected by
+    !> propagator.splitStep.exactPartScheme: "strang" (default,
+    !> exact(Δt/2) · integrator 1(Δt) · exact(Δt/2)), "yoshida4" or
+    !> "blanesMoan6" (fourth order).
+    module subroutine Propagator_SplitStep_IntegrateLin(state, t0, t1)
+      !> Quantum state, propagated in place.
+      complex(R64), intent(inout), contiguous :: state(:)
+      !> Start time.
+      real(R64), intent(in) :: t0
+      !> End time.
+      real(R64), intent(in) :: t1
+    end subroutine
   end interface
 
   !=============================================================================

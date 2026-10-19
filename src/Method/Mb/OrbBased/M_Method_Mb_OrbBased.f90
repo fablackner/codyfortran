@@ -35,6 +35,20 @@ module M_Method_Mb_OrbBased
       !> One-body reduced density matrix (nOrbsSum x nOrbsSum).
       complex(R64), intent(in), contiguous   :: rdm1(:, :)
     end subroutine
+
+    !> Propagates the orbitals exactly with the field-free one-body
+    !> Hamiltonian h0 = T + V_ext: orbs <- exp(-i h0 dt) orbs, or
+    !> exp(-h0 dt) orbs if imagTimeQ. h0 is block diagonal in (l,m) on Ylm
+    !> grids and is diagonalized once per l on the first call
+    !> (S_Method_Mb_OrbBased_FieldFree).
+    module subroutine Method_Mb_OrbBased_PropagateFieldFree(orbs, dt, imagTimeQ)
+      !> Orbitals (nPoints x nOrbsInState), propagated in place.
+      complex(R64), intent(inout), contiguous :: orbs(:, :)
+      !> Time step (may be negative).
+      real(R64), intent(in) :: dt
+      !> Imaginary-time propagation exp(-h0 dt).
+      logical, intent(in) :: imagTimeQ
+    end subroutine
   end interface
 
   !=============================================================================
@@ -280,6 +294,17 @@ module M_Method_Mb_OrbBased
       complex(R64), intent(out), allocatable, optional :: h1_(:, :)
     end subroutine
   end interface
+
+  !> If true (method.mb.orbBased.exactFieldFreeQ), the field-free one-body
+  !> Hamiltonian h0 = T + V_ext is propagated exactly by
+  !> `Method_PropagateExactPart` and the linear split-step integrator only
+  !> propagates the gauge coupling (`Method_Mb_OrbBased_ApplyLinOp`).
+  logical :: Method_Mb_OrbBased_exactFieldFreeQ = .false.
+
+  !> Pointer to the one-body operator propagated by the linear split-step
+  !> integrator (`TimeDerivativeOrbsLin`): the full one-body Hamiltonian, or
+  !> only the gauge coupling if `Method_Mb_OrbBased_exactFieldFreeQ`.
+  procedure(I_Method_Mb_OrbBased_ApplyGaugeOp), pointer :: Method_Mb_OrbBased_ApplyLinOp
 
   !> Pointer to the linear part of a split-step time derivative: the one-body
   !> operator acting on the orbitals only.

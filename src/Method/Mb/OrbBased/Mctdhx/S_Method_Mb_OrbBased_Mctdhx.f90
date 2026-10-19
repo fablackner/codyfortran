@@ -33,6 +33,7 @@ contains
     Method_TimeDerivative => TimeDerivative
     Method_Mb_OrbBased_TimeDerivativeOrbsLin => TimeDerivativeOrbsLin
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin => TimeDerivativeCoeffsPlusOrbsNonLin
+    if (Method_Mb_OrbBased_exactFieldFreeQ) Method_PropagateExactPart => PropagateExactPart
 
   end subroutine
 
@@ -172,9 +173,31 @@ contains
     call GetOrbs(orbs, state)
     call GetOrbs(dOrbs, dState)
 
-    call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time)
+    call Method_Mb_OrbBased_ApplyLinOp(dOrbs, orbs, time)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Exact field-free propagation of the orbitals (the CI coefficients are
+  !> constant in the linear split step).
+  subroutine PropagateExactPart(state, t0, t1, imagTimeQ_)
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(inout), contiguous, target :: state(:)
+    real(R64), intent(in) :: t0
+    real(R64), intent(in) :: t1
+    logical, intent(in), optional :: imagTimeQ_
+
+    complex(R64), contiguous, pointer :: orbs(:, :)
+    logical :: imagTimeQ
+
+    imagTimeQ = .false.
+    if (present(imagTimeQ_)) imagTimeQ = imagTimeQ_
+
+    call GetOrbs(orbs, state)
+    call Method_Mb_OrbBased_PropagateFieldFree(orbs, t1 - t0, imagTimeQ)
 
   end subroutine
 

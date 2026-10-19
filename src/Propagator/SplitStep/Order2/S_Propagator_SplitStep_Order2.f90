@@ -52,6 +52,7 @@ contains
   subroutine Propagate(state, t0, t1)
     use M_IntegratorList
     use M_Propagator
+    use M_Propagator_SplitStep
 
     complex(R64), intent(inout), contiguous :: state(:)
     real(R64), intent(in)    :: t0
@@ -70,9 +71,9 @@ contains
     time2 = time1 + a1 * dt
 
     ! ABA sequence: apply Â for half-step, B̂ for full step, Â for half-step
-    call IntegratorList(1) % e % Integrate(state, time1, time1 + a1 * dt)
+    call Propagator_SplitStep_IntegrateLin(state, time1, time1 + a1 * dt)
     call IntegratorList(2) % e % Integrate(state, time1, time1 + b1 * dt)
-    call IntegratorList(1) % e % Integrate(state, time2, time2 + a2 * dt)
+    call Propagator_SplitStep_IntegrateLin(state, time2, time2 + a2 * dt)
 
   end subroutine
 

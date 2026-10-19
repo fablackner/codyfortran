@@ -17,54 +17,65 @@ module M_Utils_SphericalHarmonics
   implicit none
 
   !> Gaunt table for m3 = m1 + m2 (the only nonvanishing case), indexed as
-  !> (l1²+l1+m1+1, l2²+l2+m2+1, l3+1). Read-only after setup, so lookups are
-  !> thread-safe; building it concurrently with lookups is not.
+  !> (GauntIndex(l1,m1), GauntIndex(l2,m2), l3+1) with
+  !> SphericalHarmonics_GauntIndex over |m1|, |m2| <= the tabulated m bound. Read-only after setup, so lookups are thread-safe;
+  !> building it concurrently with lookups is not.
   real(R64), allocatable :: SphericalHarmonics_gauntTable(:, :, :)
 
   !> Tabulated bounds; -1 while no table exists
   integer(I32) :: SphericalHarmonics_gauntTableL1 = -1
   integer(I32) :: SphericalHarmonics_gauntTableL2 = -1
   integer(I32) :: SphericalHarmonics_gauntTableL3 = -1
+  integer(I32) :: SphericalHarmonics_gauntTableM = -1
 
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   !> Builds (or grows) the Gaunt coefficient table so that all combinations
-  !> with l1 <= l1max, l2 <= l2max, l3 <= l3max are tabulated. Call during
+  !> with l1 <= l1max, l2 <= l2max, l3 <= l3max and |m1|, |m2| <= mmax_
+  !> (default: no m restriction) are tabulated. Call during
   !> fabrication/setup (serial context) before any tabulated lookups; repeated
   !> calls only rebuild when a bound grows.
-  subroutine SphericalHarmonics_EnsureGauntTable(l1max, l2max, l3max)
+  subroutine SphericalHarmonics_EnsureGauntTable(l1max, l2max, l3max, mmax_)
 
     integer(I32), intent(in) :: l1max
     integer(I32), intent(in) :: l2max
     integer(I32), intent(in) :: l3max
+    integer(I32), intent(in), optional :: mmax_
 
-    integer(I32) :: newL1, newL2, newL3
+    integer(I32) :: newL1, newL2, newL3, newM, mmax
     integer(I32) :: l1, m1, l2, m2, l3
     integer(I32) :: i1, i2
+
+    mmax = max(l1max, l2max)
+    if (present(mmax_)) mmax = min(mmax_, mmax)
 
     newL1 = max(l1max, SphericalHarmonics_gauntTableL1)
     newL2 = max(l2max, SphericalHarmonics_gauntTableL2)
     newL3 = max(l3max, SphericalHarmonics_gauntTableL3)
+    newM = max(mmax, SphericalHarmonics_gauntTableM)
 
     ! Already covered
     if (allocated(SphericalHarmonics_gauntTable) .and. &
         newL1 <= SphericalHarmonics_gauntTableL1 .and. &
         newL2 <= SphericalHarmonics_gauntTableL2 .and. &
-        newL3 <= SphericalHarmonics_gauntTableL3) return
+        newL3 <= SphericalHarmonics_gauntTableL3 .and. &
+        newM <= SphericalHarmonics_gauntTableM) return
 
     if (allocated(SphericalHarmonics_gauntTable)) deallocate (SphericalHarmonics_gauntTable)
-    allocate (SphericalHarmonics_gauntTable((newL1 + 1)**2, (newL2 + 1)**2, newL3 + 1))
+    allocate (SphericalHarmonics_gauntTable(SphericalHarmonics_GauntIndex(newL1 + 1, -min(newL1 + 1, newM), newM) - 1, &
+                                            SphericalHarmonics_GauntIndex(newL2 + 1, -min(newL2 + 1, newM), newM) - 1, &
+                                            newL3 + 1))
     SphericalHarmonics_gauntTable = 0.0_R64
 
     !$omp parallel do default(shared) private(l1, m1, l2, m2, l3, i1, i2) schedule(dynamic)
     do l1 = 0, newL1
-      do m1 = -l1, l1
-        i1 = l1 * l1 + l1 + m1 + 1
+      do m1 = -min(l1, newM), min(l1, newM)
+        i1 = SphericalHarmonics_GauntIndex(l1, m1, newM)
         do l2 = 0, newL2
-          do m2 = -l2, l2
-            i2 = l2 * l2 + l2 + m2 + 1
+          do m2 = -min(l2, newM), min(l2, newM)
+            i2 = SphericalHarmonics_GauntIndex(l2, m2, newM)
             do l3 = abs(l1 - l2), min(l1 + l2, newL3)
               ! Selection rules: parity and |m3| <= l3 (with m3 = m1 + m2)
               if (mod(l1 + l2 + l3, 2) .ne. 0) cycle
@@ -81,8 +92,30 @@ contains
     SphericalHarmonics_gauntTableL1 = newL1
     SphericalHarmonics_gauntTableL2 = newL2
     SphericalHarmonics_gauntTableL3 = newL3
+    SphericalHarmonics_gauntTableM = newM
 
   end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  !> Compact table index of (l, m) for |m| <= min(l, mmax): channels are
+  !> ordered by l, then m, and each l contributes 2 min(l, mmax) + 1 entries
+  !> (l² + l + m + 1 when mmax >= l).
+  pure function SphericalHarmonics_GauntIndex(l, m, mmax) result(res)
+
+    integer(I32), intent(in) :: l
+    integer(I32), intent(in) :: m
+    integer(I32), intent(in) :: mmax
+    integer(I32) :: res
+
+    if (l <= mmax + 1) then
+      res = l * l
+    else
+      res = (mmax + 1)**2 + (l - mmax - 1) * (2 * mmax + 1)
+    end if
+    res = res + m + min(l, mmax) + 1
+
+  end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -95,8 +128,11 @@ contains
 
     if (l1 <= SphericalHarmonics_gauntTableL1 .and. &
         l2 <= SphericalHarmonics_gauntTableL2 .and. &
-        l3 <= SphericalHarmonics_gauntTableL3) then
-      res = SphericalHarmonics_gauntTable(l1 * l1 + l1 + m1 + 1, l2 * l2 + l2 + m2 + 1, l3 + 1)
+        l3 <= SphericalHarmonics_gauntTableL3 .and. &
+        abs(m1) <= SphericalHarmonics_gauntTableM .and. &
+        abs(m2) <= SphericalHarmonics_gauntTableM) then
+      res = SphericalHarmonics_gauntTable(SphericalHarmonics_GauntIndex(l1, m1, SphericalHarmonics_gauntTableM), &
+                                          SphericalHarmonics_GauntIndex(l2, m2, SphericalHarmonics_gauntTableM), l3 + 1)
     else
       res = SphericalHarmonics_GauntCoefficient(l1, m1, l2, m2, l3, m1 + m2)
     end if

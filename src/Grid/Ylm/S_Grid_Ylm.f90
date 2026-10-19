@@ -235,6 +235,19 @@ contains
 
     nRad = Grid_Ylm_nRadial
 
+    ! Spherically symmetric first factor (e.g. a central potential): the Gaunt
+    ! sum collapses to Y_00 Y_lm = Y_lm / sqrt(4 pi), a radial scaling of f
+    if (lMaxConjg .eq. 0) then
+      call SpatialProductL0(fOut, fConjg, f, conjgQ, lMaxOut, lMax, mMaxOut, mMax)
+      if (withWeightsQ) then
+        do iCh = 1, Grid_Ylm_NChannels(lMaxOut, mMaxOut)
+          iOut = (iCh - 1) * nRad + 1
+          fOut(iOut:iOut + nRad - 1) = fOut(iOut:iOut + nRad - 1) * Grid_Ylm_radialMetricWeights(:)
+        end do
+      end if
+      return
+    end if
+
     ! Axially symmetric operands: exact Gauss-Legendre quadrature in cos(theta)
     ! (O(lmax^2) per radial point instead of the O(lmax^3) Gaunt sum)
     if (mMaxOut .eq. 0 .and. mMaxConjg .eq. 0 .and. mMax .eq. 0 .and. &
@@ -328,6 +341,49 @@ contains
     end if
 
     deallocate (lmTmpConjg, nonZeroQ)
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Spatial product with a spherically symmetric first factor g(r) Y_00.
+  !>
+  !> Since Y_00 Y_lm = Y_lm / sqrt(4 pi), every (l,m) channel of f that fits
+  !> into the output layout is scaled by g(r) / sqrt(4 pi); the result equals
+  !> the Gaunt-coefficient expansion exactly.
+  pure subroutine SpatialProductL0(fOut, fConjg, f, conjgQ, lMaxOut, lMax, mMaxOut, mMax)
+    use M_Utils_Constants, only: PI
+
+    complex(R64), intent(out), contiguous :: fOut(:)
+    complex(R64), intent(in), contiguous  :: fConjg(:)
+    complex(R64), intent(in), contiguous  :: f(:)
+    logical, intent(in)                   :: conjgQ
+    integer(I32), intent(in)              :: lMaxOut
+    integer(I32), intent(in)              :: lMax
+    integer(I32), intent(in)              :: mMaxOut
+    integer(I32), intent(in)              :: mMax
+
+    integer(I32) :: nRad, l, m, iIn, iOut
+    complex(R64), allocatable :: g(:)
+
+    nRad = Grid_Ylm_nRadial
+    allocate (g(nRad))
+
+    ! conjg(Y_00) = Y_00, so only the radial factor is conjugated
+    if (conjgQ) then
+      g(:) = conjg(fConjg(1:nRad)) / sqrt(4.0_R64 * PI)
+    else
+      g(:) = fConjg(1:nRad) / sqrt(4.0_R64 * PI)
+    end if
+
+    fOut = (0.0_R64, 0.0_R64)
+
+    do l = 0, min(lMax, lMaxOut)
+      do m = -min(l, mMax, mMaxOut), min(l, mMax, mMaxOut)
+        iIn = BaseIndex(l, m, mMax)
+        iOut = BaseIndex(l, m, mMaxOut)
+        fOut(iOut:iOut + nRad - 1) = g(:) * f(iIn:iIn + nRad - 1)
+      end do
+    end do
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -475,7 +531,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   pure subroutine SetLmComponent(fOut, l, m, fLm, mmax_)
 
-    complex(R64), intent(out) :: fOut(:)   ! Full function on grid (target)
+    complex(R64), intent(inout) :: fOut(:)   ! Full function on grid (target)
     integer(I32), intent(in) :: l         ! Angular momentum quantum number
     integer(I32), intent(in) :: m         ! Magnetic quantum number
     complex(R64), intent(in) :: fLm(:)   ! Input radial function for (l,m)

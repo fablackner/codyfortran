@@ -108,4 +108,26 @@ module M_Method
     end function
   end interface
 
+  !> Pointer to the exact propagation of the part of the linear split-step
+  !> generator that the method solves in closed form (e.g. the field-free
+  !> one-body Hamiltonian); unassociated if the linear integrator propagates
+  !> the whole linear part. Split-step propagators wrap every linear step as
+  !> exact(dt/2) linear integrator(dt) exact(dt/2).
+  procedure(I_Method_PropagateExactPart), pointer :: Method_PropagateExactPart => null()
+  abstract interface
+    !> Propagates `state` from `t0` to `t1` with the exactly solvable part:
+    !> exp(-i H0 (t1 - t0)), or exp(-H0 (t1 - t0)) if `imagTimeQ_`.
+    subroutine I_Method_PropagateExactPart(state, t0, t1, imagTimeQ_)
+      import :: R64
+      !> Quantum state, propagated in place.
+      complex(R64), intent(inout), contiguous, target :: state(:)
+      !> Start time.
+      real(R64), intent(in) :: t0
+      !> End time.
+      real(R64), intent(in) :: t1
+      !> Propagate in imaginary time (default: real time).
+      logical, intent(in), optional :: imagTimeQ_
+    end subroutine
+  end interface
+
 end module

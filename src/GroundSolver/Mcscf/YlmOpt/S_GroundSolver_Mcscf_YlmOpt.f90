@@ -203,11 +203,14 @@ contains
   !> Uses the h1/h2 matrices prepared in `Approach` for the current orbitals.
   !> This is the matvec callback for DiagonalizerList(1) over the CI space.
   subroutine HamiltonianAction(dCoeffs, coeffs, time)
+    use M_Utils_UnusedVariables
     use M_Coeffs
 
     complex(R64), intent(out), contiguous, target :: dCoeffs(:)
     complex(R64), intent(in), contiguous, target :: coeffs(:)
     real(R64), intent(in) :: time
+
+    if (.false.) call UnusedVariables_Mark(time)
 
     dCoeffs = 0.0_R64
 
@@ -379,7 +382,7 @@ contains
         ! density weight is the sum of the spin-up and spin-down blocks
         rdm1Weight = rdm1(p, q)
         if (Orbs_restrictedQ) rdm1Weight = rdm1Weight + rdm1(nOS + p, nOS + q)
-        if (abs(rdm1Weight) .eq. 0.0_R64) cycle
+        if (abs(rdm1Weight) < tiny(1.0_R64)) cycle
         call SysInteraction_FillInteractionSrc(src, orbs(:, p), orbs(:, q))
         weightedSrc = weightedSrc + rdm1Weight * src
       end do

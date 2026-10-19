@@ -64,6 +64,13 @@ contains
     Method_Mb_OrbBased_TimeDerivativeOrbsLin => TimeDerivativeOrbsLin
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin => TimeDerivativeTwoRdmPlusOrbsNonLin
 
+    ! With weak orbitals the linear part is H_L, not h0 plus the gauge coupling
+    if (Method_Mb_OrbBased_exactFieldFreeQ) then
+      if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs > 0) &
+        error stop "method.mb.orbBased.exactFieldFreeQ is not available with td2rdm.nWeakOrbs > 0"
+      Method_PropagateExactPart => PropagateExactPart
+    end if
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -205,10 +212,32 @@ contains
     call GetOrbs(orbs, state)
     call GetOrbs(dOrbs, dState)
 
-    call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time)
+    call Method_Mb_OrbBased_ApplyLinOp(dOrbs, orbs, time)
     if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs > 0) call AddWeakProjectorTerms(dOrbs, orbs, time)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Exact field-free propagation of the orbitals (the 2-RDM is constant in
+  !> the linear split step).
+  subroutine PropagateExactPart(state, t0, t1, imagTimeQ_)
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(inout), contiguous, target :: state(:)
+    real(R64), intent(in) :: t0
+    real(R64), intent(in) :: t1
+    logical, intent(in), optional :: imagTimeQ_
+
+    complex(R64), contiguous, pointer :: orbs(:, :)
+    logical :: imagTimeQ
+
+    imagTimeQ = .false.
+    if (present(imagTimeQ_)) imagTimeQ = imagTimeQ_
+
+    call GetOrbs(orbs, state)
+    call Method_Mb_OrbBased_PropagateFieldFree(orbs, t1 - t0, imagTimeQ)
 
   end subroutine
 
@@ -399,7 +428,8 @@ contains
 
     nOS = Orbs_nOrbsInState
 
-    if (.not. hWeakOrbsValidQ .or. time .ne. hWeakOrbsTime) then
+    ! Cached H weak orbitals are valid only for exactly the same time
+    if (.not. hWeakOrbsValidQ .or. abs(time - hWeakOrbsTime) > 0.0_R64) then
       if (.not. allocated(hWeakOrbs)) allocate (hWeakOrbs, mold=weakOrbs)
       if (.not. allocated(hWeak)) allocate (hWeak(nOS, nOS))
       hWeakOrbs(:, :) = 0.0_R64

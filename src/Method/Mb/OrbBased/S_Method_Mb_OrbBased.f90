@@ -32,6 +32,8 @@ contains
     ! JSON keys read:
     !   - method.mb.orbBased.nOrbs:                 Orbitals per body type
     !   - method.mb.orbBased.regularizationParameter: Numerical stability (default 1e-10)
+    !   - method.mb.orbBased.exactFieldFreeQ:       Exact field-free one-body
+    !                                               propagation in split steps (default false)
     !
     ! Binds default operator-application procedures, then branches to the
     ! selected method (TDCI, TDHX, MCTDHX, TD-2RDM, or TD-2RDM-StaticOrbs).
@@ -110,6 +112,16 @@ contains
       Method_Mb_OrbBased_ApplyInteractionOp => ApplyInteractionOp
     else
       Method_Mb_OrbBased_ApplyInteractionOp => NoOpProcedures_ApplyInteractionOp
+    end if
+
+    ! Exact field-free one-body propagation: the linear split-step integrator
+    ! then only propagates the gauge coupling; the methods with a split-step
+    ! linear part bind Method_PropagateExactPart
+    Method_Mb_OrbBased_exactFieldFreeQ = Json_Get("method.mb.orbBased.exactFieldFreeQ", .false.)
+    if (Method_Mb_OrbBased_exactFieldFreeQ) then
+      Method_Mb_OrbBased_ApplyLinOp => ApplyGaugeOpLin
+    else
+      Method_Mb_OrbBased_ApplyLinOp => ApplySingleBodyOpLin
     end if
 
     !------------------------------------
@@ -964,7 +976,7 @@ contains
         chi(:, :) = 0.0_R64
         do k1 = 1, nOS
           if (Method_Mb_OrbBased_bodyTypeOfOrb(j1) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(k1)) cycle
-          if (rdm2spatial(k1, k2, j1, l2) .eq. 0.0_R64) cycle
+          if (abs(rdm2spatial(k1, k2, j1, l2)) < tiny(1.0_R64)) cycle
           chi(:, :) = chi(:, :) + orbNodes(:, :, k1) * rdm2spatial(k1, k2, j1, l2)
         end do
         dOrbNodes(:, :, j1) = dOrbNodes(:, :, j1) + potNodes(:, :) * chi(:, :)
@@ -1205,6 +1217,34 @@ contains
       dOrbs(:, k2) = dOrbs(:, k2) - orbTmps(:, j1) * rdm1(j1, l2)
 
     end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine ApplySingleBodyOpLin(dOrbs, orbs, time)
+    !---------------------------------------------------------------------------
+    ! Linear split-step operator: the full one-body Hamiltonian
+    ! (Method_Mb_OrbBased_ApplyLinOp without exact field-free propagation).
+    !---------------------------------------------------------------------------
+    complex(R64), intent(inout), contiguous :: dOrbs(:, :)
+    complex(R64), intent(in), contiguous    :: orbs(:, :)
+    real(R64), intent(in)                   :: time
+
+    call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine ApplyGaugeOpLin(dOrbs, orbs, time)
+    !---------------------------------------------------------------------------
+    ! Linear split-step operator with exact field-free propagation: only the
+    ! gauge coupling (T + V_ext are propagated by Method_PropagateExactPart).
+    !---------------------------------------------------------------------------
+    complex(R64), intent(inout), contiguous :: dOrbs(:, :)
+    complex(R64), intent(in), contiguous    :: orbs(:, :)
+    real(R64), intent(in)                   :: time
+
+    call Method_Mb_OrbBased_ApplyGaugeOp(dOrbs, orbs, time)
 
   end subroutine
 

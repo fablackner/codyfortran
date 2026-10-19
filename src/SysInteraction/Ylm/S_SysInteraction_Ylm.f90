@@ -47,7 +47,8 @@ contains
     ! (l1 <= lmaxPot, l2,l3 <= lmax)
     call SphericalHarmonics_EnsureGauntTable(max(Grid_Ylm_lmax, SysInteraction_Ylm_lmax), &
                                              Grid_Ylm_lmax, &
-                                             max(Grid_Ylm_lmax, SysInteraction_Ylm_lmax))
+                                             max(Grid_Ylm_lmax, SysInteraction_Ylm_lmax), &
+                                             mmax_=max(Grid_Ylm_mmax, SysInteraction_Ylm_mmax))
 
     SysInteraction_FillInteractionPotential => FillInteractionPotential
     SysInteraction_FillInteractionSrc => FillInteractionSrc
