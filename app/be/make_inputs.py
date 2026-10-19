@@ -44,12 +44,19 @@ PRODUCTION = {
     "orbitalCharge": 3.0,
     # time stepping (output every outputStep, nTimeSteps split steps in between)
     "outputStep": 0.2,
-    "nTimeSteps": 20,
+    # dt = 0.0025; dt = 0.01 (20 steps) is unstable (TD-2RDM) or drifts
+    # (MCTDHF) with 6 or more orbitals
+    "nTimeSteps": 80,
     "postPulseTime": 0.0,
     "averagingTime": 40.0,
     # imaginary-time relaxation: final step and convergence (energy change per check)
     "dtauMin": 0.005,
     "relaxConvThresh": 1e-12,
+    # TD-2RDM: number of weak spatial natural orbitals (active/weak split,
+    # src/Method/A_Method.md; 0 = off)
+    "nWeakOrbs": 0,
+    # purify the time-averaged initial state once (P_Td2rdmTimeAverage)
+    "purifyAverageQ": False,
     "pulses": PULSES,
 }
 
@@ -70,8 +77,17 @@ def hamiltonian(p, lmax):
 
 def method(p, kind):
     n = len(p["orbitals"])
+    opts = {}
+    if kind == "td2rdm" and p["nWeakOrbs"] > 0:
+        opts["nWeakOrbs"] = p["nWeakOrbs"]
     return {"mb": {"nBodyTypes": 2, "nBodies": [2, 2], "bodyStatistics": ["f", "f"],
-                   "orbBased": {"nOrbs": [n, n], kind: {}}}}
+                   "orbBased": {"nOrbs": [n, n], kind: opts}}}
+
+
+def purification():
+    # D- and Q-condition purification of the paper (40 iterations)
+    return {"singlet": {"reduce": {"nSteps": 40, "threshold": -1e-5,
+                                   "conserveEnergyQ": False}}}
 
 
 def ci():
@@ -136,6 +152,8 @@ def time_average(p):
     d.update(two_rdm())
     d.update(split_step())
     d["propagator"] = {"splitStep": {"order2": {}}}
+    if p["purifyAverageQ"]:
+        d["purification"] = purification()
     d["program"] = {"averagingTime": p["averagingTime"], "outputStep": p["outputStep"],
                     "nTimeSteps": p["nTimeSteps"]}
     return d
@@ -156,8 +174,7 @@ def laser(p, pulse, kind):
     else:
         d.update(two_rdm())
         if pulse["purification"]:
-            d["purification"] = {"singlet": {"reduce": {"nSteps": 40, "threshold": -1e-5,
-                                                        "conserveEnergyQ": False}}}
+            d["purification"] = purification()
     d.update(split_step())
     d["propagator"] = {"splitStep": {"order2": {}}}
     d["absorber"] = {"ylm": {"cosinus": {"onset": p["absorberOnset"],
@@ -184,11 +201,15 @@ def main():
                     help="write a small, fast configuration into DIR instead")
     ap.add_argument("--norbs", type=int, default=None,
                     help="keep only the first NORBS orbitals (default: all)")
+    ap.add_argument("--nweak-orbs", type=int, default=PRODUCTION["nWeakOrbs"],
+                    help="TD-2RDM weak natural orbitals, time average and laser "
+                         "inputs (default: 0, off)")
     args = ap.parse_args()
 
     p = copy.deepcopy(PRODUCTION)
     if args.norbs:
         p["orbitals"] = p["orbitals"][:args.norbs]
+    p["nWeakOrbs"] = args.nweak_orbs
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inputs")
     if args.test:
         out = args.test

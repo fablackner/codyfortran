@@ -202,6 +202,7 @@ contains
 
     complex(R64), allocatable :: dOrbs(:, :)
     complex(R64), allocatable :: energyMatrix(:, :)
+    complex(R64), allocatable :: invRdm1(:, :)
 
     integer(I32) :: nG, nOS
 
@@ -215,7 +216,8 @@ contains
 
     dOrbs(:, :) = 0.0_R64
     call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time)
-    call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, rdm1, rdm2, time)
+    call Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
+    call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time)
 
     energyMatrix(:, :) = 0.0_R64
     do j = 1, nOS

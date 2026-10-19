@@ -14,6 +14,8 @@ module M_Utils_RdmEnforceTraceM2sym
   ! Expansion coefficients for the unitarily invariant decomposition:
   real(R64), allocatable :: pa
   real(R64), allocatable :: pb
+  !> nDim the coefficients were computed for (-1: not yet computed)
+  integer(I32) :: setupDim = -1
 
 contains
 
@@ -108,14 +110,16 @@ contains
     integer(I32), intent(in) :: nDim
     real(R64) :: x
 
+    ! the coefficients depend on nDim: recompute whenever nDim changes
+    if (nDim .eq. setupDim) return
+
     if (.not. allocated(pa)) then
       allocate (pa)
       allocate (pb)
-    else
-      return
     end if
 
     x = dble(nDim)
+    setupDim = nDim
 
     ! Coefficients for totally symmetric tensor
     pb = 1.0_R64 / (x + 2.0_R64)

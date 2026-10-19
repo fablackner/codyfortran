@@ -44,7 +44,25 @@ sin² envelope on the field as in the paper).
 | strong2c | 4×10¹⁴ | 0.107 | 2 | 40 iterations per step |
 
 `make_inputs.py --test DIR` writes a tiny configuration (small box, few
-orbitals, half-cycle pulses) to check the pipeline in minutes.
+orbitals, half-cycle pulses) to check the pipeline in minutes. `--norbs N`
+keeps the first N orbitals, `--nweak-orbs NW` switches on the TD-2RDM
+active/weak natural-orbital split (NW weak spatial natural orbitals of the
+spin-summed 1-RDM, see `src/Method/A_Method.md`; off by default) for all
+TD-2RDM inputs, i.e. the time average and the laser runs.
+
+**Time step.** Each output step of 0.2 a.u. has 80 split steps (dt = 0.0025)
+for TD-2RDM and MCTDHF alike. With 6 or more orbitals dt = 0.01 is unstable for
+TD-2RDM (the inverse 1-RDM makes the orbital equations stiff, ~1/n_min) and
+lets the MCTDHF energy drift (1.8e-4 in 10 a.u. vs. 9e-7 at dt = 0.0025).
+
+**Purification.** With `conserveEnergyQ` the D/Q correction is orthogonal to
+h2, so `laser/P_LaserTd2rdm` rebuilds h2 from the current orbitals before
+every purification (previously h2 was refreshed only at output steps). With
+`"purifyAverageQ": True` in `make_inputs.py`, `td2rdmInit/P_Td2rdmTimeAverage`
+purifies the time-averaged initial 2-RDM once with the paper's settings (the
+average is not N-representable; the minimal D and Q eigenvalues, printed
+before and after, drop by one to two orders of magnitude to about the
+threshold; without `conserveEnergyQ` the energy shifts by ~1e-3).
 
 ## Numerical parameters
 
@@ -87,6 +105,12 @@ Building this comparison exposed and required several changes in `src/`:
 - **Dipole acceleration** observable `PrinterObservableYlm_DumpDipoleAcceleration`.
 - **Ylm spatial product**: exact Gauss–Legendre fast path for m = 0 operands
   (3–5× faster propagation).
+- **TD-2RDM active/weak natural-orbital split**
+  (`method.mb.orbBased.td2rdm.nWeakOrbs`, off by default): stabilizes TD-2RDM
+  with weakly occupied natural orbitals; see `src/Method/A_Method.md`.
+- **Contraction-consistent trace constraints** (bug fix): the
+  `M_Utils_RdmEnforceTrace*` coefficients were computed for the first
+  dimension only and silently reused for other dimensions.
 
 ## Results
 

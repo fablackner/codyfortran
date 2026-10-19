@@ -3,12 +3,34 @@
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 submodule(M_Method_Mb_OrbBased_Td2rdm) S_Method_Mb_OrbBased_Td2rdm
+  !-----------------------------------------------------------------------------
+  ! Active/weak natural-orbital split (nWeakOrbs > 0; derivation, energy
+  ! conservation and usage in src/Method/A_Method.md). Orbital EOM
+  !   dphi_i/dt = -i Q sum_u G_u M(u,i),  G_u = sum_j h phi_j D1(j,u) + Gamma_u,
+  !   M = sum_{u active} |u> n_u/(n_u^2 + eps) <u|.
+  ! Split step: the linear part rotates with H_L = (1-P_w) h (1-P_w) + P_w h P_w,
+  ! the non-linear part adds the active-weak blocks of h1 to the 2-RDM.
+  ! Gamma M is Method_Mb_OrbBased_ApplyCorrelationOp with invRdm1 = M.
+  !-----------------------------------------------------------------------------
 
   implicit none
 
   !=============================================================================
   ! local data
   !=============================================================================
+
+  !> Weak natural orbitals on the grid from the last refresh, stored in the
+  !> leading columns of their body type (layout of Orbs_orbs, so that the
+  !> one-body operator applies); only columns with weakColQ hold one.
+  complex(R64), allocatable :: weakOrbs(:, :)
+  !> Whether column j of weakOrbs holds a weak natural orbital.
+  logical, allocatable :: weakColQ(:)
+  !> h weakOrbs and <weakOrbs_w|h|weakOrbs_v> at hWeakOrbsTime (the linear
+  !> part is evaluated repeatedly at one time, e.g. for every Krylov vector).
+  complex(R64), allocatable :: hWeakOrbs(:, :)
+  complex(R64), allocatable :: hWeak(:, :)
+  real(R64) :: hWeakOrbsTime
+  logical :: hWeakOrbsValidQ = .false.
 
 contains
 
@@ -24,6 +46,14 @@ contains
     call Say_Fabricate("method.mb.orbbased.td2rdm")
 
     !------------------------------------
+    ! read parameters
+    !------------------------------------
+
+    Method_Mb_OrbBased_Td2rdm_nWeakOrbs = Json_Get("method.mb.orbBased.td2rdm.nWeakOrbs", 0)
+    if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs < 0 .or. Method_Mb_OrbBased_Td2rdm_nWeakOrbs >= minval(Method_Mb_OrbBased_nOrbs)) &
+      error stop "method.mb.orbBased.td2rdm.nWeakOrbs must be >= 0 and < nOrbs"
+
+    !------------------------------------
     ! set values and procedure pointers
     !------------------------------------
 
@@ -33,6 +63,21 @@ contains
     Method_TimeDerivative => TimeDerivative
     Method_Mb_OrbBased_TimeDerivativeOrbsLin => TimeDerivativeOrbsLin
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin => TimeDerivativeTwoRdmPlusOrbsNonLin
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_Td2rdm_RefreshWeakOrbs
+    use M_TwoRdm
+    use M_Orbs
+
+    complex(R64), allocatable :: rdm1(:, :), invRdm1(:, :), activeProj(:, :), weakNatOrbs(:, :)
+
+    if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs .eq. 0) return
+
+    call TwoRdm_FillRdm1FromTwoRdmState(rdm1, TwoRdm_twoRdmState)
+    call FillWeakSplit(invRdm1, activeProj, weakNatOrbs, rdm1)
+    call StoreWeakOrbs(Orbs_orbs, weakNatOrbs)
 
   end subroutine
 
@@ -66,6 +111,9 @@ contains
     Orbs_orbs(1:nG, 1:nOS) => Method_state(nVals1 + 1:(nVals1 + nVals2))
     call OrbsInit_Initialize(Orbs_orbs)
 
+    ! weak natural orbitals of the initial state for the first linear step
+    call Method_Mb_OrbBased_Td2rdm_RefreshWeakOrbs
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -92,6 +140,7 @@ contains
     complex(R64), allocatable :: h2(:, :, :, :)
     complex(R64), allocatable :: rdm1(:, :)
     complex(R64), allocatable :: rdm2(:, :, :, :)
+    complex(R64), allocatable :: invRdm1(:, :), activeProj(:, :), weakNatOrbs(:, :), hOrbs(:, :)
 
     integer(I32) :: nG, nOS, nE
 
@@ -110,8 +159,18 @@ contains
     call TwoRdm_FillRdm1FromTwoRdmState(rdm1, twoRdmState)
     call TwoRdm_FillRdm2FromTwoRdmState(rdm2, twoRdmState)
 
-    call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time, h1_=h1)
-    call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, rdm1, rdm2, time, h2_=h2)
+    if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs .eq. 0) then
+      call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time, h1_=h1)
+      call Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
+    else
+      ! h phi D1 M + Gamma M
+      call FillWeakSplit(invRdm1, activeProj, weakNatOrbs, rdm1)
+      allocate (hOrbs, mold=orbs)
+      hOrbs(:, :) = 0.0_R64
+      call Method_Mb_OrbBased_ApplySingleBodyOp(hOrbs, orbs, time, h1_=h1)
+      dOrbs(:, :) = matmul(hOrbs, activeProj)
+    end if
+    call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_=h2)
 
     call TwoRdm_ApplyCommutatorH1(dTwoRdmState, twoRdmState, h1)
     call TwoRdm_ApplyCommutatorH2(dTwoRdmState, twoRdmState, h2)
@@ -125,7 +184,8 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Linear split-step part: the one-body operator on the orbitals only (the
-  !> 2-RDM is constant), dOrbs = -i h orbs without projection.
+  !> 2-RDM is constant), dOrbs = -i h orbs without projection. With weak
+  !> orbitals h is replaced by H_L (header).
   subroutine TimeDerivativeOrbsLin(dState, state, time)
     use M_Utils_Constants
     use M_Grid
@@ -146,6 +206,7 @@ contains
     call GetOrbs(dOrbs, dState)
 
     call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time)
+    if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs > 0) call AddWeakProjectorTerms(dOrbs, orbs, time)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
 
@@ -155,7 +216,9 @@ contains
   !> Non-linear split-step part: the two-body interaction only. The 2-RDM
   !> evolves with [h2, D2] plus the collision operator, the orbitals with the
   !> projected correlation term. The one-body commutator is absent because the
-  !> linear part rotates the orbitals with the full (unprojected) h.
+  !> linear part rotates the orbitals with the full (unprojected) h. With weak
+  !> orbitals the linear part rotates with H_L instead, the 2-RDM gets the
+  !> active-weak blocks of h1, and the weak orbitals are refreshed (header).
   subroutine TimeDerivativeTwoRdmPlusOrbsNonLin(dState, state, time)
     use M_Utils_Constants
     use M_Grid
@@ -177,6 +240,7 @@ contains
     complex(R64), allocatable :: h2(:, :, :, :)
     complex(R64), allocatable :: rdm1(:, :)
     complex(R64), allocatable :: rdm2(:, :, :, :)
+    complex(R64), allocatable :: invRdm1(:, :), activeProj(:, :), weakNatOrbs(:, :)
 
     dState(:) = 0.0_R64
 
@@ -189,14 +253,230 @@ contains
     call TwoRdm_FillRdm1FromTwoRdmState(rdm1, twoRdmState)
     call TwoRdm_FillRdm2FromTwoRdmState(rdm2, twoRdmState)
 
-    call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, rdm1, rdm2, time, h2_=h2)
+    if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs .eq. 0) then
+      call Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
+    else
+      call FillWeakSplit(invRdm1, activeProj, weakNatOrbs, rdm1)
+    end if
+    call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_=h2)
 
     call TwoRdm_ApplyCommutatorH2(dTwoRdmState, twoRdmState, h2)
     call Reconstruction_AddCollisionOp(dTwoRdmState, twoRdmState, h2)
 
+    if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs > 0) then
+      call AddActiveWeakCommutator(dTwoRdmState, twoRdmState, orbs, weakNatOrbs, time)
+      ! the last RK4 stage approximates the state at the end of the step; this
+      ! keeps splitStep order2 second order (programs that modify the state call
+      ! Method_Mb_OrbBased_Td2rdm_RefreshWeakOrbs)
+      call StoreWeakOrbs(orbs, weakNatOrbs)
+    end if
+
     call Orbs_ProjectOnSubspace(dOrbs, orbs)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Active/weak split of the spatial 1-RDM (spin-summed for restricted
+  !> orbitals), per body type: the truncated inverse M of the header
+  !> (invRdm1), the active projector D1 M (activeProj), and the weak natural orbitals
+  !> in coefficient space (weakNatOrbs, nOrbsInState x nOrbsInState), stored in
+  !> the leading columns of their body type (layout of weakOrbs), zero else.
+  subroutine FillWeakSplit(invRdm1, activeProj, weakNatOrbs, rdm1)
+    use M_Utils_RdmDiagonalize
+    use M_Orbs
+    use M_Method_Mb
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(out), allocatable :: invRdm1(:, :)
+    complex(R64), intent(out), allocatable :: activeProj(:, :)
+    complex(R64), intent(out), allocatable :: weakNatOrbs(:, :)
+    complex(R64), intent(in), contiguous   :: rdm1(:, :)
+
+    real(R64), allocatable :: natOcc(:), weights(:)
+    complex(R64), allocatable :: natOrbs(:, :), rdm1Spatial(:, :)
+    integer(I32) :: nO, nOS, nB, nW, ibt, iStart, iEnd, j1, k1, w
+    real(R64) :: reg
+
+    nOS = Orbs_nOrbsInState
+    nO = Method_Mb_OrbBased_nOrbsSum
+    reg = Method_Mb_OrbBased_regularizationParameter
+
+    allocate (rdm1Spatial(nOS, nOS))
+    if (nO .eq. nOS) then
+      rdm1Spatial(:, :) = rdm1(1:nOS, 1:nOS)
+    else if (nO .eq. 2 * nOS) then
+      rdm1Spatial(:, :) = rdm1(1:nOS, 1:nOS) + rdm1(nOS + 1:, nOS + 1:)
+    else
+      error stop "invalid nO to nOS relation in FillWeakSplit"
+    end if
+
+    allocate (invRdm1(nOS, nOS), activeProj(nOS, nOS), weakNatOrbs(nOS, nOS))
+    invRdm1(:, :) = 0.0_R64
+    activeProj(:, :) = 0.0_R64
+    weakNatOrbs(:, :) = 0.0_R64
+
+    ! the 1-RDM is block diagonal in the body types
+    do ibt = 1, Method_Mb_nBodyTypes
+      iStart = Method_Mb_OrbBased_nOrbsStart(ibt)
+      if (iStart > nOS) exit
+      iEnd = Method_Mb_OrbBased_nOrbsEnd(ibt)
+      nB = iEnd - iStart + 1
+      nW = Method_Mb_OrbBased_Td2rdm_nWeakOrbs
+
+      ! descending occupations: the last nW natural orbitals are weak
+      call RdmDiagonalize_Rdm1(natOcc, natOrbs, rdm1Spatial(iStart:iEnd, iStart:iEnd))
+      weights = natOcc(:) / (natOcc(:)**2 + reg)
+      weights(nB - nW + 1:nB) = 0.0_R64
+
+      do j1 = 1, nB
+        do k1 = 1, nB
+          invRdm1(iStart + k1 - 1, iStart + j1 - 1) = sum(natOrbs(k1, :) * weights(:) * conjg(natOrbs(j1, :)))
+          activeProj(iStart + k1 - 1, iStart + j1 - 1) = sum(natOrbs(k1, :) * natOcc(:) * weights(:) * conjg(natOrbs(j1, :)))
+        end do
+      end do
+
+      do w = 1, nW
+        weakNatOrbs(iStart:iEnd, iStart + w - 1) = natOrbs(:, nB - nW + w)
+      end do
+
+      deallocate (natOcc, natOrbs, weights)
+    end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Stores the weak natural orbitals on the grid, weakOrbs = orbs weakNatOrbs,
+  !> orthonormalized per body type.
+  subroutine StoreWeakOrbs(orbs, weakNatOrbs)
+    use M_Grid
+    use M_Orbs
+    use M_Method_Mb
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(in), contiguous :: orbs(:, :)
+    complex(R64), intent(in), contiguous :: weakNatOrbs(:, :)
+
+    integer(I32) :: nOS, ibt, iStart, nW
+
+    nOS = Orbs_nOrbsInState
+    nW = Method_Mb_OrbBased_Td2rdm_nWeakOrbs
+
+    weakOrbs = matmul(orbs, weakNatOrbs)
+    if (allocated(weakColQ)) deallocate (weakColQ)
+    allocate (weakColQ(nOS))
+    weakColQ(:) = .false.
+
+    do ibt = 1, Method_Mb_nBodyTypes
+      iStart = Method_Mb_OrbBased_nOrbsStart(ibt)
+      if (iStart > nOS) exit
+
+      weakColQ(iStart:iStart + nW - 1) = .true.
+      call Grid_Orthonormalize(weakOrbs(:, iStart:iStart + nW - 1))
+    end do
+
+    hWeakOrbsValidQ = .false.
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> dOrbs += (H_L - h) x = (- P_w h - h P_w + 2 P_w h P_w) x for every column
+  !> x of orbs (any vector, e.g. a Krylov vector), P_w the projector on the
+  !> weak orbitals of the same body type. On entry dOrbs = h orbs.
+  subroutine AddWeakProjectorTerms(dOrbs, orbs, time)
+    use M_Grid
+    use M_Orbs
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(inout), contiguous :: dOrbs(:, :)
+    complex(R64), intent(in), contiguous    :: orbs(:, :)
+    real(R64), intent(in)                   :: time
+
+    complex(R64), allocatable :: c(:), g(:), hc(:)
+    logical, allocatable :: weakOfJQ(:)
+    integer(I32) :: nOS, j, w, v
+
+    nOS = Orbs_nOrbsInState
+
+    if (.not. hWeakOrbsValidQ .or. time .ne. hWeakOrbsTime) then
+      if (.not. allocated(hWeakOrbs)) allocate (hWeakOrbs, mold=weakOrbs)
+      if (.not. allocated(hWeak)) allocate (hWeak(nOS, nOS))
+      hWeakOrbs(:, :) = 0.0_R64
+      call Method_Mb_OrbBased_ApplySingleBodyOp(hWeakOrbs, weakOrbs, time)
+      hWeak(:, :) = 0.0_R64
+      do v = 1, nOS
+        do w = 1, nOS
+          if (.not. (weakColQ(w) .and. weakColQ(v))) cycle
+          if (Method_Mb_OrbBased_bodyTypeOfOrb(w) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(v)) cycle
+          hWeak(w, v) = Grid_InnerProduct(weakOrbs(:, w), hWeakOrbs(:, v))
+        end do
+      end do
+      hWeakOrbsTime = time
+      hWeakOrbsValidQ = .true.
+    end if
+
+    allocate (c(nOS), g(nOS), hc(nOS))
+
+    do j = 1, nOS
+      ! c_w = <chi_w|x_j>, g_w = <chi_w|h x_j> for the weak w of the body type of j
+      weakOfJQ = weakColQ(:) .and. Method_Mb_OrbBased_bodyTypeOfOrb(1:nOS) .eq. Method_Mb_OrbBased_bodyTypeOfOrb(j)
+      c(:) = 0.0_R64
+      g(:) = 0.0_R64
+      do w = 1, nOS
+        if (.not. weakOfJQ(w)) cycle
+        c(w) = Grid_InnerProduct(weakOrbs(:, w), orbs(:, j))
+        g(w) = Grid_InnerProduct(weakOrbs(:, w), dOrbs(:, j))
+      end do
+      hc(:) = matmul(hWeak, c)
+
+      do w = 1, nOS
+        if (.not. weakOfJQ(w)) cycle
+        dOrbs(:, j) = dOrbs(:, j) - weakOrbs(:, w) * g(w) - hWeakOrbs(:, w) * c(w) &
+                      + 2.0_R64 * weakOrbs(:, w) * hc(w)
+      end do
+    end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> dTwoRdmState += [h1aw, D2] with the active-weak blocks of h1,
+  !>   h1aw = Pi h1 (1 - Pi) + (1 - Pi) h1 Pi,  Pi = weakNatOrbs weakNatOrbs^dagger,
+  !> the part of h1 that the linear step with H_L does not rotate.
+  subroutine AddActiveWeakCommutator(dTwoRdmState, twoRdmState, orbs, weakNatOrbs, time)
+    use M_TwoRdm
+    use M_Orbs
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(inout), contiguous :: dTwoRdmState(:)
+    complex(R64), intent(in), contiguous    :: twoRdmState(:)
+    complex(R64), intent(in), contiguous    :: orbs(:, :)
+    complex(R64), intent(in), contiguous    :: weakNatOrbs(:, :)
+    real(R64), intent(in)                   :: time
+
+    complex(R64), allocatable :: h1(:, :), hOrbs(:, :), h1aw(:, :), weakProj(:, :), activeProj(:, :)
+    integer(I32) :: i, nO, nOS
+
+    nOS = Orbs_nOrbsInState
+    nO = Method_Mb_OrbBased_nOrbsSum
+
+    allocate (hOrbs, mold=orbs)
+    hOrbs(:, :) = 0.0_R64
+    call Method_Mb_OrbBased_ApplySingleBodyOp(hOrbs, orbs, time, h1_=h1)
+
+    weakProj = matmul(weakNatOrbs, transpose(conjg(weakNatOrbs)))
+    activeProj = -weakProj
+    do i = 1, nOS
+      activeProj(i, i) = activeProj(i, i) + 1.0_R64
+    end do
+
+    allocate (h1aw, mold=h1)
+    h1aw(:, :) = 0.0_R64
+    h1aw(1:nOS, 1:nOS) = matmul(weakProj, matmul(h1(1:nOS, 1:nOS), activeProj)) + &
+                         matmul(activeProj, matmul(h1(1:nOS, 1:nOS), weakProj))
+    if (nO .eq. 2 * nOS) h1aw(nOS + 1:, nOS + 1:) = h1aw(1:nOS, 1:nOS)
+
+    call TwoRdm_ApplyCommutatorH1(dTwoRdmState, twoRdmState, h1aw)
 
   end subroutine
 

@@ -9,7 +9,9 @@
 !> the input) the D- and Q-conditions are enforced after every time step as
 !> in the paper (Eqs. 32-34): the contraction-free kernel of the negative
 !> parts of D and Q is subtracted, which keeps norm and 1-RDM but not the
-!> energy. The initial state (orbXX_YY.in, rdm2BtXX_YY.in) is the time-averaged MCTDHF
+!> energy (with conserveEnergyQ also the energy; h2 is then rebuilt from the
+!> current orbitals before every purification). The initial state
+!> (orbXX_YY.in, rdm2BtXX_YY.in) is the time-averaged MCTDHF
 !> ground state (td2rdmInit/P_Td2rdmTimeAverage, appendix C of the paper).
 !> Grid, pulse, absorber and propagation scheme are identical to
 !> P_LaserMctdhf.
@@ -32,6 +34,7 @@ program P_LaserTd2rdm
   use M_TwoRdmInit
   use M_Method
   use M_Method_Mb_OrbBased
+  use M_Method_Mb_OrbBased_Td2rdm
   use M_IntegratorList
   use M_Propagator
   use M_Purification
@@ -42,6 +45,7 @@ program P_LaserTd2rdm
 
   real(R64)    :: time, startTime, endTime, outputStep, timeStep, charge, energy
   integer(I32) :: nTimeSteps, innerStep
+  logical      :: refreshH2Q
   type(T_IntegratorList_FabricateInput) :: IntegratorListInput(2)
 
   !==========================================
@@ -75,6 +79,9 @@ program P_LaserTd2rdm
   outputStep = Json_Get("program.outputStep", 0.2_R64)
   nTimeSteps = Json_Get("program.nTimeSteps", 20)
   charge = Json_Get("sysPotential.ylm.coulomb.charge", 4.0_R64)
+  ! only the energy-conserving purification uses h2 (mirrors its conserveEnergyQ keys)
+  refreshH2Q = Json_Get("purification.singlet.reduce.conserveEnergyQ", .false.) .or. &
+               Json_Get("purification.singletTr0.reduce.conserveEnergyQ", .false.)
 
   call Grid_Setup
   call SysKinetic_Setup
@@ -112,7 +119,11 @@ program P_LaserTd2rdm
       call Propagator_Propagate(Method_state, time, time + timeStep)
       time = time + timeStep
       call Absorber_ApplyAbsorber(Orbs_orbs)
+      ! h2 of the current orbitals (Method_GetEnergy fills it only at output steps)
+      if (refreshH2Q) call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, Orbs_orbs, time)
       call Purification_PurifyTwoRdmState(TwoRdm_twoRdmState, Method_Mb_OrbBased_h2)
+      ! weak natural orbitals of the absorbed/purified state (nWeakOrbs > 0 only)
+      call Method_Mb_OrbBased_Td2rdm_RefreshWeakOrbs
     end do
 
     energy = Method_GetEnergy(time)

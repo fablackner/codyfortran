@@ -138,6 +138,62 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
+    !---------------------------------------------------------------------------
+    ! Regularized inverse of the spatial 1-RDM (spin-summed for restricted):
+    !   M = U n/(n^2 + eps) U^dagger  (natural orbitals U, occupations n),
+    ! eps = Method_Mb_OrbBased_regularizationParameter.
+    !---------------------------------------------------------------------------
+    use M_Utils_RdmDiagonalize
+    use M_Orbs
+
+    complex(R64), intent(out), allocatable :: invRdm1(:, :)
+    complex(R64), intent(in), contiguous   :: rdm1(:, :)
+
+    real(R64), allocatable :: natocc(:)
+    complex(R64), allocatable :: natorb(:, :)
+    complex(R64), allocatable :: rdm1spatial(:, :)
+
+    integer(I32) :: nO, nOS
+    integer(I32) :: j1, k1
+    real(R64) :: reg
+
+    nOS = Orbs_nOrbsInState
+    nO = Method_Mb_OrbBased_nOrbsSum
+
+    allocate (rdm1spatial(nOS, nOS))
+    allocate (invRdm1(nOS, nOS))
+
+    if (nO .eq. nOS) then
+      ! Unrestricted or single-species: direct copy
+      rdm1spatial(:, :) = rdm1(1:nOS, 1:nOS)
+    else if (nO .eq. 2 * nOS) then
+      ! Restricted: sum over spin blocks
+      rdm1spatial(:, :) = rdm1(1:nOS, 1:nOS) + rdm1(nOS + 1:, nOS + 1:)
+    else
+      error stop "invalid nO to nOS relation in Method_Mb_OrbBased_FillInverseRdm1"
+    end if
+
+    !------------------------------------
+    ! Diagonalize 1-RDM → natural orbitals
+    !------------------------------------
+
+    call RdmDiagonalize_Rdm1(natocc, natorb, rdm1spatial)
+
+    reg = Method_Mb_OrbBased_regularizationParameter
+
+    ! The transform to natural orbitals, regularized inversion, and
+    ! back-transform combine into a single matrix acting on index 3:
+    !   M_{k₁,j₁} = Σ_j U_{k₁,j} · n_j/(n_j² + ε) · U†_{j,j₁}
+    do j1 = 1, nOS
+      do k1 = 1, nOS
+        invRdm1(k1, j1) = sum(natorb(k1, :) * (natocc(:) / (natocc(:)**2 + reg)) * conjg(natorb(j1, :)))
+      end do
+    end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   function YlmM0FastPathQ() result(res)
     !---------------------------------------------------------------------------
     ! Whether ApplyCorrelationOpYlmM0 applies: Hermitian (non-ECS) Ylm grid
@@ -680,20 +736,18 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine ApplyCorrelationOp(dOrbs, orbs, rdm1, rdm2, time, h2_)
+  subroutine ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_)
     !---------------------------------------------------------------------------
     ! Applies the beyond-mean-field correlation operator to orbitals.
     !
     ! This implements the MCTDHX-style correlation contribution arising from
     ! the 2-RDM structure beyond what Hartree-Fock captures. The algorithm:
-    !   1. Diagonalize 1-RDM → natural orbitals and occupations
-    !   2. Transform 2-RDM to natural orbital basis
-    !   3. Apply regularized inverse occupations to avoid small-denominator issues
-    !   4. Contract with interaction operator to accumulate in dOrbs
+    !   1. Contract the spatial 2-RDM with the inverse 1-RDM invRdm1
+    !      (regularized, see Method_Mb_OrbBased_FillInverseRdm1)
+    !   2. Contract with interaction operator to accumulate in dOrbs
     !
     ! Optionally returns the two-body Hamiltonian matrix h2_ if requested.
     !---------------------------------------------------------------------------
-    use M_Utils_RdmDiagonalize
     use M_Method
     use M_Grid
     use M_SysInteraction
@@ -701,7 +755,7 @@ contains
 
     complex(R64), intent(inout), contiguous, target :: dOrbs(:, :)
     complex(R64), intent(in), contiguous, target    :: orbs(:, :)
-    complex(R64), intent(in), contiguous             :: rdm1(:, :)
+    complex(R64), intent(in), contiguous             :: invRdm1(:, :)
     complex(R64), intent(in), contiguous             :: rdm2(:, :, :, :)
     real(R64), intent(in)                  :: time
     complex(R64), intent(out), allocatable, optional :: h2_(:, :, :, :)
@@ -721,7 +775,7 @@ contains
       h2_(:, :, :, :) = 0.0_R64
     end if
 
-    call FillCorrelationRdm2(rdm2spatial, rdm1, rdm2)
+    call FillCorrelationRdm2(rdm2spatial, invRdm1, rdm2)
 
     allocate (orbTmps, mold=orbs)
     allocate (orbTmpsSwap, mold=orbs)
@@ -777,7 +831,7 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine ApplyCorrelationOpYlmM0(dOrbs, orbs, rdm1, rdm2, time, h2_)
+  subroutine ApplyCorrelationOpYlmM0(dOrbs, orbs, invRdm1, rdm2, time, h2_)
     !---------------------------------------------------------------------------
     ! ApplyCorrelationOp for axially symmetric (m = 0) orbitals on a Ylm grid,
     ! evaluated on the Gauss-Legendre nodes in cos(theta) (Grid_Ylm_*NodesM0).
@@ -803,7 +857,7 @@ contains
 
     complex(R64), intent(inout), contiguous, target :: dOrbs(:, :)
     complex(R64), intent(in), contiguous, target    :: orbs(:, :)
-    complex(R64), intent(in), contiguous             :: rdm1(:, :)
+    complex(R64), intent(in), contiguous             :: invRdm1(:, :)
     complex(R64), intent(in), contiguous             :: rdm2(:, :, :, :)
     real(R64), intent(in)                  :: time
     complex(R64), intent(out), allocatable, optional :: h2_(:, :, :, :)
@@ -829,7 +883,7 @@ contains
       h2_(:, :, :, :) = 0.0_R64
     end if
 
-    call FillCorrelationRdm2(rdm2spatial, rdm1, rdm2)
+    call FillCorrelationRdm2(rdm2spatial, invRdm1, rdm2)
 
     ! Orbitals on the angular nodes; quadrature weights of the full measure
     allocate (orbNodes(nRad, nNodes, nOS), dOrbNodes(nRad, nNodes, nOS))
@@ -932,91 +986,57 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine FillCorrelationRdm2(rdm2spatial, rdm1, rdm2)
+  subroutine FillCorrelationRdm2(rdm2spatial, invRdm1, rdm2)
     !---------------------------------------------------------------------------
-    ! Spatial 2-RDM contracted with the regularized inverse 1-RDM, the weights
+    ! Spatial 2-RDM contracted with the inverse 1-RDM M = invRdm1, the weights
     ! of the correlation operator:
     !   rdm2spatial(i1,i2,j1,j2) = sum_k rho2(i1,i2,k,j2) M(k,j1),
-    !   M = U n/(n^2 + eps) U^dagger  (natural orbitals U, occupations n),
-    ! with spin-summed RDMs in the restricted case.
+    ! with the spin-summed 2-RDM in the restricted case.
     !---------------------------------------------------------------------------
-    use M_Utils_RdmDiagonalize
     use M_Orbs
 
     complex(R64), intent(out), allocatable :: rdm2spatial(:, :, :, :)
-    complex(R64), intent(in), contiguous   :: rdm1(:, :)
+    complex(R64), intent(in), contiguous   :: invRdm1(:, :)
     complex(R64), intent(in), contiguous   :: rdm2(:, :, :, :)
 
-    real(R64), allocatable :: natocc(:)
-    complex(R64), allocatable :: natorb(:, :)
     complex(R64), allocatable :: correlOp(:, :, :, :)
-    complex(R64), allocatable :: rdm1spatial(:, :)
 
     integer(I32) :: nO, nOS
     integer(I32) :: j1, k1
-    real(R64) :: reg
 
     nOS = Orbs_nOrbsInState
     nO = Method_Mb_OrbBased_nOrbsSum
 
     !------------------------------------
-    ! Build spatial RDMs (spin-summed for restricted case)
+    ! Build spatial 2-RDM (spin-summed for restricted case)
     !------------------------------------
 
-    allocate (rdm1spatial(nOS, nOS))
     allocate (rdm2spatial(nOS, nOS, nOS, nOS))
 
     if (nO .eq. nOS) then
       ! Unrestricted or single-species: direct copy
-      rdm1spatial(:, :) = rdm1(1:nOS, 1:nOS)
       rdm2spatial(:, :, :, :) = rdm2(1:nOS, 1:nOS, 1:nOS, 1:nOS)
 
     else if (nO .eq. 2 * nOS) then
       ! Restricted: sum over spin blocks (αα + αβ + βα + ββ)
-      rdm1spatial(:, :) = rdm1(1:nOS, 1:nOS) + rdm1(nOS + 1:, nOS + 1:)
       rdm2spatial(:, :, :, :) = rdm2(1:nOS, 1:nOS, 1:nOS, 1:nOS) + &
                                 rdm2(nOS + 1:, :nOS, nOS + 1:, :nOS) + &
                                 rdm2(:nOS, nOS + 1:, :nOS, nOS + 1:) + &
                                 rdm2(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:)
     else
-      error stop "invalid nO to nOS relation in ApplyCorrelationOp"
+      error stop "invalid nO to nOS relation in FillCorrelationRdm2"
     end if
-
-    !------------------------------------
-    ! Diagonalize 1-RDM → natural orbitals
-    !------------------------------------
-
-    call RdmDiagonalize_Rdm1(natocc, natorb, rdm1spatial)
-
-    reg = Method_Mb_OrbBased_regularizationParameter
-
-    !------------------------------------
-    ! Transform 2-RDM and apply regularized inverse
-    !------------------------------------
 
     allocate (correlOp, mold=rdm2spatial)
 
-    ! The transform to natural orbitals, regularized inversion, and
-    ! back-transform combine into a single matrix acting on index 3:
-    !   M_{k₁,j₁} = Σ_j U_{k₁,j} · n_j/(n_j² + ε) · U†_{j,j₁}
-    block
-      complex(R64) :: regInvMat(nOS, nOS)
-
-      do j1 = 1, nOS
-        do k1 = 1, nOS
-          regInvMat(k1, j1) = sum(natorb(k1, :) * (natocc(:) / (natocc(:)**2 + reg)) * conjg(natorb(j1, :)))
-        end do
+    ! Apply: rdm2spatial_{i₁,i₂,j₁,l₂} = Σ_k correlOp_{i₁,i₂,k,l₂} · M_{k,j₁}
+    correlOp(:, :, :, :) = rdm2spatial(:, :, :, :)
+    rdm2spatial(:, :, :, :) = 0.0_R64
+    do j1 = 1, nOS
+      do k1 = 1, nOS
+        rdm2spatial(:, :, j1, :) = rdm2spatial(:, :, j1, :) + correlOp(:, :, k1, :) * invRdm1(k1, j1)
       end do
-
-      ! Apply: rdm2spatial_{i₁,i₂,j₁,l₂} = Σ_k correlOp_{i₁,i₂,k,l₂} · M_{k,j₁}
-      correlOp(:, :, :, :) = rdm2spatial(:, :, :, :)
-      rdm2spatial(:, :, :, :) = 0.0_R64
-      do j1 = 1, nOS
-        do k1 = 1, nOS
-          rdm2spatial(:, :, j1, :) = rdm2spatial(:, :, j1, :) + correlOp(:, :, k1, :) * regInvMat(k1, j1)
-        end do
-      end do
-    end block
+    end do
 
   end subroutine
 

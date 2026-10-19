@@ -23,6 +23,18 @@ module M_Method_Mb_OrbBased
     !> according to the selected configuration.
     module subroutine Method_Mb_OrbBased_Fabricate
     end subroutine
+
+    !> Fills the regularized inverse of the spatial 1-RDM,
+    !> M = U n/(n^2 + eps) U^dagger (natural orbitals U, occupations n,
+    !> eps = Method_Mb_OrbBased_regularizationParameter), spin-summed in the
+    !> restricted case; the weights contracted with the 2-RDM in
+    !> Method_Mb_OrbBased_ApplyCorrelationOp.
+    module subroutine Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
+      !> Output: inverse spatial 1-RDM (nOrbsInState x nOrbsInState).
+      complex(R64), intent(out), allocatable :: invRdm1(:, :)
+      !> One-body reduced density matrix (nOrbsSum x nOrbsSum).
+      complex(R64), intent(in), contiguous   :: rdm1(:, :)
+    end subroutine
   end interface
 
   !=============================================================================
@@ -212,15 +224,16 @@ module M_Method_Mb_OrbBased
   abstract interface
     !> Applies a correlation operator that depends on the reduced density matrices
     !> (typical of multiconfigurational methods) and accumulates the result in `dOrbs`.
-    subroutine I_Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, rdm1, rdm2, time, h2_)
+    subroutine I_Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_)
       import :: R64
       !> Input/output derivative orbitals. On exit, contains the original
       !> content plus the result of the correlation operator action.
       complex(R64), intent(inout), contiguous, target :: dOrbs(:, :)
       !> Input orbitals to which the operator is applied.
       complex(R64), intent(in), contiguous, target :: orbs(:, :)
-      !> One-body reduced density matrix.
-      complex(R64), intent(in), contiguous :: rdm1(:, :)
+      !> Inverse spatial 1-RDM (nOrbsInState x nOrbsInState) contracted with
+      !> the 2-RDM, e.g. from Method_Mb_OrbBased_FillInverseRdm1.
+      complex(R64), intent(in), contiguous :: invRdm1(:, :)
       !> Two-body reduced density matrix.
       complex(R64), intent(in), contiguous :: rdm2(:, :, :, :)
       !> Current time, allowing for time-dependent potentials.

@@ -14,6 +14,8 @@ module M_Utils_RdmEnforceTraceM2ab
   ! Expansion coefficients for the unitarily invariant decomposition:
   real(R64), allocatable :: pa(:, :)
   real(R64), allocatable :: pb(:, :)
+  !> nDim the coefficients were computed for (-1: not yet computed)
+  integer(I32) :: setupDim = -1
 
 contains
 
@@ -145,17 +147,19 @@ contains
     integer(I32), intent(in) :: nDim
     real(R64) :: x
 
+    ! the coefficients depend on nDim: recompute whenever nDim changes
+    if (nDim .eq. setupDim) return
+
     if (.not. allocated(pa)) then
       allocate (pa(2, 2))
       allocate (pb(4, 2))
-    else
-      return
     end if
 
     if (nDim <= 2) Write (*, *) 'WARNING! WARNING! WARNING! WARNING! WARNING! '
     if (nDim <= 2) Write (*, *) 'Contraction consistent Reconstruction is not possible for M2 at N <= 2!'
 
     x = dble(nDim)
+    setupDim = nDim
 
     pa(1, 1) = -(x**2 + 2.0_R64) / ((x**2 - 4.0_R64) * (x**2 - 1.0_R64))
     pa(1, 2) = (3.0_R64 * x) / ((x**2 - 4.0_R64) * (x**2 - 1.0_R64))

@@ -13,8 +13,11 @@
 !> 5. Compute collision operator collOp2ab = Tr₃[h2, rdm3aab]
 !> 6. Add to derivative and repack
 !>
-!> The NY correction is proportional to (N-2)/(N-1) and involves natural orbital
-!> occupation numbers.
+!> The NY correction is a sum of products of two 2-body cumulants Δ that are
+!> contracted through the sign matrix R = 2 P_occ - 1, where P_occ projects on
+!> the nBodies(1) most strongly occupied natural orbitals of rdm1a. R depends on
+!> the natural orbitals only (not on the occupation values); there is no
+!> particle-number prefactor.
 submodule(M_Reconstruction_Singlet_Ny) S_Reconstruction_Singlet_Ny
 
   implicit none

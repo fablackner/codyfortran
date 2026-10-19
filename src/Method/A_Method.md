@@ -149,7 +149,8 @@ Provides orbital indexing, RDM storage, and operator-application interfaces:
 | `Method_Mb_OrbBased_ApplyPotentialOp`          | V̂_ext · orbitals (accumulate)              |
 | `Method_Mb_OrbBased_ApplyInteractionOp`        | Ŵ · orbitals for index pair (i₂,j₂)        |
 | `Method_Mb_OrbBased_ApplyHartreeFockOp`        | Mean-field + exchange (Hartree–Fock)       |
-| `Method_Mb_OrbBased_ApplyCorrelationOp`        | Beyond-mean-field correlation contribution |
+| `Method_Mb_OrbBased_ApplyCorrelationOp`        | Correlation term `(dOrbs, orbs, invRdm1, rdm2, time, h2_)` |
+| `Method_Mb_OrbBased_FillInverseRdm1` (module procedure) | Regularized spatial inverse U n/(n²+ε) U† of the 1-RDM |
 | `Method_Mb_OrbBased_ApplySingleBodyOp`         | Combined T̂ + V̂_ext                         |
 | `Method_Mb_OrbBased_TimeDerivativeOrbsLin`     | Linear (static-orbital) time derivative    |
 | `...TimeDerivativeCoeffsPlusOrbsNonLin`        | Non-linear part for MCTDHX-like schemes    |
@@ -181,6 +182,52 @@ an explicit integrator):
 The sum is a gauge transform of the full derivative (in-space orbital rotation
 by h¹, compensated in the many-body part). Adding h¹ to the many-body part of
 the non-linear step would count the one-body Hamiltonian twice.
+
+### TD-2RDM Active/Weak Natural-Orbital Split
+
+The TD-2RDM orbital equations contain the inverse 1-RDM, so weakly occupied
+natural orbitals amplify every error of the reconstructed 2-RDM by 1/n_min:
+with more orbitals the equations get stiff and noisy. `method.mb.orbBased.td2rdm.nWeakOrbs` (int, default 0 =
+off, standard TD-2RDM) makes the `nWeakOrbs` lowest natural orbitals of each
+body type (spin-summed 1-RDM if restricted) *weak*: they get no Q-space drive.
+Typical: `nWeakOrbs = 2` for 6–7 orbitals.
+
+With G_u = Σ_j hφ_j D1(j,u) + Γ_u (Γ_u the two-body part of the correlation
+operator) the orbitals evolve with
+
+```
+dφ_i/dt = −i Q Σ_u G_u M(u,i),     M = Σ_{u active} |u⟩ n_u/(n_u²+ε) ⟨u|
+```
+
+For no weak orbitals this is the usual −iQ(hφ_i + Σ_u Γ_u M(u,i)); with weak
+orbitals D1 M projects on the active natural orbitals, so weak natural
+orbitals only rotate in span. **Energy conservation** holds for every
+Hermitian M (field free): dE/dt = 2 Re Σ_i ⟨φ̇_i|G_i⟩ = 2 Re(i Tr(M A)) = 0
+with A(u,i) = ⟨G_u|Q|G_i⟩ Hermitian (the trace of a product of two Hermitian
+matrices is real); the 2-RDM part conserves E by itself.
+
+**Split step.** The linear part rotates the orbitals with
+H_L = (1−P_w) h (1−P_w) + P_w h P_w (P_w the grid projector on the weak
+natural orbitals, frozen during the step); the non-linear part adds the
+missing active-weak blocks of h1 to the 2-RDM, −i[Π h1 (1−Π) + (1−Π) h1 Π, D2]
+(Π the weak projector in coefficient space). The sum is a gauge transform of
+the equation above. Γ M is computed by `Method_Mb_OrbBased_ApplyCorrelationOp`
+with the truncated inverse passed as `invRdm1` (instead of the full
+regularized inverse from `Method_Mb_OrbBased_FillInverseRdm1`).
+
+**`Method_Mb_OrbBased_Td2rdm_RefreshWeakOrbs`** (`M_Method_Mb_OrbBased_Td2rdm`,
+no-op for `nWeakOrbs = 0`) recomputes P_w from `Method_state`. `Method_Setup`
+and every non-linear evaluation refresh it (the last RK stage approximates the
+end of the step; validated for `splitStep.order2` with an RK non-linear
+integrator only). A program that changes the state outside the propagator
+(absorber, purification, kick) must call it before the next
+`Propagator_Propagate`, otherwise the split step drops to first order; for
+other propagators call it after every `Propagator_Propagate`.
+`nWeakOrbs` must be smaller than every `nOrbs`.
+Tests: `T_He1d_06_TimePropagationTd2rdmWeakOrbs` (restricted orbitals, RK4:
+exact energy conservation and natural occupations against the unrestricted
+reference) and `...WeakOrbsSplit` (unrestricted, split step against that
+reference).
 
 ### Axially Symmetric Ylm Fast Path
 

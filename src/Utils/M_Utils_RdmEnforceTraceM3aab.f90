@@ -15,6 +15,8 @@ module M_Utils_RdmEnforceTraceM3aab
   real(R64), allocatable :: pa(:, :)
   real(R64), allocatable :: pb(:, :)
   real(R64), allocatable :: pc(:, :)
+  !> nDim the coefficients were computed for (-1: not yet computed)
+  integer(I32) :: setupDim = -1
 
 contains
 
@@ -224,18 +226,20 @@ contains
 
     real(R64) :: x
 
+    ! the coefficients depend on nDim: recompute whenever nDim changes
+    if (nDim .eq. setupDim) return
+
     if (.not. allocated(pa)) then
       allocate (pa(6, 2))
       allocate (pb(18, 5))
       allocate (pc(36, 4))
-    else
-      return
     end if
 
     ! The expansion coefficients below are singular for nDim <= 4
     if (nDim <= 4) error stop "RdmEnforceTraceM3aab: contraction consistency requires more than 4 orbitals"
 
     x = dble(nDim)
+    setupDim = nDim
 
     pa(1, 1) = (8 - 4 * x + x**2) / ((-4 + x) * (-3 + x) * x * (-4 + x**2))
     pa(2, 1) = (4 - 3 * x) / ((-4 + x) * (-3 + x) * x * (-4 + x**2))

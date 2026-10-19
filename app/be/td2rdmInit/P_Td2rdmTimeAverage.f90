@@ -14,6 +14,10 @@
 !> small component of phi(t) outside span(phi0) is neglected. The averaged
 !> 2-RDM is renormalized and stored together with phi0.
 !>
+!> The average is in general not N-representable. If the input has a
+!> purification block, the averaged 2-RDM is purified once (with h2 of phi0);
+!> the minimal eigenvalues of D and Q are printed before and after.
+!>
 !> Input:  orbXX_YY.in, rdm2BtXX_YY.in (relax/P_ImagTimeMctdhf)
 !> Output: orbXX_YY.in, rdm2BtXX_YY.in (averaged),
 !>         average.dat (time, energy, natural occupations along the propagation)
@@ -23,6 +27,8 @@ program P_Td2rdmTimeAverage
   use M_Utils_Json
   use M_Utils_DataStorage
   use M_Utils_RdmDiagonalize
+  use M_Utils_RdmHole
+  use M_Utils_LapackLib
   use M_Grid
   use M_Grid_Ylm
   use M_SysKinetic
@@ -38,11 +44,13 @@ program P_Td2rdmTimeAverage
   use M_IntegratorList
   use M_Propagator
   use M_Reconstruction
+  use M_Purification
 
   implicit none
 
   real(R64)    :: time, averagingTime, outputStep, timeStep, energy, weight
   integer(I32) :: nTimeSteps, innerStep, io
+  logical      :: purifyQ
   complex(R64), allocatable :: orbs0(:, :), rdm2Average(:, :, :, :)
   type(T_IntegratorList_FabricateInput) :: IntegratorListInput(2)
 
@@ -67,6 +75,8 @@ program P_Td2rdmTimeAverage
   call IntegratorList_Fabricate(IntegratorListInput)
   call Propagator_Fabricate()
   call Reconstruction_Fabricate
+  purifyQ = Json_GetExistence("purification")
+  if (purifyQ) call Purification_Fabricate
 
   call Say_Fabricate("program")
   averagingTime = Json_Get("program.averagingTime", 40.0_R64)
@@ -85,6 +95,7 @@ program P_Td2rdmTimeAverage
   call IntegratorList_Setup
   call Propagator_Setup
   call Reconstruction_Setup
+  if (purifyQ) call Purification_Setup
 
   ! The one-body operator is self-adjoint only in the FEDVR-weighted metric
   integratorList(1) % e % metricWeights = MetricWeights(TwoRdm_nElements)
@@ -125,10 +136,19 @@ program P_Td2rdmTimeAverage
   call TwoRdm_FillTwoRdmStateFromRdm2(TwoRdm_twoRdmState, rdm2Average * (timeStep / time))
   call TwoRdm_Normalize(TwoRdm_twoRdmState)
 
+  ! also fills h2 of phi0 for the energy-conserving purification
   energy = Method_GetEnergy(0.0_R64)
 
   print *
   write (*, '(A,F22.14)') " energy of the averaged state: ", energy
+  call PrintMinEigenvalues("averaged state")
+
+  if (purifyQ) then
+    call Purification_PurifyTwoRdmState(TwoRdm_twoRdmState, Method_Mb_OrbBased_h2)
+    energy = Method_GetEnergy(0.0_R64)
+    write (*, '(A,F22.14)') " energy of the purified state: ", energy
+    call PrintMinEigenvalues("purified state")
+  end if
 
   !==========================================
   call Say_Section("save data")
@@ -215,6 +235,34 @@ contains
         end do
       end do
     end do
+
+  end subroutine
+
+  !> Minimal eigenvalues of the spin-orbital D (2-RDM) and Q (2-hole RDM)
+  !> matrices of the current 2-RDM.
+  subroutine PrintMinEigenvalues(label)
+    character(len=*), intent(in) :: label
+
+    complex(R64), allocatable :: rdm2(:, :, :, :), qrdm2(:, :, :, :), mat(:, :), evecs(:, :)
+    real(R64), allocatable :: evals(:)
+    real(R64) :: minD, minQ
+    integer(I32) :: n
+
+    call TwoRdm_FillRdm2FromTwoRdmState(rdm2, TwoRdm_twoRdmState)
+    n = size(rdm2, 1)
+
+    mat = reshape(rdm2, [n * n, n * n])
+    mat = 0.5_R64 * (mat + conjg(transpose(mat)))
+    call LapackLib_DiagonalizeGeneric(evals, evecs, mat, .false.)
+    minD = minval(evals)
+
+    call RdmHole_FillQrdm2(qrdm2, rdm2)
+    mat = reshape(qrdm2, [n * n, n * n])
+    mat = 0.5_R64 * (mat + conjg(transpose(mat)))
+    call LapackLib_DiagonalizeGeneric(evals, evecs, mat, .false.)
+    minQ = minval(evals)
+
+    write (*, '(1X,A,A,ES12.4,A,ES12.4)') label, ":  min eig D =", minD, "  min eig Q =", minQ
 
   end subroutine
 
