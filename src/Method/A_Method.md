@@ -286,7 +286,11 @@ withWeightsQ_=.true.)`), the
 2-RDM-weighted orbital combinations are formed before multiplying with the
 potential, and every product is pointwise. The node count makes all angular
 integrals exact, so results equal the generic operator to round-off while the
-cost per pair drops from n spatial products to O(1) transforms.
+cost per pair drops from n spatial products to O(1) transforms. The potentials
+of all ordered pairs are stored on the nodes; the pointwise sums then run over
+cache-sized blocks of nodes with two ZGEMMs per block (the 2-RDM-weighted
+combinations χ for all (pair, j1) and the h2 quadratures), leaving only V·χ
+elementwise.
 
 ---
 

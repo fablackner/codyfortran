@@ -107,10 +107,11 @@ def purification():
 def propagator(p):
     # second-order split step; with the exact field-free propagator the linear
     # step is the fourth-order Blanes-Moan composition of exp(-i h0 dt) and
-    # the gauge SIL (src/Propagator/A_Propagator.md)
+    # the gauge SIL (src/Propagator/A_Propagator.md); the swapped variant has
+    # 6 instead of 7 exact substeps at the same accuracy (README)
     split = {"order2": {}}
     if p["exactFieldFree"]:
-        split["exactPartScheme"] = "blanesMoan6"
+        split["exactPartScheme"] = "blanesMoan6Swap"
     return {"splitStep": split}
 
 
@@ -132,9 +133,12 @@ def two_rdm():
 
 
 def split_step(imag=False):
-    sil = {"krylovDim": 40, "tolerance": 1e-12, "maxRestarts": 10}
+    # real time: SIL tolerance 1e-10 changes the observables by < 1e-9, far
+    # below the splitting error, with fewer Krylov vectors (README)
+    sil = {"krylovDim": 40, "tolerance": 1e-10, "maxRestarts": 10}
     if imag:
         sil["imagTimeQ"] = True
+        sil["tolerance"] = 1e-12
     return {"integratorList": {"sil1": sil, "rk2": {"o4Expl": {}}}}
 
 

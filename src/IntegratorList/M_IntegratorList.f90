@@ -115,6 +115,12 @@ module M_IntegratorList
     !> before the first `Integrate` call (grid weights typically become
     !> available only after `Grid_Setup`).
     real(R64), allocatable :: metricWeights(:)
+
+    !> Whether the integrator propagates in imaginary time, exp(−Δτ Ĥ)
+    !> (set by integrators that support it, currently SIL). Read by
+    !> Propagator_SplitStep_IntegrateLin to propagate the exact part of the
+    !> linear step in the same time direction.
+    logical :: imagTimeQ = .false.
   contains
     !> @brief Read parameters and capture dependencies from configuration.
     !> @details Called once after allocation. Implementations should read

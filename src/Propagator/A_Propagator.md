@@ -150,6 +150,12 @@ exact part and IntegratorList(1) inside that step:
 | `"strang"` (default) | 2 | 2 / 1 |
 | `"yoshida4"` | 4 | 4 / 3 (negative middle steps) |
 | `"blanesMoan6"` | 4 | 7 / 6 (Blanes & Moan 2002, PRK S6; ~250× smaller error constant than Yoshida) |
+| `"blanesMoan6Swap"` | 4 | 6 / 7 (same composition with the roles exchanged; starts and ends with an integrator substep) |
+
+`blanesMoan6Swap` saves one exact substep per step, worthwhile when the exact
+part is the expensive one (dense transformations of the exact field-free
+propagator); for the Be HHG runs its error equals that of `blanesMoan6`
+(app/be/README.md).
 
 The exact substeps carry the time; every integrator substep is centred on the
 time reached, so its midpoint evaluation of a time-dependent part (e.g. the

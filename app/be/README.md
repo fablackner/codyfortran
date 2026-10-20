@@ -63,7 +63,9 @@ propagated exactly per l (diagonalized once) and SIL only sees the gauge
 coupling A·p. A plain Strang splitting of h0 and A·p adds a large error near
 the nucleus ([h0, A·p] = iA ∂zV); the fourth-order Blanes–Moan composition
 (`propagator.splitStep.exactPartScheme = "blanesMoan6"`, 7 exact and 6 SIL
-substeps per linear step) removes it. MCTDHF, strong2c pulse, 0.2 a.u. at the
+substeps per linear step; now the default is its swapped variant
+`"blanesMoan6Swap"` with 6 exact and 7 SIL substeps, see "Performance" below)
+removes it. MCTDHF, strong2c pulse, 0.2 a.u. at the
 peak vector potential, maximal error against the Richardson-extrapolated
 reference, one thread:
 
@@ -98,6 +100,35 @@ python3 make_inputs.py --gpu
 
 On a GTX 1050 Ti (FP64 at 1/32 rate) this gives 1.6× per step over the CPU
 path; results agree with the CPU to round-off.
+
+**Performance (MCTDHF, 5 orbitals, strong2c, at the peak vector potential).**
+Wall time per split step (dt = 0.0025) on a Pentium G4560 (2 cores, no AVX),
+OpenBLAS, `OMP_NUM_THREADS` as given:
+
+| | 1 thread | 2 threads |
+|---|---|---|
+| before (blanesMoan6, SIL tolerance 1e-12) | 4.54 s | 3.17 s |
+| now (CPU) | 3.71 s | 2.45 s |
+| now (`--gpu`, GTX 1050 Ti) | 2.33 s | 1.74 s |
+
+What changed, measured against a dt/4 reference over 0.1 a.u. (maximal error
+of the dipole acceleration 6.1e-4 in all cases):
+
+- `exactPartScheme = "blanesMoan6Swap"`: the Blanes–Moan composition with the
+  roles exchanged, 6 instead of 7 exact substeps (the dense transformations
+  dominate); the observables change by 2.5e-5 (acceleration).
+- SIL tolerance 1e-10 in real time (1e-12 in imaginary time): fewer Krylov
+  vectors; the observables change by 1e-10.
+- `ApplyCorrelationOpYlmM0` with blocked ZGEMMs: results unchanged to 1e-13,
+  the mean-field part 4× cheaper.
+- MRRR (DSYEVR) for the exact field-free blocks: setup 34 s → 13 s.
+
+Two threads pay off (1.5×) when no other job runs; the GPU path only offloads
+the dense transformations, so the CPU threads still matter there. Tried and
+dropped: SHTns (the m = 0 angular transforms are ~1.5% of the run), the
+reversed outer splitting B(½Δt) A(Δt) B(½Δt) (1.2× faster per step but twice
+the acceleration error, i.e. slower at equal accuracy), padded or re-laid-out
+DGEMMs (≤ 4%; the 999 × 999 × 10 products already run at 60% of peak).
 
 **Purification.** With `conserveEnergyQ` the D/Q correction is orthogonal to
 h2, so `laser/P_LaserTd2rdm` rebuilds h2 from the current orbitals before

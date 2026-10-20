@@ -38,9 +38,6 @@ module M_IntegratorList_Sil
     real(R64) :: tolerance = 1.0e-10_R64
     !> Maximum number of step-halving retries per sub-step.
     integer(I32) :: maxRestarts = 8
-    !> If true, propagate in imaginary time: exp(−Δτ Ĥ) instead of exp(−i Δt Ĥ).
-    !> The TimeDerivative callback still supplies −i Ĥ v (real-time convention).
-    logical :: imagTimeQ = .false.
   contains
     !> Read SIL-specific parameters from configuration and capture dependencies.
     procedure :: Fabricate

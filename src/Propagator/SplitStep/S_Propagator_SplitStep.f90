@@ -27,7 +27,8 @@ submodule(M_Propagator_SplitStep) S_Propagator_SplitStep
   !> Composition of the linear step when the method propagates part of it
   !> exactly (`Method_PropagateExactPart`): exact substeps exactCoeffs(k) Δt
   !> alternate with integrator-1 substeps integratorCoeffs(k) Δt,
-  !> exact(1) int(1) exact(2) ... int(n) exact(n+1)
+  !> exact(1) int(1) exact(2) ... int(n) exact(n+1), or with one more
+  !> integrator substep int(1) exact(1) ... exact(n) int(n+1).
   !> (propagator.splitStep.exactPartScheme).
   real(R64), allocatable :: exactCoeffs(:)
   real(R64), allocatable :: integratorCoeffs(:)
@@ -87,8 +88,18 @@ contains
       exactCoeffs = [a1, a2, a3, 1.0_R64 - 2.0_R64 * (a1 + a2 + a3), a3, a2, a1]
       integratorCoeffs = [b1, b2, 0.5_R64 - b1 - b2, 0.5_R64 - b1 - b2, b2, b1]
 
+    case ("blanesMoan6Swap")
+      ! same composition with the roles exchanged: 6 exact / 7 integrator substeps
+      a1 = 0.0792036964311957_R64
+      a2 = 0.353172906049774_R64
+      a3 = -0.0420650803577195_R64
+      b1 = 0.209515106613362_R64
+      b2 = -0.143851773179818_R64
+      exactCoeffs = [b1, b2, 0.5_R64 - b1 - b2, 0.5_R64 - b1 - b2, b2, b1]
+      integratorCoeffs = [a1, a2, a3, 1.0_R64 - 2.0_R64 * (a1 + a2 + a3), a3, a2, a1]
+
     case default
-      error stop "propagator.splitStep.exactPartScheme must be one of: strang, yoshida4, blanesMoan6"
+      error stop "propagator.splitStep.exactPartScheme must be one of: strang, yoshida4, blanesMoan6, blanesMoan6Swap"
     end select
 
     !------------------------------------
@@ -118,6 +129,7 @@ contains
 
     real(R64) :: dt, tExact, tHalf
     integer(I32) :: k
+    logical :: imagTimeQ
 
     if (.not. associated(Method_PropagateExactPart)) then
       call IntegratorList(1) % e % Integrate(state, t0, t1)
@@ -126,18 +138,37 @@ contains
 
     dt = t1 - t0
 
+    ! The exact part runs in the time direction of integrator 1; backward
+    ! substeps would amplify exp(+|E| dt) in imaginary time
+    imagTimeQ = IntegratorList(1) % e % imagTimeQ
+    if (imagTimeQ .and. (any(exactCoeffs < 0.0_R64) .or. any(integratorCoeffs < 0.0_R64))) &
+      error stop "propagator.splitStep.exactPartScheme: imaginary time requires a scheme without negative substeps (strang)"
+
     ! The exact substeps carry the time; each integrator substep is centred on
     ! the time reached so that its midpoint evaluation of the time-dependent
-    ! part is consistent with the symmetric composition
+    ! part is consistent with the symmetric composition. The composition
+    ! starts and ends with the exact part unless it has fewer substeps.
     tExact = t0
-    do k = 1, size(integratorCoeffs)
-      call Method_PropagateExactPart(state, tExact, tExact + exactCoeffs(k) * dt)
-      tExact = tExact + exactCoeffs(k) * dt
+    if (size(exactCoeffs) > size(integratorCoeffs)) then
+      do k = 1, size(integratorCoeffs)
+        call Method_PropagateExactPart(state, tExact, tExact + exactCoeffs(k) * dt, imagTimeQ_=imagTimeQ)
+        tExact = tExact + exactCoeffs(k) * dt
 
-      tHalf = 0.5_R64 * integratorCoeffs(k) * dt
-      call IntegratorList(1) % e % Integrate(state, tExact - tHalf, tExact + tHalf)
-    end do
-    call Method_PropagateExactPart(state, tExact, t1)
+        tHalf = 0.5_R64 * integratorCoeffs(k) * dt
+        call IntegratorList(1) % e % Integrate(state, tExact - tHalf, tExact + tHalf)
+      end do
+      call Method_PropagateExactPart(state, tExact, t1, imagTimeQ_=imagTimeQ)
+    else
+      do k = 1, size(exactCoeffs)
+        tHalf = 0.5_R64 * integratorCoeffs(k) * dt
+        call IntegratorList(1) % e % Integrate(state, tExact - tHalf, tExact + tHalf)
+
+        call Method_PropagateExactPart(state, tExact, tExact + exactCoeffs(k) * dt, imagTimeQ_=imagTimeQ)
+        tExact = tExact + exactCoeffs(k) * dt
+      end do
+      tHalf = 0.5_R64 * integratorCoeffs(size(integratorCoeffs)) * dt
+      call IntegratorList(1) % e % Integrate(state, t1 - tHalf, t1 + tHalf)
+    end if
 
   end subroutine
 

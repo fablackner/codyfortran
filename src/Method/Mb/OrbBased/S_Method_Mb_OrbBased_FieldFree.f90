@@ -301,7 +301,7 @@ contains
 
     real(R64), parameter :: tolerance = 1.0e-10_R64
 
-    integer(I32) :: nRad, nG, lmax, mmax, i, l, m
+    integer(I32) :: nRad, nG, lmax, mmax, i, l, m, nFound
     logical :: potentialQ
     real(R64) :: hScale, devM, devImag, devSym
     complex(R64), allocatable :: probe(:), hProbe(:), tmp(:), hLm(:), unitRad(:), externalPotential(:)
@@ -399,10 +399,12 @@ contains
     if (devM > tolerance) error stop "method.mb.orbBased.exactFieldFreeQ: h0 depends on m"
     if (devSym > tolerance) error stop "method.mb.orbBased.exactFieldFreeQ: h0 is not Hermitian in the grid metric"
 
-    !$omp parallel do default(shared) schedule(dynamic) private(l, hs, evals, evecs)
+    ! MRRR (DSYEVR): the QR iteration of DSYEV took most of the setup time
+    !$omp parallel do default(shared) schedule(dynamic) private(l, hs, evals, evecs, nFound)
     do l = 0, lmax
       hs = 0.5_R64 * (blockEvecs(:, :, l) + transpose(blockEvecs(:, :, l)))
-      call LapackLib_DiagonalizeGeneric(evals, evecs, hs, .true.)
+      call LapackLib_DiagonalizeSym(evals, evecs, nFound, hs, .true.)
+      if (nFound .ne. nRad) error stop "method.mb.orbBased.exactFieldFreeQ: incomplete diagonalization of h0"
       blockEvals(:, l) = evals(:)
       blockEvecs(:, :, l) = evecs(:, :)
     end do

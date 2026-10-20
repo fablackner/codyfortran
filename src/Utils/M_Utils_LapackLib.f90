@@ -460,6 +460,10 @@ contains
     integer(I32)              :: iOPT(1)
     real(R64), parameter      :: ABSTOL = 1e-15_R64
     integer(I32)              :: N, lwork, ilwork, info
+    ! LAPACK reads VL, VU, IL, IU only for the matching RANGE; absent optionals
+    ! must not be passed to its non-optional dummies
+    real(R64)                 :: vl, vu
+    integer(I32)              :: il, iu
     integer(I32), allocatable :: ISUPPZ(:)
     real(R64), allocatable    :: rWORK(:)
     integer(I32)              :: rlwork
@@ -481,12 +485,21 @@ contains
       range = 'A'
     end if
 
+    vl = 0.0_R64
+    vu = 0.0_R64
+    il = 1
+    iu = N
+    if (present(min_)) vl = min_
+    if (present(max_)) vu = max_
+    if (present(imin_)) il = imin_
+    if (present(imax_)) iu = imax_
+
     if (evecsQ) then
       if (.not. allocated(evecs)) allocate (evecs(N, N))
-      call ZHEEVR('V', range, 'U', N, A, N, min_, max_, imin_, imax_, ABSTOL, nFound, evals, evecs, N, &
+      call ZHEEVR('V', range, 'U', N, A, N, vl, vu, il, iu, ABSTOL, nFound, evals, evecs, N, &
                   ISUPPZ, OPT, -1, rOPT, -1, iOPT, -1, info)
     else
-      call ZHEEVR('N', range, 'U', N, A, N, min_, max_, imin_, imax_, ABSTOL, nFound, evals, evecsDummy, 1, &
+      call ZHEEVR('N', range, 'U', N, A, N, vl, vu, il, iu, ABSTOL, nFound, evals, evecsDummy, 1, &
                   ISUPPZ, OPT, -1, rOPT, -1, iOPT, -1, info)
     end if
 
@@ -498,10 +511,10 @@ contains
     allocate (iWORK(ilwork))
 
     if (evecsQ) then
-      call ZHEEVR('V', range, 'U', N, A, N, min_, max_, imin_, imax_, ABSTOL, nFound, evals, evecs, N, &
+      call ZHEEVR('V', range, 'U', N, A, N, vl, vu, il, iu, ABSTOL, nFound, evals, evecs, N, &
                   ISUPPZ, WORK, lwork, rWORK, rlwork, iWORK, ilwork, info)
     else
-      call ZHEEVR('N', range, 'U', N, A, N, min_, max_, imin_, imax_, ABSTOL, nFound, evals, evecsDummy, 1, &
+      call ZHEEVR('N', range, 'U', N, A, N, vl, vu, il, iu, ABSTOL, nFound, evals, evecsDummy, 1, &
                   ISUPPZ, WORK, lwork, rWORK, rlwork, iWORK, ilwork, info)
     end if
 
@@ -540,6 +553,10 @@ contains
     integer(I32)              :: iOPT(1)
     real(R64), parameter      :: ABSTOL = 1e-15_R64
     integer(I32)              :: N, lwork, ilwork, info
+    ! LAPACK reads VL, VU, IL, IU only for the matching RANGE; absent optionals
+    ! must not be passed to its non-optional dummies
+    real(R64)                 :: vl, vu
+    integer(I32)              :: il, iu
     integer(I32), allocatable :: ISUPPZ(:)
 
     N = size(A, 1)
@@ -558,12 +575,21 @@ contains
       range = 'A'
     end if
 
+    vl = 0.0_R64
+    vu = 0.0_R64
+    il = 1
+    iu = N
+    if (present(min_)) vl = min_
+    if (present(max_)) vu = max_
+    if (present(imin_)) il = imin_
+    if (present(imax_)) iu = imax_
+
     if (evecsQ) then
       if (.not. allocated(evecs)) allocate (evecs(N, N))
-      call DSYEVR('V', range, 'U', N, A, N, min_, max_, imin_, imax_, ABSTOL, nFound, evals, evecs, N, &
+      call DSYEVR('V', range, 'U', N, A, N, vl, vu, il, iu, ABSTOL, nFound, evals, evecs, N, &
                   ISUPPZ, OPT, -1, iOPT, -1, info)
     else
-      call DSYEVR('N', range, 'U', N, A, N, min_, max_, imin_, imax_, ABSTOL, nFound, evals, evecsDummy, 1, &
+      call DSYEVR('N', range, 'U', N, A, N, vl, vu, il, iu, ABSTOL, nFound, evals, evecsDummy, 1, &
                   ISUPPZ, OPT, -1, iOPT, -1, info)
     end if
 
@@ -573,10 +599,10 @@ contains
     allocate (iWORK(ilwork))
 
     if (evecsQ) then
-      call DSYEVR('V', range, 'U', N, A, N, min_, max_, imin_, imax_, ABSTOL, nFound, evals, evecs, N, &
+      call DSYEVR('V', range, 'U', N, A, N, vl, vu, il, iu, ABSTOL, nFound, evals, evecs, N, &
                   ISUPPZ, WORK, lwork, iWORK, ilwork, info)
     else
-      call DSYEVR('N', range, 'U', N, A, N, min_, max_, imin_, imax_, ABSTOL, nFound, evals, evecsDummy, 1, &
+      call DSYEVR('N', range, 'U', N, A, N, vl, vu, il, iu, ABSTOL, nFound, evals, evecsDummy, 1, &
                   ISUPPZ, WORK, lwork, iWORK, ilwork, info)
     end if
 
