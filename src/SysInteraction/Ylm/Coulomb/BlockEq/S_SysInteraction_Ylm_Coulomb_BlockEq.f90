@@ -4,10 +4,11 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> @brief Block-factorized FEDVR implementation with Schur complement.
 !>
-!> @details Precomputes element-level LU factorizations and interface responses
-!> during setup. Each solve then requires only:
-!>   1. Map source to element-local RHS and solve (using cached LU)
-!>   2. Assemble and solve small Schur complement system at interfaces
+!> @details Precomputes element-level inverses, interface responses and the
+!> LU-factorized Schur complement during setup (all depend only on l). Each
+!> solve then requires only:
+!>   1. Map source to element-local RHS and multiply with the cached inverses
+!>   2. Solve the small Schur complement system at interfaces (cached LU)
 !>   3. Back-substitute to recover full solution
 submodule(M_SysInteraction_Ylm_Coulomb_BlockEq) S_SysInteraction_Ylm_Coulomb_BlockEq
 
@@ -27,6 +28,14 @@ submodule(M_SysInteraction_Ylm_Coulomb_BlockEq) S_SysInteraction_Ylm_Coulomb_Blo
 
   !> Unit response to right boundary excitation
   complex(R64), allocatable :: unitResponseRight(:, :, :)     ! (nLoc, nE, lmax+1)
+
+  !> Inverse element matrices (real); a matrix-vector product per element is
+  !> much cheaper than a LAPACK solve call for these small blocks
+  real(R64), allocatable :: elementInverses(:, :, :, :)       ! (nLoc, nLoc, nE, lmax+1)
+
+  !> LU-factorized Schur complement matrix and pivots
+  complex(R64), allocatable :: schurLu(:, :, :)               ! (nE-1, nE-1, lmax+1)
+  integer(I32), allocatable :: schurIpiv(:, :)                ! (nE-1, lmax+1)
 
 contains
 
@@ -56,16 +65,20 @@ contains
   !>   1. Build and LU-factorize the element Poisson matrix
   !>   2. Compute unit response to left boundary: solve with RHS = [1,0,...,0]
   !>   3. Compute unit response to right boundary: solve with RHS = [0,...,0,1]
+  !>   4. Store the element inverse
+  !> and for each l build and LU-factorize the Schur complement matrix.
   subroutine Setup
+    use M_Utils_LapackLib
     use M_Utils_Fedvr
     use M_SysInteraction_Ylm
     use M_Grid_Ylm
     use M_Grid_Ylm_Fedvr, fedvrCtx => Grid_Ylm_Fedvr_fedvrCtx
 
-    integer(I32) :: iE, iL
+    integer(I32) :: iE, iL, iLoc
     integer(I32) :: nE
     integer(I32) :: lVal, lmaxPot
     integer(I32) :: nLoc
+    complex(R64), allocatable :: unitVec(:)
 
     nE = Grid_Ylm_Fedvr_nElements
     lmaxPot = SysInteraction_Ylm_lmax
@@ -74,6 +87,9 @@ contains
     allocate (subBlocks(nE, lmaxPot + 1))
     allocate (unitResponseLeft(nLoc, nE, lmaxPot + 1))
     allocate (unitResponseRight(nLoc, nE, lmaxPot + 1))
+    allocate (elementInverses(nLoc, nLoc, nE, lmaxPot + 1))
+    allocate (schurLu(nE - 1, nE - 1, lmaxPot + 1), schurIpiv(nE - 1, lmaxPot + 1))
+    allocate (unitVec(nLoc))
 
     do iL = 1, lmaxPot + 1
       lVal = iL - 1
@@ -89,7 +105,20 @@ contains
         unitResponseRight(:, iE, iL) = cmplx(0.0_R64, 0.0_R64, kind=R64)
         unitResponseRight(nLoc, iE, iL) = cmplx(1.0_R64, 0.0_R64, kind=R64)
         call SolveElementSystem(subBlocks(iE, iL) % matrix, unitResponseRight(:, iE, iL), subBlocks(iE, iL) % ipiv)
+
+        ! Element inverse, column by column (the element matrix is real)
+        do iLoc = 1, nLoc
+          unitVec(:) = cmplx(0.0_R64, 0.0_R64, kind=R64)
+          unitVec(iLoc) = cmplx(1.0_R64, 0.0_R64, kind=R64)
+          call SolveElementSystem(subBlocks(iE, iL) % matrix, unitVec, subBlocks(iE, iL) % ipiv)
+          elementInverses(:, iLoc, iE, iL) = real(unitVec(:), kind=R64)
+        end do
       end do
+
+      if (nE >= 2) then
+        call BuildInterfaceMatrix(schurLu(:, :, iL), unitResponseLeft(:, :, iL), unitResponseRight(:, :, iL))
+        call LapackLib_FactorizeLU(schurLu(:, :, iL), schurIpiv(:, iL))
+      end if
     end do
   end subroutine
 
@@ -115,6 +144,7 @@ contains
     use M_Grid_Ylm
     use M_Grid_Ylm_Fedvr, fedvrCtx => Grid_Ylm_Fedvr_fedvrCtx, derivativeCtx => Grid_Ylm_Fedvr_derivativeCtx
     use M_SysInteraction_Ylm_Coulomb
+    use M_Utils_LapackLib
 
     complex(R64), intent(out), contiguous :: potLm(:)
     complex(R64), intent(in), contiguous  :: srcLm(:)
@@ -124,7 +154,6 @@ contains
     integer(I32), intent(in), optional  :: bt1_
     integer(I32), intent(in), optional  :: bt2_
 
-    complex(R64), allocatable :: schurMatrix(:, :)
     complex(R64), allocatable :: schurWeightRight(:)
     complex(R64), allocatable :: rhsRight(:)
     ! Workspace for homogeneous element solutions; local (not module state) so
@@ -144,24 +173,20 @@ contains
     homogeneousResponse = cmplx(0.0_R64, 0.0_R64, kind=R64)
 
     allocate (rhsRight(nE - 1))
-    allocate (schurMatrix(nE - 1, nE - 1))
     allocate (schurWeightRight(nE - 1))
 
     rhsRight = cmplx(0.0_R64, 0.0_R64, kind=R64)
-    schurMatrix = cmplx(0.0_R64, 0.0_R64, kind=R64)
     schurWeightRight = cmplx(0.0_R64, 0.0_R64, kind=R64)
 
     ! Step 1: Solve element systems with homogeneous BCs
     call FillHomogeneousResponse(homogeneousResponse, rhsRight, srcLm, l)
 
-    ! Step 2: Build Schur complement system
-    call BuildInterfaceSystem(schurMatrix, schurWeightRight, homogeneousResponse, &
-                              unitResponseLeft(:, :, l + 1), unitResponseRight(:, :, l + 1), &
-                              rhsRight)
+    ! Step 2: Build Schur complement right-hand side
+    call FillInterfaceRhs(schurWeightRight, homogeneousResponse, unitResponseLeft(:, :, l + 1), rhsRight)
 
-    ! Step 3: Solve interface system
+    ! Step 3: Solve interface system with the cached factorization
     if (nE >= 2) then
-      call SolveInterfaceSystem(schurMatrix, schurWeightRight)
+      call LapackLib_SolveFactorized(schurLu(:, :, l + 1), schurIpiv(:, l + 1), schurWeightRight, 'N')
     end if
 
     ! Step 4: Recover full solution
@@ -172,7 +197,7 @@ contains
 
     potLm(:) = strength * potLm(:)
 
-    deallocate (rhsRight, schurMatrix, schurWeightRight)
+    deallocate (rhsRight, schurWeightRight)
   end subroutine
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -266,7 +291,7 @@ contains
   !> @brief Solve element systems with homogeneous boundary conditions.
   !>
   !> For each element, sets up the RHS from the source term, imposes zero
-  !> boundary values, and solves using the precomputed LU factorization.
+  !> boundary values, and multiplies with the precomputed element inverse.
   subroutine FillHomogeneousResponse(homogeneousResponse, rhsRight, srcLm, l)
     use M_Utils_Constants, only: PI
     use M_Grid_Ylm_Fedvr, fedvrCtx => Grid_Ylm_Fedvr_fedvrCtx
@@ -278,10 +303,13 @@ contains
 
     integer(I32) :: nE, nLoc
     integer(I32) :: iE, iStart, iEnd
-    integer(I32) :: iLocalStart, iLocalEnd
+    integer(I32) :: iLocalStart, iLocalEnd, iLoc
+    complex(R64), allocatable :: rhsLocal(:)
 
     nE = Grid_Ylm_Fedvr_nElements
     nLoc = Grid_Ylm_Fedvr_nLocals
+
+    allocate (rhsLocal(nLoc))
 
     do iE = 1, nE
       associate (element => fedvrCtx % elements(iE))
@@ -301,26 +329,57 @@ contains
         homogeneousResponse(1, iE) = cmplx(0.0_R64, 0.0_R64, kind=R64)
         homogeneousResponse(nLoc, iE) = cmplx(0.0_R64, 0.0_R64, kind=R64)
 
-        call SolveElementSystem(subBlocks(iE, l + 1) % matrix, homogeneousResponse(:, iE), &
-                                subBlocks(iE, l + 1) % ipiv)
+        rhsLocal(:) = homogeneousResponse(:, iE)
+        homogeneousResponse(:, iE) = cmplx(0.0_R64, 0.0_R64, kind=R64)
+        do iLoc = 1, nLoc
+          homogeneousResponse(:, iE) = homogeneousResponse(:, iE) + elementInverses(:, iLoc, iE, l + 1) * rhsLocal(iLoc)
+        end do
       end associate
     end do
   end subroutine
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> @brief Build Schur complement system for interface coupling.
+  !> @brief Build Schur complement matrix for interface coupling.
   !>
   !> The interface values must satisfy continuity constraints between elements.
-  !> This builds a tridiagonal system relating adjacent interface DOFs.
-  subroutine BuildInterfaceSystem(schurMatrix, schurWeightRight, homogeneousResponse, unitResponseLeft, &
-                                  unitResponseRight, rhsRight)
-    use M_Grid_Ylm_Fedvr, fedvrCtx => Grid_Ylm_Fedvr_fedvrCtx
+  !> This builds a tridiagonal system relating adjacent interface DOFs; it
+  !> depends only on l and is factorized once during setup.
+  subroutine BuildInterfaceMatrix(schurMatrix, unitResponseLeft, unitResponseRight)
+    use M_Grid_Ylm_Fedvr
 
-    complex(R64), intent(inout) :: schurMatrix(:, :)
+    complex(R64), intent(out) :: schurMatrix(:, :)
+    complex(R64), intent(in) :: unitResponseLeft(:, :)
+    complex(R64), intent(in) :: unitResponseRight(:, :)
+
+    integer(I32) :: iE, lE, rE
+    integer(I32) :: nE, nLoc
+
+    nE = Grid_Ylm_Fedvr_nElements
+    nLoc = Grid_Ylm_Fedvr_nLocals
+
+    schurMatrix(:, :) = cmplx(0.0_R64, 0.0_R64, kind=R64)
+
+    do iE = 1, nE - 1
+      lE = iE - 1
+      rE = iE + 1
+
+      if (iE > 1) schurMatrix(iE, lE) = unitResponseLeft(nLoc, iE)
+
+      schurMatrix(iE, iE) = -(unitResponseRight(nLoc, iE) + &
+                              unitResponseLeft(1, rE))
+
+      if (iE < nE - 1) schurMatrix(iE, rE) = unitResponseRight(1, rE)
+    end do
+  end subroutine
+
+  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Fill the Schur complement right-hand side from the element solutions.
+  subroutine FillInterfaceRhs(schurWeightRight, homogeneousResponse, unitResponseLeft, rhsRight)
+    use M_Grid_Ylm_Fedvr
+
     complex(R64), intent(inout) :: schurWeightRight(:)
     complex(R64), intent(in) :: homogeneousResponse(:, :)
     complex(R64), intent(in) :: unitResponseLeft(:, :)
-    complex(R64), intent(in) :: unitResponseRight(:, :)
     complex(R64), intent(in) :: rhsRight(:)
 
     integer(I32) :: iE, lE, rE
@@ -340,34 +399,8 @@ contains
       if (iE > 1) then
         schurWeightRight(iE) = schurWeightRight(iE) &
                                + unitResponseLeft(nLoc, iE) * rhsRight(lE)
-        schurMatrix(iE, lE) = unitResponseLeft(nLoc, iE)
-      end if
-
-      schurMatrix(iE, iE) = -(unitResponseRight(nLoc, iE) + &
-                              unitResponseLeft(1, rE))
-
-      if (iE < nE - 1) then
-        schurMatrix(iE, rE) = unitResponseRight(1, rE)
       end if
     end do
-  end subroutine
-
-  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> @brief Solve the interface system via LU factorization.
-  subroutine SolveInterfaceSystem(matrix, rhsInSolOut)
-    use M_Utils_LapackLib
-
-    complex(R64), intent(inout), contiguous :: matrix(:, :)
-    complex(R64), intent(inout), contiguous :: rhsInSolOut(:)
-
-    integer(I32), allocatable :: ipiv(:)
-
-    allocate (ipiv(size(rhsInSolOut)))
-
-    call LapackLib_FactorizeLU(matrix, ipiv)
-    call LapackLib_SolveFactorized(matrix, ipiv, rhsInSolOut, 'N')
-
-    deallocate (ipiv)
   end subroutine
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

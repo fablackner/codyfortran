@@ -125,7 +125,7 @@ w(r) = strength × exp(-dampening×r) / (√(r² + softening1²) + softening2)
 | `TwoScan` | O(N) | Forward/backward prefix sums |
 | `FullEq` | O(N³) | FEDVR + LU per call |
 | `FullEqEcs` | O(N³) | FEDVR-ECS contour + complex LU per call (requires `grid.ylm.fedvrEcs`) |
-| `BlockEq` | O(nE² + nE×nLoc) | FEDVR + precomputed Schur |
+| `BlockEq` | O(nE² + nE×nLoc²) | FEDVR + element inverses and Schur LU precomputed per l |
 
 **JSON path:** `sysInteraction.ylm.coulomb`
 
