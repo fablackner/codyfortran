@@ -182,34 +182,16 @@ contains
 !>
 !> The 2-RDM is extracted from the full combined orbital space into blocks:
 !>   rdm2Bt(i1, i2, j1, j2) with i1,j1 ∈ orbitals(bt1) and i2,j2 ∈ orbitals(bt2)
+!> (written by Method_Mb_OrbBased_SaveRdm2Blocks).
   subroutine SaveTwoRdm(coeffs)
-    use M_Utils_DataStorage
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(in), contiguous  :: coeffs(:)
 
     complex(R64), allocatable :: rdm2(:, :, :, :)
-    complex(R64), allocatable :: rdm2Bt(:, :, :, :)
-    character(len=256) :: filename
-    integer(I32)      :: ibt1, ibt2
 
     call Coeffs_ApplyH2FillRdm2(coeffs, rdm2_=rdm2)
-
-    do ibt1 = 1, Method_Mb_nBodyTypes
-      do ibt2 = 1, Method_Mb_nBodyTypes
-
-        write (filename, '("rdm2Bt",I2.2,"_",I2.2,".in")') ibt1, ibt2
-
-        rdm2Bt = rdm2(Method_Mb_OrbBased_nOrbsStart(ibt1):Method_Mb_OrbBased_nOrbsEnd(ibt1), &
-                      Method_Mb_OrbBased_nOrbsStart(ibt2):Method_Mb_OrbBased_nOrbsEnd(ibt2), &
-                      Method_Mb_OrbBased_nOrbsStart(ibt1):Method_Mb_OrbBased_nOrbsEnd(ibt1), &
-                      Method_Mb_OrbBased_nOrbsStart(ibt2):Method_Mb_OrbBased_nOrbsEnd(ibt2))
-
-        call SaveData(rdm2Bt, trim(filename), storage_size(rdm2Bt))
-
-      end do
-    end do
+    call Method_Mb_OrbBased_SaveRdm2Blocks(rdm2)
 
   end subroutine
 

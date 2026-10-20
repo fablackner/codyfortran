@@ -175,7 +175,7 @@ contains
 
     call Say_Setup("groundSolver.mcscf.ylmOpt")
 
-    potSize = Grid_Ylm_NChannels(SysInteraction_Ylm_lmax, SysInteraction_Ylm_mmax) * Grid_Ylm_nRadial
+    potSize = SysInteraction_Ylm_nPoints
 
     nUp = GroundSolver_NumberOfSpinUpOrbs()
 

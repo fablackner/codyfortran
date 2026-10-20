@@ -133,7 +133,7 @@ contains
 
     call Say_Setup("groundSolver.scf.ylmOpt")
 
-    potSize = Grid_Ylm_NChannels(SysInteraction_Ylm_lmax, SysInteraction_Ylm_mmax) * Grid_Ylm_nRadial
+    potSize = SysInteraction_Ylm_nPoints
 
     allocate (src(potSize))
     allocate (srcTmp(potSize))

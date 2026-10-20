@@ -32,6 +32,7 @@ contains
     nSteps = Json_Get("purification.singlet.reduce.nSteps", 40)
     threshold = Json_Get("purification.singlet.reduce.threshold", -1e-5_R64)
     conserveEnergyQ = Json_Get("purification.singlet.reduce.conserveEnergyQ", .FALSE.)
+    Purification_usesH2Q = conserveEnergyQ
 
     Purification_PurifyTwoRdmState => PurifyTwoRdmState
 
@@ -47,7 +48,8 @@ contains
   !>
   !> @param[inout] twoRdmState  Packed 2-RDM (Singlet layout: α-β block).
   !> @param[in]    h2           Two-body Hamiltonian for optional energy conservation
-  !>                            ((up,down) block or full spin-orbital tensor).
+  !>                            (full spin-orbital tensor, see M_Purification;
+  !>                            the (up,down) block alone is accepted as well).
   subroutine PurifyTwoRdmState(twoRdmState, h2)
     use M_TwoRdm_Fermionic_Singlet
     use M_Utils_RdmHole

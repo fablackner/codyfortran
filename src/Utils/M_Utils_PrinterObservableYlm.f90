@@ -12,6 +12,9 @@ module M_Utils_PrinterObservableYlm
 
   implicit none
 
+  private
+  public :: PrinterObservableYlm_DumpDipole, PrinterObservableYlm_DumpDipoleAcceleration
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -26,7 +26,7 @@ src/Propagator/
 │   └── S_Propagator_Single.f90       # Delegates to IntegratorList(1)
 ├── SplitStep/
 │   ├── M_Propagator_SplitStep.f90    # Split-operator framework interface
-│   ├── S_Propagator_SplitStep.f90    # Dispatch to order variants
+│   ├── S_Propagator_SplitStep.f90    # Order dispatch, exact-part composition (IntegrateLin)
 │   ├── Order2/
 │   │   ├── M_Propagator_SplitStep_Order2.f90  # 2nd-order Strang splitting
 │   │   └── S_Propagator_SplitStep_Order2.f90
@@ -118,10 +118,28 @@ Symmetric Strang splitting: A(½Δt) · B(Δt) · A(½Δt)
 
 **Requires 2 integrators:** IntegratorList(1) for Â, IntegratorList(2) for B̂.
 
+### Split-Step (4th Order)
+
+Yoshida composition with 7 stages and O(Δt⁴) global error:
+
+```json
+{
+  "propagator": {
+    "splitStep": {
+      "order4": { }
+    }
+  }
+}
+```
+
+### Split-Step: exactly propagated linear part
+
 Every Â step goes through `Propagator_SplitStep_IntegrateLin` (both orders):
 if the method propagates part of Â exactly (`Method_PropagateExactPart`
-associated, e.g. `method.mb.orbBased.exactFieldFreeQ`), the step is
-exact(Δt/2) · IntegratorList(1)(Δt) · exact(Δt/2); otherwise it is
+associated, e.g. `method.mb.orbBased.exactFieldFreeQ`), the step is a
+composition of exact and IntegratorList(1) substeps selected by
+`exactPartScheme`; with the default `strang` scheme it is
+exact(Δt/2) · IntegratorList(1)(Δt) · exact(Δt/2). Otherwise it is
 IntegratorList(1) alone.
 
 `"exactPartScheme"` in `propagator.splitStep` selects the composition of the
@@ -137,15 +155,12 @@ The exact substeps carry the time; every integrator substep is centred on the
 time reached, so its midpoint evaluation of a time-dependent part (e.g. the
 vector potential) stays consistent with the symmetric composition.
 
-### Split-Step (4th Order)
-
-Yoshida composition with 7 stages and O(Δt⁴) global error:
-
 ```json
 {
   "propagator": {
     "splitStep": {
-      "order4": { }
+      "order2": { },
+      "exactPartScheme": "blanesMoan6"
     }
   }
 }

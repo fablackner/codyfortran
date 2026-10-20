@@ -187,7 +187,8 @@ src/Grid/
 
 **m truncation.** Orbitals store the channels 0 ≤ l ≤ lmax, |m| ≤ min(l, mmax),
 l-major with m ascending and radial points innermost
-(`Grid_nPoints = nRadial · Grid_Ylm_NChannels(lmax, mmax)`). Lowering `mmax`
+(`Grid_nPoints = nRadial · Grid_Ylm_NChannels(lmax, mmax)`; the channel
+layout and count delegate to `M_Utils_SphericalHarmonics`). Lowering `mmax`
 is useful when the dynamics conserves the orbital m quantum numbers, e.g. a
 linearly z-polarized laser acting on an atom whose initial orbitals have
 |m| ≤ mmax. Potential-like fields carry their own caps, just like their own
@@ -202,6 +203,19 @@ All default to the orbital layout (`Grid_Ylm_lmax`, `Grid_Ylm_mmax`); pass only
 the caps of non-orbital operands. The accessors do not range-check: callers
 must request |m| ≤ min(l, cap), which is guaranteed by validating inputs at
 fabrication (e.g. OrbsInit checks every |m| ≤ mmax).
+
+**Axially symmetric node representation (m = 0).** The tables are built in
+`Grid_Ylm` Setup (`SetupQuadratureM0`) and are used by `SpatialProductM0` and by
+Method's `ApplyCorrelationOpYlmM0` (`S_Method_Mb_OrbBased.f90`); see also the
+Ylm spatial product bullet under Performance Notes.
+
+| Name | Kind | Contract |
+|------|------|----------|
+| `Grid_Ylm_ToNodesM0(fNodes, f, lmax)` | subroutine | fNodes(r, q) = Σ_l f_l(r) Y_l0(x_q); requires lmax ≤ `Grid_Ylm_lmaxNodesM0` |
+| `Grid_Ylm_FromNodesM0(f, fNodes, lmax, withWeightsQ_)` | subroutine | Projection onto Y_l0, l ≤ lmax; exact for angular degree ≤ 2 nNodesM0 − 1 − lmax; `withWeightsQ_` multiplies the output by `Grid_Ylm_radialMetricWeights` (default `.false.`) |
+| `Grid_Ylm_nNodesM0` | integer | 2 lmax + 3 Gauss–Legendre nodes in cos θ |
+| `Grid_Ylm_lmaxNodesM0` | integer | 2 lmax + 2, largest tabulated l |
+| `Grid_Ylm_nodeWeightsM0` | real(:) | 2π w_q, Σ_q = 4π |
 
 ### Prolate Grid (Homonuclear Diatomic Molecules)
 
@@ -441,7 +455,7 @@ call Grid_ProjectOnSubspace(dOrbs, Orbs_orbs)
 
 1. **Forgetting to call Grid_Setup**: Coordinate/weight arrays remain unallocated.
 2. **Metric mismatch**: Using raw `dot_product` instead of `Grid_InnerProduct` gives wrong norms on non-uniform grids.
-3. **Ylm indexing confusion**: The flattened order is (l=0,m=0), (l=1,m=−1), (l=1,m=0), (l=1,m=+1), … — not sorted by m first.
+3. **Ylm indexing confusion**: The flattened order is (l=0,m=0), (l=1,m=−1), (l=1,m=0), (l=1,m=+1), … — not sorted by m first. The channel order is `SphericalHarmonics_ChannelIndex` (`M_Utils_SphericalHarmonics`).
 4. **Lattice periodicity**: Operators like `SysKinetic` must respect the `PeriodicQ` flags; mismatches cause edge artifacts.
 5. **Projection drift**: `Grid_ProjectOnSubspace` is sensitive to accumulated errors; consider periodic re-orthonormalization during long propagations.
 
@@ -460,6 +474,7 @@ call Grid_ProjectOnSubspace(dOrbs, Orbs_orbs)
   A spherically symmetric first factor (`lMaxConjg_ = 0`, e.g. a central external
   potential) takes precedence: Y₀₀ Y_lm = Y_lm/√(4π), so the product is an exact
   radial scaling of every channel of the second factor (O(N), no transforms).
+  All three paths share one metric-weight step (`withWeightsQ_`).
 - **Gaunt table** (`M_Utils_SphericalHarmonics`): SysInteraction and SysPotential
   tabulate only |m| ≤ max(grid mmax, operator mmax) in a compact (l, m) index;
   other m fall back to the direct Wigner-3j evaluation. With `mmax = 0` and

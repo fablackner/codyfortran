@@ -100,7 +100,7 @@ contains
     logical, intent(in) :: imagTimeQ
 
     integer(I32) :: nRad, lmax, l, nCol, nColMax
-    integer(I64) :: blockSize, offsetU, offsetX
+    integer(I64) :: blockSize
     real(R64), contiguous, pointer :: blocks(:, :, :)
 
     nRad = Grid_Ylm_nRadial
@@ -126,15 +126,7 @@ contains
     end do
     !$omp end parallel do
 
-    call CublasLib_CopyToDevice(deviceX, hostBlocks, 0_I64)
-    do l = 0, lmax
-      nCol = NColumns(l, size(orbs, 2))
-      offsetU = int(nRad, kind=I64) * nRad * l
-      offsetX = blockSize * l
-      call CublasLib_Dgemm('T', 'N', nRad, 2 * nCol, nRad, 1.0_R64, deviceEvecs, offsetU, nRad, &
-                           deviceX, offsetX, nRad, 0.0_R64, deviceY, offsetX, nRad)
-    end do
-    call CublasLib_CopyToHost(hostBlocks, deviceY, 0_I64)
+    call TransformBlocksGpu('T', deviceX, deviceY, size(orbs, 2))
 
     !$omp parallel do default(shared) schedule(dynamic) private(l, nCol)
     do l = 0, lmax
@@ -143,15 +135,7 @@ contains
     end do
     !$omp end parallel do
 
-    call CublasLib_CopyToDevice(deviceY, hostBlocks, 0_I64)
-    do l = 0, lmax
-      nCol = NColumns(l, size(orbs, 2))
-      offsetU = int(nRad, kind=I64) * nRad * l
-      offsetX = blockSize * l
-      call CublasLib_Dgemm('N', 'N', nRad, 2 * nCol, nRad, 1.0_R64, deviceEvecs, offsetU, nRad, &
-                           deviceY, offsetX, nRad, 0.0_R64, deviceX, offsetX, nRad)
-    end do
-    call CublasLib_CopyToHost(hostBlocks, deviceX, 0_I64)
+    call TransformBlocksGpu('N', deviceY, deviceX, size(orbs, 2))
 
     !$omp parallel do default(shared) schedule(dynamic) private(l, nCol)
     do l = 0, lmax
@@ -159,6 +143,38 @@ contains
       call ScatterBlock(orbs, blocks(:, 1:2 * nCol, l), l)
     end do
     !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> One cuBLAS transformation of all blocks: uploads hostBlocks to deviceIn,
+  !> computes op(U_l) x_l per l into deviceOut, and downloads deviceOut to
+  !> hostBlocks.
+  subroutine TransformBlocksGpu(transA, deviceIn, deviceOut, nOS)
+    use M_Utils_CublasLib
+    use M_Grid_Ylm
+
+    character(len=1), intent(in) :: transA
+    type(c_ptr), intent(in) :: deviceIn
+    type(c_ptr), intent(in) :: deviceOut
+    integer(I32), intent(in) :: nOS
+
+    integer(I32) :: nRad, lmax, l, nCol
+    integer(I64) :: blockSize, offsetU, offsetX
+
+    nRad = Grid_Ylm_nRadial
+    lmax = Grid_Ylm_lmax
+    blockSize = int(nRad, kind=I64) * 2 * NColumns(lmax, nOS)
+
+    call CublasLib_CopyToDevice(deviceIn, hostBlocks, 0_I64)
+    do l = 0, lmax
+      nCol = NColumns(l, nOS)
+      offsetU = int(nRad, kind=I64) * nRad * l
+      offsetX = blockSize * l
+      call CublasLib_Dgemm(transA, 'N', nRad, 2 * nCol, nRad, 1.0_R64, deviceEvecs, offsetU, nRad, &
+                           deviceIn, offsetX, nRad, 0.0_R64, deviceOut, offsetX, nRad)
+    end do
+    call CublasLib_CopyToHost(hostBlocks, deviceOut, 0_I64)
 
   end subroutine
 
@@ -285,10 +301,10 @@ contains
 
     real(R64), parameter :: tolerance = 1.0e-10_R64
 
-    integer(I32) :: nRad, nCh, nG, lmax, mmax, iCh, i, l, m
+    integer(I32) :: nRad, nG, lmax, mmax, i, l, m
     logical :: potentialQ
     real(R64) :: hScale, devM, devImag, devSym
-    complex(R64), allocatable :: probe(:), hProbe(:), tmp(:), hLm(:), externalPotential(:)
+    complex(R64), allocatable :: probe(:), hProbe(:), tmp(:), hLm(:), unitRad(:), externalPotential(:)
     real(R64), allocatable :: hs(:, :), evals(:), evecs(:, :)
 
     call Say_Setup("method.mb.orbBased.exactFieldFree")
@@ -320,12 +336,11 @@ contains
     nG = Grid_nPoints
     lmax = Grid_Ylm_lmax
     mmax = Grid_Ylm_mmax
-    nCh = Grid_Ylm_NChannels(lmax, mmax)
 
     allocate (sqrtWeights(nRad))
     sqrtWeights(:) = sqrt(Grid_Ylm_radialWeights(:))
 
-    allocate (probe(nG), hProbe(nG), tmp(nG), hLm(nRad))
+    allocate (probe(nG), hProbe(nG), tmp(nG), hLm(nRad), unitRad(nRad))
     allocate (blockEvecs(nRad, nRad, 0:lmax), blockEvals(nRad, 0:lmax))
 
     if (potentialQ) call SysPotential_FillExternalPotential(externalPotential, 0.0_R64)
@@ -335,8 +350,12 @@ contains
 
     do i = 1, nRad
       probe(:) = (0.0_R64, 0.0_R64)
-      do iCh = 1, nCh
-        probe((iCh - 1) * nRad + i) = (1.0_R64, 0.0_R64)
+      unitRad(:) = (0.0_R64, 0.0_R64)
+      unitRad(i) = (1.0_R64, 0.0_R64)
+      do l = 0, lmax
+        do m = -min(l, mmax), min(l, mmax)
+          call Grid_Ylm_SetLmComponent(probe, l, m, unitRad)
+        end do
       end do
 
       hProbe(:) = (0.0_R64, 0.0_R64)

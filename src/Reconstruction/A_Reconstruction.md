@@ -33,12 +33,12 @@ M_Reconstruction (root interface)
 │
 ├── Singlet/           ← spin-singlet (S=0) implementations
 │   ├── Valdemoro/     ← Valdemoro for α-β blocks
-│   ├── Ny/            ← Nakatsuji-Yasuda with N-corrections
+│   ├── Ny/            ← Nakatsuji-Yasuda (cumulant products via R = 2 P_occ - 1)
 │   └── NnCholesky/    ← neural-network via Cholesky features
 │
 └── SingletTr0/        ← trace-free singlet state representation
     ├── Valdemoro/     ← Valdemoro on trace-free 2-RDM
-    ├── Ny/            ← Nakatsuji-Yasuda with N-corrections
+    ├── Ny/            ← Nakatsuji-Yasuda (cumulant products via R = 2 P_occ - 1)
     ├── MlpFullCop/    ← neural-network on packed features
     ├── CnnFullCop/    ← convolutional NN on 4D tensors
     └── CnnCorrelCop/  ← CNN correction to Valdemoro collision operator

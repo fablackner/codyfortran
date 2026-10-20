@@ -5,10 +5,16 @@
 !>
 !> The initial state (orbXX_YY.in, coeffs.in) is the imaginary-time MCTDHF
 !> ground state on the same grid (relax/P_ImagTimeMctdhf). Split-step (Strang)
-!> propagation: the stiff linear one-body part (kinetic + centrifugal +
-!> Coulomb + A.p) by the Short Iterative Lanczos in the FEDVR metric, the
-!> interaction part by RK4. A radial cos^(1/order) mask absorbs outgoing
-!> flux after every time step.
+!> propagation: the stiff linear one-body part by integrator 1, the Short
+!> Iterative Lanczos in the FEDVR metric; the interaction part by RK4. With
+!> method.mb.orbBased.exactFieldFreeQ (the make_inputs.py default) the
+!> field-free h0 (kinetic + centrifugal + Coulomb) is propagated exactly
+!> (Method_PropagateExactPart) and composed with the SIL step according to
+!> propagator.splitStep.exactPartScheme (make_inputs.py sets blanesMoan6; the
+!> code default is strang), so SIL only
+!> carries the A.p gauge coupling; otherwise SIL carries the whole linear
+!> part. A radial cos^(1/order) mask absorbs outgoing flux after every time
+!> step.
 !>
 !> Output (one line per program.outputStep):
 !>   observables.dat : time, E(t), A(t), <z>, dipole acceleration
@@ -19,14 +25,10 @@ program P_LaserMctdhf
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
-  use M_Utils_PrinterObservableYlm
-  use M_Utils_RdmDiagonalize
   use M_Grid
-  use M_Grid_Ylm
   use M_SysKinetic
   use M_SysPotential
   use M_SysGauge
-  use M_SysGauge_Ylm_Velocity
   use M_SysInteraction
   use M_Orbs
   use M_OrbsInit
@@ -101,7 +103,7 @@ program P_LaserMctdhf
   time = startTime
   timeStep = outputStep / nTimeSteps
 
-  call WriteObservables(time, .true.)
+  call WriteLaserObservables(time, charge, Method_GetEnergy(time), .true.)
 
   do while (time < endTime - 0.5_R64 * timeStep)
 
@@ -111,7 +113,7 @@ program P_LaserMctdhf
       call Absorber_ApplyAbsorber(Orbs_orbs)
     end do
 
-    call WriteObservables(time, .false.)
+    call WriteLaserObservables(time, charge, Method_GetEnergy(time), .false.)
 
   end do
 
@@ -127,17 +129,6 @@ program P_LaserMctdhf
   !==========================================
 
 contains
-
-  subroutine WriteObservables(t, newFilesQ)
-    real(R64), intent(in) :: t
-    logical, intent(in) :: newFilesQ
-
-    complex(R64), allocatable :: rdm1(:, :)
-
-    call Method_Mb_OrbBased_FillRdm1(rdm1, Method_state)
-    call WriteLaserObservables(rdm1, t, charge, Method_GetEnergy(t), newFilesQ)
-
-  end subroutine
 
   include '../common/BeCommon.inc'
   include '../common/BeObservables.inc'

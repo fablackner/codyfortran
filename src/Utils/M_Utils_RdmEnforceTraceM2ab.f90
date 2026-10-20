@@ -11,9 +11,11 @@ module M_Utils_RdmEnforceTraceM2ab
 
   implicit none
 
+  private
+  public :: RdmEnforceTraceM2ab_Apply
+
   ! Expansion coefficients for the unitarily invariant decomposition:
-  real(R64), allocatable :: pa(:, :)
-  real(R64), allocatable :: pb(:, :)
+  real(R64) :: pa(2, 2), pb(4, 2)
   !> nDim the coefficients were computed for (-1: not yet computed)
   integer(I32) :: setupDim = -1
 
@@ -91,42 +93,42 @@ contains
           do i1 = 1, nDim
 
             ! Perm 1: delta(i1, j1) * delta(i2, j2)
-            if (i1 == j1 .and. i2 == j2) then
+            if (i1 .eq. j1 .and. i2 .eq. j2) then
               m2ab(i1, i2, j1, j2) = m2ab(i1, i2, j1, j2) + &
                                      pa(1, 1) * twofoldTraces(1) + &
                                      pa(1, 2) * twofoldTraces(2)
             end if
 
             ! Perm 2: delta(i1, j2) * delta(i2, j1)
-            if (i1 == j2 .and. i2 == j1) then
+            if (i1 .eq. j2 .and. i2 .eq. j1) then
               m2ab(i1, i2, j1, j2) = m2ab(i1, i2, j1, j2) + &
                                      pa(2, 1) * twofoldTraces(1) + &
                                      pa(2, 2) * twofoldTraces(2)
             end if
 
             ! Perm 1: delta(i1, j1)
-            if (i1 == j1) then
+            if (i1 .eq. j1) then
               m2ab(i1, i2, j1, j2) = m2ab(i1, i2, j1, j2) + &
                                      pb(1, 1) * onefoldTraces(i2, j2, 1) + &
                                      pb(1, 2) * onefoldTraces(i2, j2, 2)
             end if
 
             ! Perm 2: delta(i1, j2)
-            if (i1 == j2) then
+            if (i1 .eq. j2) then
               m2ab(i1, i2, j1, j2) = m2ab(i1, i2, j1, j2) + &
                                      pb(2, 1) * onefoldTraces(i2, j1, 1) + &
                                      pb(2, 2) * onefoldTraces(i2, j1, 2)
             end if
 
             ! Perm 3: delta(i2, j1)
-            if (i2 == j1) then
+            if (i2 .eq. j1) then
               m2ab(i1, i2, j1, j2) = m2ab(i1, i2, j1, j2) + &
                                      pb(3, 1) * onefoldTraces(i1, j2, 1) + &
                                      pb(3, 2) * onefoldTraces(i1, j2, 2)
             end if
 
             ! Perm 4: delta(i2, j2)
-            if (i2 == j2) then
+            if (i2 .eq. j2) then
               m2ab(i1, i2, j1, j2) = m2ab(i1, i2, j1, j2) + &
                                      pb(4, 1) * onefoldTraces(i1, j1, 1) + &
                                      pb(4, 2) * onefoldTraces(i1, j1, 2)
@@ -149,11 +151,6 @@ contains
 
     ! the coefficients depend on nDim: recompute whenever nDim changes
     if (nDim .eq. setupDim) return
-
-    if (.not. allocated(pa)) then
-      allocate (pa(2, 2))
-      allocate (pb(4, 2))
-    end if
 
     if (nDim <= 2) Write (*, *) 'WARNING! WARNING! WARNING! WARNING! WARNING! '
     if (nDim <= 2) Write (*, *) 'Contraction consistent Reconstruction is not possible for M2 at N <= 2!'

@@ -24,6 +24,16 @@ module M_Method_Mb_OrbBased
     module subroutine Method_Mb_OrbBased_Fabricate
     end subroutine
 
+    !> Fills the spatial 1-RDM in the orbitals of the state: rdm1 itself for
+    !> unrestricted or single-species (nOrbsSum = nOrbsInState), the sum of
+    !> the two spin blocks for restricted (nOrbsSum = 2 nOrbsInState).
+    module subroutine Method_Mb_OrbBased_FillSpatialRdm1(rdm1Spatial, rdm1)
+      !> Output: spatial 1-RDM (nOrbsInState x nOrbsInState).
+      complex(R64), intent(out), allocatable :: rdm1Spatial(:, :)
+      !> One-body reduced density matrix (nOrbsSum x nOrbsSum).
+      complex(R64), intent(in), contiguous   :: rdm1(:, :)
+    end subroutine
+
     !> Fills the regularized inverse of the spatial 1-RDM,
     !> M = U n/(n^2 + eps) U^dagger (natural orbitals U, occupations n,
     !> eps = Method_Mb_OrbBased_regularizationParameter), spin-summed in the
@@ -34,6 +44,13 @@ module M_Method_Mb_OrbBased
       complex(R64), intent(out), allocatable :: invRdm1(:, :)
       !> One-body reduced density matrix (nOrbsSum x nOrbsSum).
       complex(R64), intent(in), contiguous   :: rdm1(:, :)
+    end subroutine
+
+    !> Writes the body-type blocks rdm2BtXX_YY.in of the 2-RDM (the format
+    !> read by twoRdmInit.load).
+    module subroutine Method_Mb_OrbBased_SaveRdm2Blocks(rdm2)
+      !> Two-body reduced density matrix (nOrbsSum^4).
+      complex(R64), intent(in), contiguous :: rdm2(:, :, :, :)
     end subroutine
 
     !> Propagates the orbitals exactly with the field-free one-body
@@ -304,7 +321,21 @@ module M_Method_Mb_OrbBased
   !> Pointer to the one-body operator propagated by the linear split-step
   !> integrator (`TimeDerivativeOrbsLin`): the full one-body Hamiltonian, or
   !> only the gauge coupling if `Method_Mb_OrbBased_exactFieldFreeQ`.
-  procedure(I_Method_Mb_OrbBased_ApplyGaugeOp), pointer :: Method_Mb_OrbBased_ApplyLinOp
+  procedure(I_Method_Mb_OrbBased_ApplyLinOp), pointer :: Method_Mb_OrbBased_ApplyLinOp
+  abstract interface
+    !> Applies the one-body operator propagated by the linear split-step
+    !> integrator (full one-body Hamiltonian, or only the gauge coupling if
+    !> `Method_Mb_OrbBased_exactFieldFreeQ`) and accumulates the result in `dOrbs`.
+    subroutine I_Method_Mb_OrbBased_ApplyLinOp(dOrbs, orbs, time)
+      import :: R64
+      !> In/out: where the result is added. Initialize before calling.
+      complex(R64), intent(inout), contiguous :: dOrbs(:, :)
+      !> Input: orbitals to which the operator is applied.
+      complex(R64), intent(in), contiguous :: orbs(:, :)
+      !> Current time.
+      real(R64), intent(in) :: time
+    end subroutine
+  end interface
 
   !> Pointer to the linear part of a split-step time derivative: the one-body
   !> operator acting on the orbitals only.

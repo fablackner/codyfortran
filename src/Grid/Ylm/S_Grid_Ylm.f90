@@ -12,9 +12,8 @@ submodule(M_Grid_Ylm) S_Grid_Ylm
 
   !> Gauss-Legendre tables for the m = 0 fast path of SpatialProduct (Setup):
   !> quadY(l, q) = Y_l0(x_q) and quadWY(q, l) = 2 pi w_q Y_l0(x_q) for
-  !> 0 <= l <= quadLcap on the quadNq Gauss-Legendre nodes x_q in cos(theta).
-  integer(I32) :: quadLcap = -1
-  integer(I32) :: quadNq = 0
+  !> 0 <= l <= Grid_Ylm_lmaxNodesM0 on the Grid_Ylm_nNodesM0 Gauss-Legendre
+  !> nodes x_q in cos(theta).
   real(R64), allocatable :: quadY(:, :)
   real(R64), allocatable :: quadWY(:, :)
 
@@ -140,30 +139,28 @@ contains
     real(R64), allocatable :: x(:), w(:), p(:, :)
     integer(I32) :: l
 
-    quadLcap = 2 * Grid_Ylm_lmax + 2
-    quadNq = 2 * Grid_Ylm_lmax + 3
+    Grid_Ylm_lmaxNodesM0 = 2 * Grid_Ylm_lmax + 2
+    Grid_Ylm_nNodesM0 = 2 * Grid_Ylm_lmax + 3
 
-    allocate (x(quadNq), w(quadNq), p(0:quadLcap, quadNq))
+    allocate (x(Grid_Ylm_nNodesM0), w(Grid_Ylm_nNodesM0), p(0:Grid_Ylm_lmaxNodesM0, Grid_Ylm_nNodesM0))
     call gauss_legendre(x, w)
 
     ! Legendre polynomials by the Bonnet recurrence
     p(0, :) = 1.0_R64
-    if (quadLcap >= 1) p(1, :) = x(:)
-    do l = 1, quadLcap - 1
+    if (Grid_Ylm_lmaxNodesM0 >= 1) p(1, :) = x(:)
+    do l = 1, Grid_Ylm_lmaxNodesM0 - 1
       p(l + 1, :) = ((2 * l + 1) * x(:) * p(l, :) - l * p(l - 1, :)) / (l + 1)
     end do
 
     if (allocated(quadY)) deallocate (quadY)
     if (allocated(quadWY)) deallocate (quadWY)
-    allocate (quadY(0:quadLcap, quadNq), quadWY(quadNq, 0:quadLcap))
+    allocate (quadY(0:Grid_Ylm_lmaxNodesM0, Grid_Ylm_nNodesM0), quadWY(Grid_Ylm_nNodesM0, 0:Grid_Ylm_lmaxNodesM0))
 
-    do l = 0, quadLcap
+    do l = 0, Grid_Ylm_lmaxNodesM0
       quadY(l, :) = sqrt((2 * l + 1) / (4.0_R64 * PI)) * p(l, :)
       quadWY(:, l) = 2.0_R64 * PI * w(:) * quadY(l, :)
     end do
 
-    Grid_Ylm_nNodesM0 = quadNq
-    Grid_Ylm_lmaxNodesM0 = quadLcap
     Grid_Ylm_nodeWeightsM0 = 2.0_R64 * PI * w(:)
 
   end subroutine
@@ -184,7 +181,6 @@ contains
   !> Computes the spatial product of two fields
   pure subroutine SpatialProduct(fOut, fConjg, f, conjgQ_, withWeightsQ_, &
                                  lMaxOut_, lMaxConjg_, lMax_, mMaxOut_, mMaxConjg_, mMax_)
-    use M_Utils_SphericalHarmonics
 
     complex(R64), intent(out), contiguous :: fOut(:)
     complex(R64), intent(in), contiguous  :: fConjg(:)
@@ -198,15 +194,9 @@ contains
     integer(I32), intent(in), optional    :: mMaxConjg_
     integer(I32), intent(in), optional    :: mMax_
 
-    integer(I32) :: l, m
-    integer(I32) :: l1, m1, l2, m2
     integer(I32) :: lMaxOut, lMaxConjg, lMax
     integer(I32) :: mMaxOut, mMaxConjg, mMax
-    integer(I32) :: nRad, iCh, i1, i2, iOut
-    real(R64)    :: gVal
     logical :: conjgQ, withWeightsQ
-    logical, allocatable :: nonZeroQ(:)
-    complex(R64), allocatable :: lmTmpConjg(:)
 
     if (.not. present(conjgQ_)) conjgQ = .false.
     if (present(conjgQ_)) conjgQ = conjgQ_
@@ -233,34 +223,73 @@ contains
     mMax = Grid_Ylm_mmax
     if (present(mMax_)) mMax = mMax_
 
+    if (lMaxConjg .eq. 0) then
+      ! Spherically symmetric first factor (e.g. a central potential): the Gaunt
+      ! sum collapses to Y_00 Y_lm = Y_lm / sqrt(4 pi), a radial scaling of f
+      call SpatialProductL0(fOut, fConjg, f, conjgQ, lMaxOut, lMax, mMaxOut, mMax)
+
+    else if (mMaxOut .eq. 0 .and. mMaxConjg .eq. 0 .and. mMax .eq. 0 .and. &
+             max(lMaxOut, lMaxConjg, lMax) <= Grid_Ylm_lmaxNodesM0 .and. &
+             lMaxOut + lMaxConjg + lMax < 2 * Grid_Ylm_nNodesM0) then
+      ! Axially symmetric operands: exact Gauss-Legendre quadrature in cos(theta)
+      ! (O(lmax^2) per radial point instead of the O(lmax^3) Gaunt sum)
+      call SpatialProductM0(fOut, fConjg, f, conjgQ, lMaxOut, lMaxConjg, lMax)
+
+    else
+      ! General case: Gaunt-coefficient expansion
+      call SpatialProductGaunt(fOut, fConjg, f, conjgQ, lMaxOut, lMaxConjg, lMax, mMaxOut, mMaxConjg, mMax)
+    end if
+
+    ! Apply metric weights if requested (complex on c-product back-ends)
+    if (withWeightsQ) call ApplyRadialMetricWeights(fOut, Grid_Ylm_NChannels(lMaxOut, mMaxOut))
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Multiplies the first nChannels radial blocks of f by the radial metric
+  !> weights (complex on c-product back-ends).
+  pure subroutine ApplyRadialMetricWeights(f, nChannels)
+    complex(R64), intent(inout), contiguous :: f(:)
+    integer(I32), intent(in)                :: nChannels
+
+    integer(I32) :: nRad, iCh, i
+
     nRad = Grid_Ylm_nRadial
 
-    ! Spherically symmetric first factor (e.g. a central potential): the Gaunt
-    ! sum collapses to Y_00 Y_lm = Y_lm / sqrt(4 pi), a radial scaling of f
-    if (lMaxConjg .eq. 0) then
-      call SpatialProductL0(fOut, fConjg, f, conjgQ, lMaxOut, lMax, mMaxOut, mMax)
-      if (withWeightsQ) then
-        do iCh = 1, Grid_Ylm_NChannels(lMaxOut, mMaxOut)
-          iOut = (iCh - 1) * nRad + 1
-          fOut(iOut:iOut + nRad - 1) = fOut(iOut:iOut + nRad - 1) * Grid_Ylm_radialMetricWeights(:)
-        end do
-      end if
-      return
-    end if
+    do iCh = 1, nChannels
+      i = (iCh - 1) * nRad + 1
+      f(i:i + nRad - 1) = f(i:i + nRad - 1) * Grid_Ylm_radialMetricWeights(:)
+    end do
 
-    ! Axially symmetric operands: exact Gauss-Legendre quadrature in cos(theta)
-    ! (O(lmax^2) per radial point instead of the O(lmax^3) Gaunt sum)
-    if (mMaxOut .eq. 0 .and. mMaxConjg .eq. 0 .and. mMax .eq. 0 .and. &
-        max(lMaxOut, lMaxConjg, lMax) <= quadLcap .and. lMaxOut + lMaxConjg + lMax < 2 * quadNq) then
-      call SpatialProductM0(fOut, fConjg, f, conjgQ, lMaxOut, lMaxConjg, lMax)
-      if (withWeightsQ) then
-        do iCh = 1, lMaxOut + 1
-          iOut = (iCh - 1) * nRad + 1
-          fOut(iOut:iOut + nRad - 1) = fOut(iOut:iOut + nRad - 1) * Grid_Ylm_radialMetricWeights(:)
-        end do
-      end if
-      return
-    end if
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Spatial product of general fields by the Gaunt-coefficient expansion.
+  !>
+  !> Every product Y_{l1,m1} Y_{l2,m2} is expanded into the Y_{l,m} of the
+  !> output layout; negligible channels of either factor are skipped.
+  pure subroutine SpatialProductGaunt(fOut, fConjg, f, conjgQ, lMaxOut, lMaxConjg, lMax, mMaxOut, mMaxConjg, mMax)
+    use M_Utils_SphericalHarmonics
+
+    complex(R64), intent(out), contiguous :: fOut(:)
+    complex(R64), intent(in), contiguous  :: fConjg(:)
+    complex(R64), intent(in), contiguous  :: f(:)
+    logical, intent(in)                   :: conjgQ
+    integer(I32), intent(in)              :: lMaxOut
+    integer(I32), intent(in)              :: lMaxConjg
+    integer(I32), intent(in)              :: lMax
+    integer(I32), intent(in)              :: mMaxOut
+    integer(I32), intent(in)              :: mMaxConjg
+    integer(I32), intent(in)              :: mMax
+
+    integer(I32) :: l, m
+    integer(I32) :: l1, m1, l2, m2
+    integer(I32) :: nRad, iCh, i1, i2, iOut
+    real(R64)    :: gVal
+    logical, allocatable :: nonZeroQ(:)
+    complex(R64), allocatable :: lmTmpConjg(:)
+
+    nRad = Grid_Ylm_nRadial
 
     allocate (lmTmpConjg(nRad))
 
@@ -331,14 +360,6 @@ contains
         end do
       end do
     end do
-
-    ! Apply metric weights if requested (complex on c-product back-ends)
-    if (withWeightsQ) then
-      do iCh = 1, Grid_Ylm_NChannels(lMaxOut, mMaxOut)
-        iOut = (iCh - 1) * nRad + 1
-        fOut(iOut:iOut + nRad - 1) = fOut(iOut:iOut + nRad - 1) * Grid_Ylm_radialMetricWeights(:)
-      end do
-    end if
 
     deallocate (lmTmpConjg, nonZeroQ)
   end subroutine
@@ -436,7 +457,7 @@ contains
 
     integer(I32) :: nRad
 
-    if (lmax > quadLcap) error stop "Grid_Ylm_ToNodesM0: lmax exceeds the quadrature tables"
+    if (lmax > Grid_Ylm_lmaxNodesM0) error stop "Grid_Ylm_ToNodesM0: lmax exceeds the quadrature tables"
 
     nRad = Grid_Ylm_nRadial
 
@@ -447,14 +468,19 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine Grid_Ylm_FromNodesM0(f, fNodes, lmax)
+  module subroutine Grid_Ylm_FromNodesM0(f, fNodes, lmax, withWeightsQ_)
     complex(R64), intent(out), contiguous :: f(:)
     complex(R64), intent(in), contiguous  :: fNodes(:, :)
     integer(I32), intent(in)              :: lmax
+    logical, intent(in), optional         :: withWeightsQ_
 
     integer(I32) :: nRad
+    logical :: withWeightsQ
 
-    if (lmax > quadLcap) error stop "Grid_Ylm_FromNodesM0: lmax exceeds the quadrature tables"
+    if (.not. present(withWeightsQ_)) withWeightsQ = .false.
+    if (present(withWeightsQ_)) withWeightsQ = withWeightsQ_
+
+    if (lmax > Grid_Ylm_lmaxNodesM0) error stop "Grid_Ylm_FromNodesM0: lmax exceeds the quadrature tables"
 
     nRad = Grid_Ylm_nRadial
 
@@ -463,35 +489,20 @@ contains
                                            matmul(aimag(fNodes), quadWY(:, 0:lmax)), kind=R64), &
                                      [nRad * (lmax + 1)])
 
+    ! Apply metric weights if requested (complex on c-product back-ends)
+    if (withWeightsQ) call ApplyRadialMetricWeights(f, lmax + 1)
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   pure module function Grid_Ylm_NChannels(lmax, mmax) result(res)
+    use M_Utils_SphericalHarmonics
 
     integer(I32), intent(in) :: lmax
     integer(I32), intent(in) :: mmax
     integer(I32) :: res
 
-    res = ChannelOffset(lmax + 1, mmax)
-
-  end function
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Number of channels preceding shell l in a layout with |m| <= min(l, mmax).
-  !>
-  !> Shells l' < l hold (2*min(l',mmax)+1) channels: l**2 while l <= mmax,
-  !> afterwards each further shell adds (2*mmax+1).
-  pure function ChannelOffset(l, mmax) result(res)
-
-    integer(I32), intent(in) :: l
-    integer(I32), intent(in) :: mmax
-    integer(I32) :: res
-
-    if (l <= mmax) then
-      res = l * l
-    else
-      res = mmax * mmax + (l - mmax) * (2 * mmax + 1)
-    end if
+    res = SphericalHarmonics_NChannels(lmax, mmax)
 
   end function
 
@@ -499,13 +510,14 @@ contains
   !> First flattened index of channel (l,m); channels are l-major with m
   !> running over -min(l,mmax)..min(l,mmax), each holding nRadial points.
   pure function BaseIndex(l, m, mmax) result(res)
+    use M_Utils_SphericalHarmonics
 
     integer(I32), intent(in) :: l
     integer(I32), intent(in) :: m
     integer(I32), intent(in) :: mmax
     integer(I32) :: res
 
-    res = 1 + (ChannelOffset(l, mmax) + m + min(l, mmax)) * Grid_Ylm_nRadial
+    res = 1 + (SphericalHarmonics_ChannelIndex(l, m, mmax) - 1) * Grid_Ylm_nRadial
 
   end function
 

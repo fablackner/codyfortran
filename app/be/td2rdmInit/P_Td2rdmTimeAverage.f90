@@ -25,12 +25,10 @@ program P_Td2rdmTimeAverage
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
-  use M_Utils_DataStorage
   use M_Utils_RdmDiagonalize
   use M_Utils_RdmHole
   use M_Utils_LapackLib
   use M_Grid
-  use M_Grid_Ylm
   use M_SysKinetic
   use M_SysPotential
   use M_SysInteraction
@@ -39,7 +37,6 @@ program P_Td2rdmTimeAverage
   use M_TwoRdm
   use M_TwoRdmInit
   use M_Method
-  use M_Method_Mb
   use M_Method_Mb_OrbBased
   use M_IntegratorList
   use M_Propagator
@@ -51,7 +48,7 @@ program P_Td2rdmTimeAverage
   real(R64)    :: time, averagingTime, outputStep, timeStep, energy, weight
   integer(I32) :: nTimeSteps, innerStep, io
   logical      :: purifyQ
-  complex(R64), allocatable :: orbs0(:, :), rdm2Average(:, :, :, :)
+  complex(R64), allocatable :: orbs0(:, :), rdm2Average(:, :, :, :), rdm2(:, :, :, :)
   type(T_IntegratorList_FabricateInput) :: IntegratorListInput(2)
 
   !==========================================
@@ -155,7 +152,8 @@ program P_Td2rdmTimeAverage
   !==========================================
 
   call Orbs_SaveOrbs(Orbs_orbs)
-  call SaveTwoRdmBlocks
+  call TwoRdm_FillRdm2FromTwoRdmState(rdm2, TwoRdm_twoRdmState)
+  call Method_Mb_OrbBased_SaveRdm2Blocks(rdm2)
 
   !==========================================
   call Say_Goodbye
@@ -280,28 +278,6 @@ contains
     write (io, '(F10.4, F24.16, *(E16.6E3))') t, energy, natOcc
     flush (io)
     write (*, '(A,F9.3,A,F22.14)') " t =", t, "  energy =", energy
-
-  end subroutine
-
-  !> Write the body-type blocks rdm2BtXX_YY.in of the current 2-RDM (the
-  !> format read by twoRdmInit.load and written by Coeffs_SaveTwoRdm).
-  subroutine SaveTwoRdmBlocks
-    complex(R64), allocatable :: rdm2(:, :, :, :), rdm2Bt(:, :, :, :)
-    character(len=256) :: filename
-    integer(I32) :: ibt1, ibt2
-
-    call TwoRdm_FillRdm2FromTwoRdmState(rdm2, TwoRdm_twoRdmState)
-
-    do ibt1 = 1, Method_Mb_nBodyTypes
-      do ibt2 = 1, Method_Mb_nBodyTypes
-        write (filename, '("rdm2Bt",I2.2,"_",I2.2,".in")') ibt1, ibt2
-        rdm2Bt = rdm2(Method_Mb_OrbBased_nOrbsStart(ibt1):Method_Mb_OrbBased_nOrbsEnd(ibt1), &
-                      Method_Mb_OrbBased_nOrbsStart(ibt2):Method_Mb_OrbBased_nOrbsEnd(ibt2), &
-                      Method_Mb_OrbBased_nOrbsStart(ibt1):Method_Mb_OrbBased_nOrbsEnd(ibt1), &
-                      Method_Mb_OrbBased_nOrbsStart(ibt2):Method_Mb_OrbBased_nOrbsEnd(ibt2))
-        call SaveData(rdm2Bt, trim(filename), storage_size(rdm2Bt))
-      end do
-    end do
 
   end subroutine
 

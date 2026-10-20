@@ -39,10 +39,13 @@ module M_Grid_Ylm
     !> Project a field given on the Gauss-Legendre nodes onto Y_l0, l <= lmax:
     !> f_l(r) = sum_q Grid_Ylm_nodeWeightsM0(q) Y_l0(x_q) fNodes(r, q). Exact for
     !> fNodes of total angular degree <= 2 Grid_Ylm_nNodesM0 - 1 - lmax.
-    module subroutine Grid_Ylm_FromNodesM0(f, fNodes, lmax)
+    !> withWeightsQ_: when true, multiplies every output channel l <= lmax by
+    !> Grid_Ylm_radialMetricWeights (as in Grid_Ylm_SpatialProduct); default .false.
+    module subroutine Grid_Ylm_FromNodesM0(f, fNodes, lmax, withWeightsQ_)
       complex(R64), intent(out), contiguous :: f(:)
       complex(R64), intent(in), contiguous  :: fNodes(:, :)
       integer(I32), intent(in)              :: lmax
+      logical, intent(in), optional         :: withWeightsQ_
     end subroutine
   end interface
 
@@ -70,9 +73,10 @@ module M_Grid_Ylm
 
   !> Gauss-Legendre representation of axially symmetric (m = 0) fields, set
   !> up with the grid: number of nodes in cos(theta), largest l covered by
-  !> the tables, and angular weights 2 pi w_q (sum_q weight = 4 pi).
-  integer(I32) :: Grid_Ylm_nNodesM0
-  integer(I32) :: Grid_Ylm_lmaxNodesM0
+  !> the tables, and angular weights 2 pi w_q (sum_q weight = 4 pi). The
+  !> tables cover 0 <= l <= Grid_Ylm_lmaxNodesM0.
+  integer(I32) :: Grid_Ylm_nNodesM0 = 0
+  integer(I32) :: Grid_Ylm_lmaxNodesM0 = -1
   real(R64), allocatable :: Grid_Ylm_nodeWeightsM0(:)
 
   !> Maximum radius value rmax of the radial grid.

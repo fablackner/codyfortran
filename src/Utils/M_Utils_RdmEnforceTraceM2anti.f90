@@ -8,9 +8,11 @@ module M_Utils_RdmEnforceTraceM2anti
 
   implicit none
 
+  private
+  public :: RdmEnforceTraceM2anti_Apply
+
   ! Expansion coefficients for the unitarily invariant decomposition:
-  real(R64), allocatable :: pa
-  real(R64), allocatable :: pb
+  real(R64) :: pa, pb
   !> nDim the coefficients were computed for (-1: not yet computed)
   integer(I32) :: setupDim = -1
 
@@ -81,18 +83,18 @@ contains
 
             ! Twofold trace terms (pa)
             ! delta(i1, j1) * delta(i2, j2) - delta(i1, j2) * delta(i2, j1)
-            if (i1 == j1 .and. i2 == j2) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) + pa * twofoldTraces
-            if (i1 == j2 .and. i2 == j1) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) - pa * twofoldTraces
+            if (i1 .eq. j1 .and. i2 .eq. j2) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) + pa * twofoldTraces
+            if (i1 .eq. j2 .and. i2 .eq. j1) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) - pa * twofoldTraces
 
             ! Onefold trace terms (pb)
             ! delta(i1, j1)
-            if (i1 == j1) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) + pb * onefoldTraces(i2, j2)
+            if (i1 .eq. j1) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) + pb * onefoldTraces(i2, j2)
             ! -delta(i1, j2)
-            if (i1 == j2) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) - pb * onefoldTraces(i2, j1)
+            if (i1 .eq. j2) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) - pb * onefoldTraces(i2, j1)
             ! -delta(i2, j1)
-            if (i2 == j1) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) - pb * onefoldTraces(i1, j2)
+            if (i2 .eq. j1) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) - pb * onefoldTraces(i1, j2)
             ! delta(i2, j2)
-            if (i2 == j2) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) + pb * onefoldTraces(i1, j1)
+            if (i2 .eq. j2) m2anti(i1, i2, j1, j2) = m2anti(i1, i2, j1, j2) + pb * onefoldTraces(i1, j1)
 
           end do
         end do
@@ -109,11 +111,6 @@ contains
 
     ! the coefficients depend on nDim: recompute whenever nDim changes
     if (nDim .eq. setupDim) return
-
-    if (.not. allocated(pa)) then
-      allocate (pa)
-      allocate (pb)
-    end if
 
     if (nDim <= 2) Write (*, *) 'WARNING! WARNING! WARNING! WARNING! WARNING! '
     if (nDim <= 2) Write (*, *) 'Contraction consistent Reconstruction is not possible for M2anti at N <= 2!'

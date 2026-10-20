@@ -111,8 +111,10 @@ module M_Method
   !> Pointer to the exact propagation of the part of the linear split-step
   !> generator that the method solves in closed form (e.g. the field-free
   !> one-body Hamiltonian); unassociated if the linear integrator propagates
-  !> the whole linear part. Split-step propagators wrap every linear step as
-  !> exact(dt/2) linear integrator(dt) exact(dt/2).
+  !> the whole linear part. Split-step propagators compose every linear step
+  !> from exact substeps and integrator-1 substeps
+  !> (propagator.splitStep.exactPartScheme; default Strang exact(dt/2)
+  !> integrator(dt) exact(dt/2), see A_Propagator.md).
   procedure(I_Method_PropagateExactPart), pointer :: Method_PropagateExactPart => null()
   abstract interface
     !> Propagates `state` from `t0` to `t1` with the exactly solvable part:

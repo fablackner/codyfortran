@@ -32,6 +32,7 @@ contains
     nSteps = Json_Get("purification.singletTr0.reduce.nSteps", 40)
     threshold = Json_Get("purification.singletTr0.reduce.threshold", -1e-5_R64)
     conserveEnergyQ = Json_Get("purification.singletTr0.reduce.conserveEnergyQ", .FALSE.)
+    Purification_usesH2Q = conserveEnergyQ
 
     Purification_PurifyTwoRdmState => PurifyTwoRdmState
 

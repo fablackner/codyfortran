@@ -129,6 +129,13 @@ w(r) = strength × exp(-dampening×r) / (√(r² + softening1²) + softening2)
 
 **JSON path:** `sysInteraction.ylm.coulomb`
 
+**Layout module data** (set in `SysInteraction_Ylm_Fabricate`):
+| Name | Meaning |
+|------|---------|
+| `SysInteraction_Ylm_lmax`, `SysInteraction_Ylm_mmax` | Caps of the source/potential expansion |
+| `SysInteraction_Ylm_nChannels` | Number of (l,m) channels, `Grid_Ylm_NChannels(lmax, mmax)` |
+| `SysInteraction_Ylm_nPoints` | Length of a source/potential array, `nChannels * Grid_Ylm_nRadial` |
+
 ---
 
 ## Workflow

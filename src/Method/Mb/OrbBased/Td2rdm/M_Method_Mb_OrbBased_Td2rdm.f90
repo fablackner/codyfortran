@@ -22,7 +22,14 @@ module M_Method_Mb_OrbBased_Td2rdm
 
   interface
     !> Binds TD-2RDM (dynamic orbitals) procedure pointers at runtime and sets up
-    !> state layout. Typically sets `Method_Setup` and `Method_TimeDerivative`.
+    !> state layout. Sets:
+    !> - Method_Setup, Method_TimeDerivative
+    !> - Method_Mb_OrbBased_FillRdm1, Method_Mb_OrbBased_FillRdm2
+    !> - Method_Mb_OrbBased_TimeDerivativeOrbsLin
+    !> - Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin
+    !> - Method_PropagateExactPart if method.mb.orbBased.exactFieldFreeQ
+    !> Reads method.mb.orbBased.td2rdm.nWeakOrbs (0 <= nWeakOrbs < min nOrbs);
+    !> exactFieldFreeQ together with nWeakOrbs > 0 is an error.
     module subroutine Method_Mb_OrbBased_Td2rdm_Fabricate
     end subroutine
 

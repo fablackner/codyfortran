@@ -5,7 +5,8 @@
 !> @brief Standard SCF implementation submodule.
 !>
 !> @details
-!> Implements the SCF iteration for general grids (non-Ylm). The algorithm:
+!> Implements the SCF iteration on any grid back-end (the Ne3d tests run it
+!> on Ylm grids; `ylmOpt` is the faster Ylm-specialized variant). The algorithm:
 !>
 !>   1. **Setup**: Allocate working arrays for potentials and temporaries
 !>   2. **Approach** (per iteration):
@@ -63,21 +64,25 @@ submodule(M_GroundSolver_Scf_StdImpl) S_GroundSolver_Scf_StdImpl
   !> Temporary for operator action results, dimension(Grid_nPoints)
   complex(R64), allocatable :: dOrbTmp(:)
 
-  !> Accepted Hartree (direct) potential on grid, dimension(potSize).
+  !> Accepted Hartree (direct) potential on grid, sized from
+  !> SysInteraction_FillInteractionPotential on first Approach.
   !> For mixTarget="potential" this carries the mixed potential across
   !> iterations; for mixTarget="orbitals" it is rebuilt every Approach.
   complex(R64), allocatable :: hartreePotentialMixed(:)
 
-  !> Raw Hartree potential built from the current orbitals, dimension(potSize)
+  !> Raw Hartree potential built from the current orbitals, sized from
+  !> SysInteraction_FillInteractionPotential on first Approach
   complex(R64), allocatable :: hartreePotentialRaw(:)
 
   !> External potential V̂_ext, dimension(Grid_nPoints) - recomputed each Approach
   complex(R64), allocatable :: externalPotential(:)
 
-  !> Temporary for exchange potential computation, dimension(potSize)
+  !> Temporary for exchange potential computation, sized by
+  !> SysInteraction_FillInteractionPotential
   complex(R64), allocatable :: interactionPotential(:)
 
-  !> Interaction source density ρ_ij(r) = φ_i*(r)·φ_j(r), dimension(potSize)
+  !> Interaction source density ρ_ij(r) = φ_i*(r)·φ_j(r), sized by
+  !> SysInteraction_FillInteractionSrc
   complex(R64), allocatable :: src(:)
 
   !> Gauge-aligned new orbitals for mixing, dimension(Grid_nPoints, nOrbsInState/2)
@@ -140,27 +145,21 @@ contains
   !> @brief Allocate working arrays for the standard SCF implementation.
   !>
   !> @details
-  !> Allocates potentials and temporaries based on the configured grid size.
-  !> For Ylm grids, the potential holds all (l,m) channels of the interaction
-  !> expansion × nRadial.
+  !> Allocates temporaries based on the configured grid size. Potential
+  !> buffers are sized lazily in Approach from the interaction layout returned
+  !> by SysInteraction (as in Mcscf StdImpl).
   subroutine Setup
     use M_Utils_Say
     use M_Grid
-    use M_Grid_Ylm
-    use M_SysInteraction_Ylm
     use M_GroundSolver
     use M_Orbs
 
-    integer(I32) :: potSize, nUp
+    integer(I32) :: nUp
 
     call Say_Setup("groundSolver.scf.stdImpl")
 
-    potSize = Grid_Ylm_NChannels(SysInteraction_Ylm_lmax, SysInteraction_Ylm_mmax) * Grid_Ylm_nRadial
-
     nUp = GroundSolver_NumberOfSpinUpOrbs()
 
-    allocate (hartreePotentialMixed(potSize))
-    allocate (hartreePotentialRaw(potSize))
     allocate (dOrbTmp(Grid_nPoints))
     allocate (orbsRaw(Grid_nPoints, nUp))
     allocate (orbsTmp(Grid_nPoints, nUp))
@@ -240,7 +239,6 @@ contains
   subroutine Approach(state, time)
     use M_Mixing
     use M_Grid
-    use M_Grid_Ylm
     use M_DiagonalizerList
     use M_GroundSolver
     use M_Orbs
@@ -265,11 +263,14 @@ contains
 
     ! Step 2: Build raw Hartree potential from occupied orbitals
     ! Factor 2 accounts for spin degeneracy (restricted: spin-up = spin-down)
-    hartreePotentialRaw = 0.0_R64
     do j = 1, nUp
       call SysInteraction_FillInteractionSrc(src, orbs(:, j), orbs(:, j))
       call SysInteraction_FillInteractionPotential(interactionPotential, 2.0_R64 * src, time)
-      hartreePotentialRaw = hartreePotentialRaw + interactionPotential
+      if (j .eq. 1) then
+        hartreePotentialRaw = interactionPotential
+      else
+        hartreePotentialRaw = hartreePotentialRaw + interactionPotential
+      end if
     end do
 
     if (mixTarget .eq. "potential") then

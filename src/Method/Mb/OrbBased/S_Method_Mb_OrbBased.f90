@@ -34,6 +34,8 @@ contains
     !   - method.mb.orbBased.regularizationParameter: Numerical stability (default 1e-10)
     !   - method.mb.orbBased.exactFieldFreeQ:       Exact field-free one-body
     !                                               propagation in split steps (default false)
+    !   - method.mb.orbBased.exactFieldFreeGpuQ:    cuBLAS variant of the exact
+    !                                               propagation (default false)
     !
     ! Binds default operator-application procedures, then branches to the
     ! selected method (TDCI, TDHX, MCTDHX, TD-2RDM, or TD-2RDM-StaticOrbs).
@@ -150,6 +152,32 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_FillSpatialRdm1(rdm1Spatial, rdm1)
+    use M_Orbs
+
+    complex(R64), intent(out), allocatable :: rdm1Spatial(:, :)
+    complex(R64), intent(in), contiguous   :: rdm1(:, :)
+
+    integer(I32) :: nO, nOS
+
+    nOS = Orbs_nOrbsInState
+    nO = Method_Mb_OrbBased_nOrbsSum
+
+    allocate (rdm1Spatial(nOS, nOS))
+
+    if (nO .eq. nOS) then
+      ! Unrestricted or single-species: direct copy
+      rdm1Spatial(:, :) = rdm1(1:nOS, 1:nOS)
+    else if (nO .eq. 2 * nOS) then
+      ! Restricted: sum over spin blocks
+      rdm1Spatial(:, :) = rdm1(1:nOS, 1:nOS) + rdm1(nOS + 1:, nOS + 1:)
+    else
+      error stop "invalid nO to nOS relation in Method_Mb_OrbBased_FillSpatialRdm1"
+    end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
     !---------------------------------------------------------------------------
     ! Regularized inverse of the spatial 1-RDM (spin-summed for restricted):
@@ -164,33 +192,22 @@ contains
 
     real(R64), allocatable :: natocc(:)
     complex(R64), allocatable :: natorb(:, :)
-    complex(R64), allocatable :: rdm1spatial(:, :)
+    complex(R64), allocatable :: rdm1Spatial(:, :)
 
-    integer(I32) :: nO, nOS
+    integer(I32) :: nOS
     integer(I32) :: j1, k1
     real(R64) :: reg
 
     nOS = Orbs_nOrbsInState
-    nO = Method_Mb_OrbBased_nOrbsSum
 
-    allocate (rdm1spatial(nOS, nOS))
+    call Method_Mb_OrbBased_FillSpatialRdm1(rdm1Spatial, rdm1)
     allocate (invRdm1(nOS, nOS))
-
-    if (nO .eq. nOS) then
-      ! Unrestricted or single-species: direct copy
-      rdm1spatial(:, :) = rdm1(1:nOS, 1:nOS)
-    else if (nO .eq. 2 * nOS) then
-      ! Restricted: sum over spin blocks
-      rdm1spatial(:, :) = rdm1(1:nOS, 1:nOS) + rdm1(nOS + 1:, nOS + 1:)
-    else
-      error stop "invalid nO to nOS relation in Method_Mb_OrbBased_FillInverseRdm1"
-    end if
 
     !------------------------------------
     ! Diagonalize 1-RDM → natural orbitals
     !------------------------------------
 
-    call RdmDiagonalize_Rdm1(natocc, natorb, rdm1spatial)
+    call RdmDiagonalize_Rdm1(natocc, natorb, rdm1Spatial)
 
     reg = Method_Mb_OrbBased_regularizationParameter
 
@@ -200,6 +217,34 @@ contains
     do j1 = 1, nOS
       do k1 = 1, nOS
         invRdm1(k1, j1) = sum(natorb(k1, :) * (natocc(:) / (natocc(:)**2 + reg)) * conjg(natorb(j1, :)))
+      end do
+    end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_SaveRdm2Blocks(rdm2)
+    use M_Utils_DataStorage
+    use M_Method_Mb
+
+    complex(R64), intent(in), contiguous :: rdm2(:, :, :, :)
+
+    complex(R64), allocatable :: rdm2Bt(:, :, :, :)
+    character(len=256) :: filename
+    integer(I32)      :: ibt1, ibt2
+
+    do ibt1 = 1, Method_Mb_nBodyTypes
+      do ibt2 = 1, Method_Mb_nBodyTypes
+
+        write (filename, '("rdm2Bt",I2.2,"_",I2.2,".in")') ibt1, ibt2
+
+        rdm2Bt = rdm2(Method_Mb_OrbBased_nOrbsStart(ibt1):Method_Mb_OrbBased_nOrbsEnd(ibt1), &
+                      Method_Mb_OrbBased_nOrbsStart(ibt2):Method_Mb_OrbBased_nOrbsEnd(ibt2), &
+                      Method_Mb_OrbBased_nOrbsStart(ibt1):Method_Mb_OrbBased_nOrbsEnd(ibt1), &
+                      Method_Mb_OrbBased_nOrbsStart(ibt2):Method_Mb_OrbBased_nOrbsEnd(ibt2))
+
+        call SaveData(rdm2Bt, trim(filename), storage_size(rdm2Bt))
+
       end do
     end do
 
@@ -881,7 +926,7 @@ contains
     real(R64), allocatable :: weightNodes(:, :)
 
     integer(I32) :: nO, nOS, nRad, nNodes, lmax, lmaxPot
-    integer(I32) :: i1, k2, l2, iCh
+    integer(I32) :: i1, k2, l2
 
     nOS = Orbs_nOrbsInState
     nO = Method_Mb_OrbBased_nOrbsSum
@@ -920,10 +965,7 @@ contains
 
         ! Source conjg(phi_l2) phi_k2 with radial weights, potential V_(l2,k2)
         srcNodes(:, :) = conjg(orbNodes(:, :, l2)) * orbNodes(:, :, k2)
-        call Grid_Ylm_FromNodesM0(src, srcNodes, lmaxPot)
-        do iCh = 1, lmaxPot + 1
-          src((iCh - 1) * nRad + 1:iCh * nRad) = src((iCh - 1) * nRad + 1:iCh * nRad) * Grid_Ylm_radialMetricWeights(:)
-        end do
+        call Grid_Ylm_FromNodesM0(src, srcNodes, lmaxPot, withWeightsQ_=.true.)
         call SysInteraction_FillInteractionPotential(pot, src, time, -1, -1)
         call Grid_Ylm_ToNodesM0(potNodes, pot, lmaxPot)
 

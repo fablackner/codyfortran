@@ -88,7 +88,10 @@ module M_Purification
   ! module data
   !=============================================================================
 
-  ! (No module-level data; all state is held by submodules.)
+  !> .true. when the bound `Purification_PurifyTwoRdmState` reads h2
+  !> (energy-conserving projection, `conserveEnergyQ` of the active backend);
+  !> callers must then pass an h2 of the current orbitals. Set by Fabricate.
+  logical :: Purification_usesH2Q = .false.
 
   !=============================================================================
   ! module procedures pointers
@@ -128,8 +131,14 @@ module M_Purification
     !>                            Singlet uses α-β block, SingletTr0 adds trace-free
     !>                            constraint). Modified in-place to restore positivity.
     !> @param[in]    h2           Two-body Hamiltonian tensor h²(p,q,r,s). Used only
-    !>                            when `conserveEnergyQ=.TRUE.` to project corrections
+    !>                            when `Purification_usesH2Q` (backend option
+    !>                            `conserveEnergyQ=.TRUE.`) to project corrections
     !>                            onto the energy-conserving subspace (orthogonal to h²).
+    !>                            Layout: the full spin-orbital tensor as in
+    !>                            Method_Mb_OrbBased_h2 (nOrbsSum^4, spin-up orbitals
+    !>                            first, then spin-down); backends extract the blocks
+    !>                            they need (Singlet/Reduce also accepts the (up,down)
+    !>                            block alone).
     subroutine I_Purification_PurifyTwoRdmState(twoRdmState, h2)
       import :: R64
       complex(R64), intent(inout), contiguous :: twoRdmState(:)

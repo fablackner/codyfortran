@@ -86,6 +86,7 @@ procedure pointers to concrete implementations. This enables:
 |------------------|---------|
 | `SysPotential_Ylm_FillExternalPotentialRadial` | Get V_{lm}(r) component |
 | `SysPotential_Ylm_lmax` | Angular expansion cutoff |
+| `SysPotential_Ylm_mmax` | Maximum \|m\| of the potential expansion; must be set by the model (Coulomb/CoulombLaser: 0); Fabricate refuses models with mmax > 0 when `grid.ylm.mmax < grid.ylm.lmax` |
 | `SysPotential_Ylm_mIndependentQ` | True if potential is azimuthally symmetric |
 
 ---

@@ -70,10 +70,21 @@ complex(R64), intent(inout), contiguous :: A2(:,:,:,:)
 | `M_Utils_RdmCollisionOp`        | Compute collision operator Tr₃[Ŵ, D³]                     |
 | `M_Utils_RdmCholeskyExtract`    | Cholesky decomposition of 2-RDM for ML features           |
 | `M_Utils_RdmSingletRelations`   | Singlet spin-symmetry relations between RDM blocks        |
-| `M_Utils_RdmEnforceTraceM2ab`   | Enforce trace constraints on α-β 2-RDM                    |
-| `M_Utils_RdmEnforceTraceM2sym`  | Enforce trace constraints on symmetric 2-RDM              |
-| `M_Utils_RdmEnforceTraceM2anti` | Enforce trace constraints on antisymmetric 2-RDM          |
-| `M_Utils_RdmEnforceTraceM3aab`  | Enforce trace constraints on 3-RDM (αα-β block)           |
+| `M_Utils_RdmEnforceTraceM2ab`   | Enforce trace constraints on α-β 2-RDM; coefficients cached per nDim and recomputed when nDim changes |
+| `M_Utils_RdmEnforceTraceM2sym`  | Enforce trace constraints on symmetric 2-RDM; coefficients cached per nDim and recomputed when nDim changes |
+| `M_Utils_RdmEnforceTraceM2anti` | Enforce trace constraints on antisymmetric 2-RDM; coefficients cached per nDim and recomputed when nDim changes |
+| `M_Utils_RdmEnforceTraceM3aab`  | Enforce trace constraints on 3-RDM (αα-β block); coefficients cached per nDim and recomputed when nDim changes |
+
+---
+
+## Observable Printers
+
+| Module | Public routines | Notes |
+|--------|-----------------|-------|
+| `M_Utils_PrinterObservable` | `PrinterObservable_DumpNorm`, `_DumpOrthonormality`, `_DumpOrbitalEnergyMatrix`, `_DumpEnergy` | Method-aware: uses `M_Method`/`M_Method_Mb_OrbBased` (Apply*Op, `Method_Mb_OrbBased_FillInverseRdm1` for the orbital energy matrix), so not a stateless utility |
+| `M_Utils_PrinterObservableLinear` | `PrinterObservableLinear_DumpDipole`, `_DumpPotentialFullExpansion` | Linear grids |
+| `M_Utils_PrinterObservableLattice` | `PrinterObservableLattice_DumpDensityCenter`, `_DumpDensityOnSite` | Lattice grids |
+| `M_Utils_PrinterObservableYlm` | `PrinterObservableYlm_DumpDipole` (optional `dipole_` out), `PrinterObservableYlm_DumpDipoleAcceleration` (optional `acceleration_` out) | Ylm grids; z = r√(4π/3)Y₁₀ applied as spatial product; acceleration form −Z⟨cosθ/r²⟩ |
 
 ---
 
@@ -88,6 +99,18 @@ exactly one implementation submodule: `S_Utils_CublasLib_Cuda` with
 `-DCODY_USE_CUDA=ON` (links `CUDA::cublas`, `CUDA::cudart`), otherwise
 `S_Utils_CublasLib_Stub` (no device; every call except `AvailableQ` stops).
 Used by the exact field-free propagation (`method.mb.orbBased.exactFieldFreeGpuQ`).
+
+---
+
+## Spherical Harmonics: `M_Utils_SphericalHarmonics`
+
+Gaunt coefficients (direct via GSL Wigner-3j, or from the table built by
+`SphericalHarmonics_EnsureGauntTable` and read by
+`SphericalHarmonics_GauntTabulated`). The module also owns the compact (l,m)
+channel layout, 0 ≤ l ≤ lmax, |m| ≤ min(l, mmax), l-major with m ascending:
+`SphericalHarmonics_ChannelOffset`, `SphericalHarmonics_ChannelIndex` and
+`SphericalHarmonics_NChannels`. Both the Gaunt table and the Grid_Ylm storage
+(`Grid_Ylm_NChannels`) use it.
 
 ---
 

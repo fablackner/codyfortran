@@ -193,7 +193,8 @@ contains
 !> Apply two-body Hamiltonian H2 and optionally compute 2-RDM.
 !>
 !> The two-body Hamiltonian is:
-!>   Ĥ₂ = ½ Σ_{pqrs} h²_{pqrs} a†_p a†_q a_s a_r
+!>   Ĥ₂ = Σ_{pqrs} h²_{pqrs} a†_p a†_q a_s a_r,  h²_{pqrs} = ½⟨pq|W|rs⟩
+!> (index pairs are translated by the packing helpers, see Index Convention)
 !>
 !> Two interaction types are handled:
 !> 1. **Intra-body** (same body type): uses `doubles` connectivity
@@ -335,11 +336,11 @@ contains
 !>
 !> The accumulator at `orbCode = (i-1)*nO + j` holds ⟨a†_i a_j⟩, which is
 !> rdm1(j,i) in the public convention rdm1(i,j) = ⟨a†_j a_i⟩.
-  subroutine FillRdm1FromRdm1Lin(rdm1_, rdm1Lin)
+  subroutine FillRdm1FromRdm1Lin(rdm1, rdm1Lin)
     use M_Method_Mb
     use M_Method_Mb_OrbBased
 
-    complex(R64), intent(out), contiguous  :: rdm1_(:, :)
+    complex(R64), intent(out), contiguous  :: rdm1(:, :)
     complex(R64), intent(in), contiguous   :: rdm1Lin(:)
 
     integer(I32) :: i1, j1
@@ -354,7 +355,7 @@ contains
         orbCode = (orbCode - 1) * nO + i1
         orbCode = (orbCode - 1) * nO + j1
 
-        rdm1_(j1, i1) = rdm1Lin(orbCode)
+        rdm1(j1, i1) = rdm1Lin(orbCode)
 
       end do
     end do
@@ -373,23 +374,22 @@ contains
 !> Inter-body terms (different body types) use antisymmetric convention via
 !> Klein transformation for consistent handling of distinguishable particles.
 !>
-!> The accumulators hold ⟨a†_i1 a†_i2 a_j2 a_j1⟩; the creator and annihilator
-!> index pairs are swapped at the end to return the public convention
-!> rdm2(i1,i2,j1,j2) = ⟨a†_j1 a†_j2 a_i2 a_i1⟩.
-  subroutine FillRdm2FromRdm2Lin(rdm2_, rdm2Lin)
+!> The accumulators hold ⟨a†_i1 a†_i2 a_j2 a_j1⟩; the expansion writes them
+!> directly with creator and annihilator index pairs swapped, i.e. in the public
+!> convention rdm2(i1,i2,j1,j2) = ⟨a†_j1 a†_j2 a_i2 a_i1⟩.
+  subroutine FillRdm2FromRdm2Lin(rdm2, rdm2Lin)
     use M_Method_Mb
     use M_Method_Mb_OrbBased
 
-    complex(R64), intent(out), contiguous  :: rdm2_(:, :, :, :)
+    complex(R64), intent(out), contiguous  :: rdm2(:, :, :, :)
     complex(R64), intent(in), contiguous   :: rdm2Lin(:)
 
     integer(I32) :: i1, i2, j1, j2, i1bt, i2bt, j1bt, j2bt
     integer(I32) :: nO, orbCode
-    complex(R64), allocatable :: rdm2Tmp(:, :, :, :)
 
     nO = Method_Mb_OrbBased_nOrbsSum
 
-    rdm2_(:, :, :, :) = 0.0_R64
+    rdm2(:, :, :, :) = 0.0_R64
 
     do j2 = 1, nO
       do j1 = 1, j2
@@ -416,20 +416,20 @@ contains
 
               if (Method_Mb_bodyStatistics(i1bt) .eq. 'f') then
                 ! Fermionic antisymmetry
-                rdm2_(i1, i2, j1, j2) = rdm2_(i1, i2, j1, j2) + rdm2Lin(orbCode)
-                rdm2_(i2, i1, j1, j2) = rdm2_(i2, i1, j1, j2) - rdm2Lin(orbCode)
-                rdm2_(i1, i2, j2, j1) = rdm2_(i1, i2, j2, j1) - rdm2Lin(orbCode)
-                rdm2_(i2, i1, j2, j1) = rdm2_(i2, i1, j2, j1) + rdm2Lin(orbCode)
+                rdm2(j1, j2, i1, i2) = rdm2(j1, j2, i1, i2) + rdm2Lin(orbCode)
+                rdm2(j1, j2, i2, i1) = rdm2(j1, j2, i2, i1) - rdm2Lin(orbCode)
+                rdm2(j2, j1, i1, i2) = rdm2(j2, j1, i1, i2) - rdm2Lin(orbCode)
+                rdm2(j2, j1, i2, i1) = rdm2(j2, j1, i2, i1) + rdm2Lin(orbCode)
 
               else if (Method_Mb_bodyStatistics(i1bt) .eq. 'b') then
                 ! Bosonic symmetry (with diagonal correction)
-                rdm2_(i1, i2, j1, j2) = rdm2_(i1, i2, j1, j2) + rdm2Lin(orbCode)
-                rdm2_(i2, i1, j1, j2) = rdm2_(i2, i1, j1, j2) + rdm2Lin(orbCode)
-                rdm2_(i1, i2, j2, j1) = rdm2_(i1, i2, j2, j1) + rdm2Lin(orbCode)
-                rdm2_(i2, i1, j2, j1) = rdm2_(i2, i1, j2, j1) + rdm2Lin(orbCode)
+                rdm2(j1, j2, i1, i2) = rdm2(j1, j2, i1, i2) + rdm2Lin(orbCode)
+                rdm2(j1, j2, i2, i1) = rdm2(j1, j2, i2, i1) + rdm2Lin(orbCode)
+                rdm2(j2, j1, i1, i2) = rdm2(j2, j1, i1, i2) + rdm2Lin(orbCode)
+                rdm2(j2, j1, i2, i1) = rdm2(j2, j1, i2, i1) + rdm2Lin(orbCode)
 
-                if (i1 .eq. i2) rdm2_(i1, i2, j1, j2) = rdm2_(i1, i2, j1, j2) / 2.0_R64
-                if (j1 .eq. j2) rdm2_(i1, i2, j1, j2) = rdm2_(i1, i2, j1, j2) / 2.0_R64
+                if (i1 .eq. i2) rdm2(j1, j2, i1, i2) = rdm2(j1, j2, i1, i2) / 2.0_R64
+                if (j1 .eq. j2) rdm2(j1, j2, i1, i2) = rdm2(j1, j2, i1, i2) / 2.0_R64
 
               else
                 error stop "Method_Mb_bodyStatistics not implemented"
@@ -437,25 +437,13 @@ contains
 
             else
               ! Different body types: use antisymmetric convention (Klein transform)
-              rdm2_(i1, i2, j1, j2) = rdm2_(i1, i2, j1, j2) + rdm2Lin(orbCode)
-              rdm2_(i2, i1, j1, j2) = rdm2_(i2, i1, j1, j2) - rdm2Lin(orbCode)
-              rdm2_(i1, i2, j2, j1) = rdm2_(i1, i2, j2, j1) - rdm2Lin(orbCode)
-              rdm2_(i2, i1, j2, j1) = rdm2_(i2, i1, j2, j1) + rdm2Lin(orbCode)
+              rdm2(j1, j2, i1, i2) = rdm2(j1, j2, i1, i2) + rdm2Lin(orbCode)
+              rdm2(j1, j2, i2, i1) = rdm2(j1, j2, i2, i1) - rdm2Lin(orbCode)
+              rdm2(j2, j1, i1, i2) = rdm2(j2, j1, i1, i2) - rdm2Lin(orbCode)
+              rdm2(j2, j1, i2, i1) = rdm2(j2, j1, i2, i1) + rdm2Lin(orbCode)
 
             end if
 
-          end do
-        end do
-      end do
-    end do
-
-    ! Swap creator and annihilator index pairs (public convention)
-    allocate (rdm2Tmp, source=rdm2_)
-    do j2 = 1, nO
-      do j1 = 1, nO
-        do i2 = 1, nO
-          do i1 = 1, nO
-            rdm2_(i1, i2, j1, j2) = rdm2Tmp(j1, j2, i1, i2)
           end do
         end do
       end do
@@ -469,12 +457,12 @@ contains
 !> Uses same encoding as `FillRdm1FromRdm1Lin`: orbCode = (i-1)*nO + j. The
 !> connection a†_i a_j of configuration iC couples to ⟨iC|Ĥ₁|jC⟩ through
 !> h1(j,i), so the transposed element is stored.
-  subroutine FillH1Lin(h1Lin, h1_)
+  subroutine FillH1Lin(h1Lin, h1)
     use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(out), contiguous  :: h1Lin(:)
-    complex(R64), intent(in), contiguous   :: h1_(:, :)
+    complex(R64), intent(in), contiguous   :: h1(:, :)
 
     integer(I32) :: i1, j1
     integer(I32) :: nO, orbCode
@@ -488,7 +476,7 @@ contains
         orbCode = (orbCode - 1) * nO + i1
         orbCode = (orbCode - 1) * nO + j1
 
-        h1Lin(orbCode) = h1_(j1, i1)
+        h1Lin(orbCode) = h1(j1, i1)
 
       end do
     end do
@@ -503,37 +491,24 @@ contains
 !> during H2 application returns the correctly weighted matrix element.
 !>
 !> Same body type with fermionic statistics uses antisymmetrized form:
-!>   h2Lin = h2(i1,i2,j1,j2) - h2(i1,i2,j2,j1) - h2(i2,i1,j1,j2) + h2(i2,i1,j2,j1)
+!>   h2Lin = h2(j1,j2,i1,i2) - h2(j2,j1,i1,i2) - h2(j1,j2,i2,i1) + h2(j2,j1,i2,i1)
 !>
 !> Same body type with bosonic statistics uses symmetrized form (with diagonal fix).
 !> Different body types use antisymmetric convention via Klein transformation.
 !>
 !> As for `FillH1Lin`, the connections act with the transposed index order, so
-!> the creator and annihilator index pairs of h2 are swapped before folding.
-  subroutine FillH2Lin(h2Lin, h2In)
+!> h2 is read with its creator and annihilator index pairs swapped.
+  subroutine FillH2Lin(h2Lin, h2)
     use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(out), contiguous  :: h2Lin(:)
-    complex(R64), intent(in), contiguous   :: h2In(:, :, :, :)
+    complex(R64), intent(in), contiguous   :: h2(:, :, :, :)
 
     integer(I32) :: i1, i2, j1, j2, i1bt, i2bt, j1bt, j2bt
     integer(I32) :: nO, orbCode
-    complex(R64), allocatable :: h2_(:, :, :, :)
 
     nO = Method_Mb_OrbBased_nOrbsSum
-
-    ! Swap creator and annihilator index pairs (internal convention)
-    allocate (h2_, mold=h2In)
-    do j2 = 1, nO
-      do j1 = 1, nO
-        do i2 = 1, nO
-          do i1 = 1, nO
-            h2_(i1, i2, j1, j2) = h2In(j1, j2, i1, i2)
-          end do
-        end do
-      end do
-    end do
 
     do j2 = 1, nO
       do j1 = 1, j2
@@ -559,13 +534,13 @@ contains
 
               if (Method_Mb_bodyStatistics(i1bt) .eq. 'f') then
                 ! Fermionic: antisymmetrize (vanishes on diagonal)
-                h2Lin(orbCode) = (h2_(i1, i2, j1, j2) - h2_(i1, i2, j2, j1) - h2_(i2, i1, j1, j2) + h2_(i2, i1, j2, j1))
+                h2Lin(orbCode) = (h2(j1, j2, i1, i2) - h2(j2, j1, i1, i2) - h2(j1, j2, i2, i1) + h2(j2, j1, i2, i1))
                 if (i1 .eq. i2) h2Lin(orbCode) = 0
                 if (j1 .eq. j2) h2Lin(orbCode) = 0
 
               else if (Method_Mb_bodyStatistics(i1bt) .eq. 'b') then
                 ! Bosonic: symmetrize (with diagonal correction)
-                h2Lin(orbCode) = (h2_(i1, i2, j1, j2) + h2_(i1, i2, j2, j1) + h2_(i2, i1, j1, j2) + h2_(i2, i1, j2, j1))
+                h2Lin(orbCode) = (h2(j1, j2, i1, i2) + h2(j2, j1, i1, i2) + h2(j1, j2, i2, i1) + h2(j2, j1, i2, i1))
 
                 if (i1 .eq. i2) h2Lin(orbCode) = h2Lin(orbCode) / 2
                 if (j1 .eq. j2) h2Lin(orbCode) = h2Lin(orbCode) / 2
@@ -576,7 +551,7 @@ contains
 
             else
               ! Different body types: antisymmetric convention
-              h2Lin(orbCode) = (h2_(i1, i2, j1, j2) - h2_(i1, i2, j2, j1) - h2_(i2, i1, j1, j2) + h2_(i2, i1, j2, j1))
+              h2Lin(orbCode) = (h2(j1, j2, i1, i2) - h2(j2, j1, i1, i2) - h2(j1, j2, i2, i1) + h2(j2, j1, i2, i1))
               if (i1 .eq. i2) h2Lin(orbCode) = 0
               if (j1 .eq. j2) h2Lin(orbCode) = 0
 

@@ -3,9 +3,12 @@
 !> propagation, as in Lackner et al., PRA 95, 033414 (2017).
 !>
 !> Imaginary-time Strang splitting exp(-h/2) exp(-W) exp(-h/2):
-!> - one-body part: every orbital is propagated with exp(-h dtau/2) by the
-!>   Short Iterative Lanczos in imaginary time at fixed CI coefficients, which
-!>   is the exact one-body evolution of the many-body state;
+!> - one-body part: every orbital is propagated with exp(-h dtau/2) at fixed
+!>   CI coefficients, which is the exact one-body evolution of the many-body
+!>   state. Without method.mb.orbBased.exactFieldFreeQ the Short Iterative
+!>   Lanczos does this in imaginary time; with it, exp(-h0 dtau/4) of the
+!>   field-free h0 is applied exactly on both sides of the SIL step, which
+!>   then only sees the vanishing gauge term (ImagTimeLin);
 !> - interaction part: classical RK4 of the MCTDHF non-linear derivative (CI
 !>   with h2, orbitals with the projected correlation term) in imaginary time.
 !> After each part the orbitals are Loewdin-orthonormalized with the
@@ -28,8 +31,8 @@ program P_ImagTimeMctdhf
   use M_Utils_Say
   use M_Utils_Json
   use M_Utils_Constants
+  use M_Utils_RdmDiagonalize
   use M_Grid
-  use M_Grid_Ylm
   use M_SysKinetic
   use M_SysPotential
   use M_SysInteraction
@@ -42,7 +45,6 @@ program P_ImagTimeMctdhf
   use M_Method_Mb_OrbBased
   use M_IntegratorList
   use M_IntegratorList_Sil
-  use M_Utils_RdmDiagonalize
 
   implicit none
 

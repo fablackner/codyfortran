@@ -42,6 +42,10 @@ contains
     if (SysInteraction_Ylm_mmax < 0) error stop "sysInteraction.ylm.mmax must be >= 0"
     SysInteraction_Ylm_mmax = min(SysInteraction_Ylm_mmax, SysInteraction_Ylm_lmax)
 
+    ! Size of the interaction layout (sources and potentials)
+    SysInteraction_Ylm_nChannels = Grid_Ylm_NChannels(SysInteraction_Ylm_lmax, SysInteraction_Ylm_mmax)
+    SysInteraction_Ylm_nPoints = SysInteraction_Ylm_nChannels * Grid_Ylm_nRadial
+
     ! Precompute Gaunt coefficients covering both SpatialProduct usages:
     ! source fill (l1,l2 <= lmax, l3 <= lmaxPot) and potential multiply
     ! (l1 <= lmaxPot, l2,l3 <= lmax)
@@ -102,14 +106,14 @@ contains
     nRad = Grid_Ylm_nRadial
     lmaxPot = SysInteraction_Ylm_lmax
     mmaxPot = SysInteraction_Ylm_mmax
-    potSize = Grid_Ylm_NChannels(lmaxPot, mmaxPot) * Grid_Ylm_nRadial
+    potSize = SysInteraction_Ylm_nPoints
 
     if (.not. allocated(interactionPotential)) allocate (interactionPotential(potSize))
     interactionPotential = 0.0_R64
 
     ! Flatten the (l,m) channels so the independent radial Poisson solves can
     ! run in parallel; each channel writes a disjoint slice of the potential
-    nCh = Grid_Ylm_NChannels(lmaxPot, mmaxPot)
+    nCh = SysInteraction_Ylm_nChannels
     allocate (lOfCh(nCh), mOfCh(nCh))
     iCh = 0
     do l = 0, lmaxPot
@@ -157,11 +161,7 @@ contains
     complex(R64), intent(in), contiguous :: orbConjg(:)
     complex(R64), intent(in), contiguous :: orb(:)
 
-    integer(I32) :: srcSize
-
-    srcSize = Grid_Ylm_NChannels(SysInteraction_Ylm_lmax, SysInteraction_Ylm_mmax) * Grid_Ylm_nRadial
-
-    if (.not. allocated(src)) allocate (src(srcSize))
+    if (.not. allocated(src)) allocate (src(SysInteraction_Ylm_nPoints))
 
     ! Under a c-product metric (rotated ECS contour) the source is the
     ! bilinear product phi_i(z) phi_j(z) without conjugation of the bra

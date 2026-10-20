@@ -12,6 +12,10 @@
 !>   exp(−iĤΔt) ≈ product of exp(−iÂ·aₖΔt) and exp(−iB̂·bₖΔt)
 !>
 !> Each operator (Â, B̂) is applied via a separate integrator in IntegratorList.
+!> Every Â step goes through Propagator_SplitStep_IntegrateLin, which composes
+!> it with Method_PropagateExactPart when the method binds one
+!> (propagator.splitStep.exactPartScheme), and otherwise calls IntegratorList(1)
+!> alone.
 submodule(M_Propagator_SplitStep) S_Propagator_SplitStep
 
   implicit none
@@ -36,6 +40,10 @@ contains
 !> Exactly one order key must be present:
 !>   - `"propagator.splitStep.order2"` → 2nd-order Strang splitting
 !>   - `"propagator.splitStep.order4"` → 4th-order Yoshida composition
+!>
+!> Optional: `"propagator.splitStep.exactPartScheme"` (strang | yoshida4 |
+!> blanesMoan6, default strang). It is validated always but used only if
+!> Method_PropagateExactPart is associated.
   module subroutine Propagator_SplitStep_Fabricate
     use M_Utils_Say
     use M_Utils_Json

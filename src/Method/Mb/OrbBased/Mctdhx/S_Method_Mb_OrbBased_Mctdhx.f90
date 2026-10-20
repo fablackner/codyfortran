@@ -152,6 +152,10 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Linear split-step part: the one-body operator on the orbitals only (the
+  !> coefficients are constant), dOrbs = -i L orbs without projection,
+  !> L = Method_Mb_OrbBased_ApplyLinOp (h, or only the gauge coupling if
+  !> exactFieldFreeQ).
   subroutine TimeDerivativeOrbsLin(dState, state, time)
     use M_Utils_Timer
     use M_Grid

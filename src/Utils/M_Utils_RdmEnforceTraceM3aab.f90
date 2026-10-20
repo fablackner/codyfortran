@@ -11,10 +11,11 @@ module M_Utils_RdmEnforceTraceM3aab
 
   implicit none
 
+  private
+  public :: RdmEnforceTraceM3aab_Apply
+
   ! Expansion coefficients for the unitarily invariant decomposition:
-  real(R64), allocatable :: pa(:, :)
-  real(R64), allocatable :: pb(:, :)
-  real(R64), allocatable :: pc(:, :)
+  real(R64) :: pa(6, 2), pb(18, 5), pc(36, 4)
   !> nDim the coefficients were computed for (-1: not yet computed)
   integer(I32) :: setupDim = -1
 
@@ -155,7 +156,7 @@ contains
                     do t3 = 1, nThreefoldTraces
                       do jp = 1, 6
                         ! delta(i1, j(perm(jp, 1))) * delta(i2, j(perm(jp, 2))) * delta(i3, j(perm(jp, 3)))
-                        if (i1 == j(perm(jp, 1)) .and. i2 == j(perm(jp, 2)) .and. i3 == j(perm(jp, 3))) then
+                        if (i1 .eq. j(perm(jp, 1)) .and. i2 .eq. j(perm(jp, 2)) .and. i3 .eq. j(perm(jp, 3))) then
                           m3aab(i1, i2, i3, j1, j2, j3) = m3aab(i1, i2, i3, j1, j2, j3) + &
                                                           pa(jp, t3) * &
                                                           threefoldTraces(t3)
@@ -171,7 +172,7 @@ contains
                             count = count + 1
 
                             ! delta(i(perm(ip, 1)), j(perm(jp, 1))) * delta(i(perm(ip, 2)), j(perm(jp, 2)))
-                            if (i(perm(ip, 1)) == j(perm(jp, 1)) .and. i(perm(ip, 2)) == j(perm(jp, 2))) then
+                            if (i(perm(ip, 1)) .eq. j(perm(jp, 1)) .and. i(perm(ip, 2)) .eq. j(perm(jp, 2))) then
                               m3aab(i1, i2, i3, j1, j2, j3) = m3aab(i1, i2, i3, j1, j2, j3) + &
                                                               pb(count, t2) * &
                                                               twofoldTraces(i(perm(ip, 3)), j(perm(jp, 3)), t2)
@@ -189,7 +190,7 @@ contains
                           count = count + 1
 
                           ! delta(i(perm(ip, 1)), j(perm(jp, 1)))
-                          if (i(perm(ip, 1)) == j(perm(jp, 1))) then
+                          if (i(perm(ip, 1)) .eq. j(perm(jp, 1))) then
                             m3aab(i1, i2, i3, j1, j2, j3) = m3aab(i1, i2, i3, j1, j2, j3) + &
                                                             pc(count, t1) * &
                                                             onefoldTraces(i(perm(ip, 2)), &
@@ -228,12 +229,6 @@ contains
 
     ! the coefficients depend on nDim: recompute whenever nDim changes
     if (nDim .eq. setupDim) return
-
-    if (.not. allocated(pa)) then
-      allocate (pa(6, 2))
-      allocate (pb(18, 5))
-      allocate (pc(36, 4))
-    end if
 
     ! The expansion coefficients below are singular for nDim <= 4
     if (nDim <= 4) error stop "RdmEnforceTraceM3aab: contraction consistency requires more than 4 orbitals"

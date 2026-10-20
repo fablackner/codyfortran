@@ -150,7 +150,9 @@ Provides orbital indexing, RDM storage, and operator-application interfaces:
 | `Method_Mb_OrbBased_ApplyInteractionOp`        | Ŵ · orbitals for index pair (i₂,j₂)        |
 | `Method_Mb_OrbBased_ApplyHartreeFockOp`        | Mean-field + exchange (Hartree–Fock)       |
 | `Method_Mb_OrbBased_ApplyCorrelationOp`        | Correlation term `(dOrbs, orbs, invRdm1, rdm2, time, h2_)` |
+| `Method_Mb_OrbBased_FillSpatialRdm1` (module procedure) | Spatial 1-RDM (spin-summed for restricted) |
 | `Method_Mb_OrbBased_FillInverseRdm1` (module procedure) | Regularized spatial inverse U n/(n²+ε) U† of the 1-RDM |
+| `Method_Mb_OrbBased_SaveRdm2Blocks` (module procedure) | Write body-type blocks `rdm2BtXX_YY.in` of a 2-RDM (read by `twoRdmInit.load`) |
 | `Method_Mb_OrbBased_ApplySingleBodyOp`         | Combined T̂ + V̂_ext                         |
 | `Method_Mb_OrbBased_TimeDerivativeOrbsLin`     | Linear (static-orbital) time derivative    |
 | `...TimeDerivativeCoeffsPlusOrbsNonLin`        | Non-linear part for MCTDHX-like schemes    |
@@ -190,9 +192,12 @@ linear step is split once more: the field-free h0 = T + V_ext is propagated
 exactly and the linear integrator only sees the gauge coupling
 (`Method_Mb_OrbBased_ApplyLinOp` binds the gauge operator instead of the full
 one-body operator). The methods bind `Method_PropagateExactPart`, and the
-split-step propagators compose every linear step as
-exp(−i h0 Δt/2) · integrator 1(Δt) · exp(−i h0 Δt/2) (local error O(Δt³), as
-the outer Strang splitting).
+split-step propagators compose every linear step from exact and integrator-1
+substeps (`propagator.splitStep.exactPartScheme`; the default `strang` is
+exp(−i h0 Δt/2) · integrator 1(Δt) · exp(−i h0 Δt/2), local error O(Δt³), as
+the outer Strang splitting). Only MCTDHX and TD-2RDM (without weak orbitals)
+bind `Method_PropagateExactPart`; for TDCI, TDHX and TD-2RDM-StaticOrbs the
+flag has no effect.
 
 `S_Method_Mb_OrbBased_FieldFree.f90` builds h0 on the first call: it applies
 the kinetic and potential operators to radial unit vectors placed in all
@@ -218,7 +223,7 @@ stay on the device, each call gathers all blocks on the host, sends them once,
 applies the phases on the host between the two transformations and returns
 them. Results agree with the CPU path to round-off.
 
-Requirements (checked at setup): Hermitian (non-ECS) Ylm grid, time- and
+Requirements (checked on the first exact step): Hermitian (non-ECS) Ylm grid, time- and
 body-type-independent kinetic and potential, central potential
 (`SysPotential_Ylm_lmax = 0`), no TD-2RDM weak orbitals. Memory: one real
 nRadial² matrix per l. T_Ne3d_09 (Strang) and T_Ne3d_10 (Blanes–Moan) check
@@ -275,7 +280,9 @@ reference).
 For Hermitian Ylm grids with `grid.ylm.mmax = 0` and a body-type-independent
 Ylm interaction, `Method_Mb_OrbBased_ApplyCorrelationOp` is bound to
 `ApplyCorrelationOpYlmM0`: orbitals, pair densities and pair potentials are
-evaluated on the Gauss–Legendre nodes in cos θ (`Grid_Ylm_ToNodesM0`), the
+evaluated on the Gauss–Legendre nodes in cos θ (`Grid_Ylm_ToNodesM0`; pair
+sources come back with radial weights via `Grid_Ylm_FromNodesM0(...,
+withWeightsQ_=.true.)`), the
 2-RDM-weighted orbital combinations are formed before multiplying with the
 potential, and every product is pointwise. The node count makes all angular
 integrals exact, so results equal the generic operator to round-off while the

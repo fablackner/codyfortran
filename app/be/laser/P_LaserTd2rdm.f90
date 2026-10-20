@@ -14,7 +14,7 @@
 !> (orbXX_YY.in, rdm2BtXX_YY.in) is the time-averaged MCTDHF
 !> ground state (td2rdmInit/P_Td2rdmTimeAverage, appendix C of the paper).
 !> Grid, pulse, absorber and propagation scheme are identical to
-!> P_LaserMctdhf.
+!> P_LaserMctdhf (exactFieldFreeQ is unavailable with td2rdm.nWeakOrbs > 0).
 !>
 !> Output: observables.dat and natocc.dat as in P_LaserMctdhf.
 program P_LaserTd2rdm
@@ -22,11 +22,9 @@ program P_LaserTd2rdm
   use M_Utils_Say
   use M_Utils_Json
   use M_Grid
-  use M_Grid_Ylm
   use M_SysKinetic
   use M_SysPotential
   use M_SysGauge
-  use M_SysGauge_Ylm_Velocity
   use M_SysInteraction
   use M_Orbs
   use M_OrbsInit
@@ -45,7 +43,6 @@ program P_LaserTd2rdm
 
   real(R64)    :: time, startTime, endTime, outputStep, timeStep, charge, energy
   integer(I32) :: nTimeSteps, innerStep
-  logical      :: refreshH2Q
   type(T_IntegratorList_FabricateInput) :: IntegratorListInput(2)
 
   !==========================================
@@ -79,9 +76,6 @@ program P_LaserTd2rdm
   outputStep = Json_Get("program.outputStep", 0.2_R64)
   nTimeSteps = Json_Get("program.nTimeSteps", 20)
   charge = Json_Get("sysPotential.ylm.coulomb.charge", 4.0_R64)
-  ! only the energy-conserving purification uses h2 (mirrors its conserveEnergyQ keys)
-  refreshH2Q = Json_Get("purification.singlet.reduce.conserveEnergyQ", .false.) .or. &
-               Json_Get("purification.singletTr0.reduce.conserveEnergyQ", .false.)
 
   call Grid_Setup
   call SysKinetic_Setup
@@ -109,9 +103,9 @@ program P_LaserTd2rdm
   time = startTime
   timeStep = outputStep / nTimeSteps
 
-  ! also fills Method_Mb_OrbBased_h2, only used by energy-conserving purification
+  ! also fills Method_Mb_OrbBased_h2, only used by purification if Purification_usesH2Q
   energy = Method_GetEnergy(time)
-  call WriteObservables(time, energy, .true.)
+  call WriteLaserObservables(time, charge, energy, .true.)
 
   do while (time < endTime - 0.5_R64 * timeStep)
 
@@ -120,14 +114,14 @@ program P_LaserTd2rdm
       time = time + timeStep
       call Absorber_ApplyAbsorber(Orbs_orbs)
       ! h2 of the current orbitals (Method_GetEnergy fills it only at output steps)
-      if (refreshH2Q) call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, Orbs_orbs, time)
+      if (Purification_usesH2Q) call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, Orbs_orbs, time)
       call Purification_PurifyTwoRdmState(TwoRdm_twoRdmState, Method_Mb_OrbBased_h2)
       ! weak natural orbitals of the absorbed/purified state (nWeakOrbs > 0 only)
       call Method_Mb_OrbBased_Td2rdm_RefreshWeakOrbs
     end do
 
     energy = Method_GetEnergy(time)
-    call WriteObservables(time, energy, .false.)
+    call WriteLaserObservables(time, charge, energy, .false.)
 
   end do
 
@@ -136,18 +130,6 @@ program P_LaserTd2rdm
   !==========================================
 
 contains
-
-  subroutine WriteObservables(t, e, newFilesQ)
-    real(R64), intent(in) :: t
-    real(R64), intent(in) :: e
-    logical, intent(in) :: newFilesQ
-
-    complex(R64), allocatable :: rdm1(:, :)
-
-    call TwoRdm_FillRdm1FromTwoRdmState(rdm1, TwoRdm_twoRdmState)
-    call WriteLaserObservables(rdm1, t, charge, e, newFilesQ)
-
-  end subroutine
 
   include '../common/BeCommon.inc'
   include '../common/BeObservables.inc'

@@ -112,10 +112,10 @@ contains
 
     allocate (Method_state(1:(nVals1 + nVals2)))
 
-    TwoRdm_twoRdmState(1:nE) => Method_state(1:nVals1)
+    call GetTwoRdmState(TwoRdm_twoRdmState, Method_state)
     call TwoRdmInit_Initialize(TwoRdm_twoRdmState)
 
-    Orbs_orbs(1:nG, 1:nOS) => Method_state(nVals1 + 1:(nVals1 + nVals2))
+    call GetOrbs(Orbs_orbs, Method_state)
     call OrbsInit_Initialize(Orbs_orbs)
 
     ! weak natural orbitals of the initial state for the first linear step
@@ -126,7 +126,6 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine TimeDerivative(dState, state, time)
     use M_Utils_Constants
-    use M_Grid
     use M_Reconstruction
     use M_TwoRdm
     use M_Orbs
@@ -149,19 +148,13 @@ contains
     complex(R64), allocatable :: rdm2(:, :, :, :)
     complex(R64), allocatable :: invRdm1(:, :), activeProj(:, :), weakNatOrbs(:, :), hOrbs(:, :)
 
-    integer(I32) :: nG, nOS, nE
-
     dState(:) = 0.0_R64
 
-    nG = Grid_nPoints
-    nOS = Orbs_nOrbsInState
-    nE = TwoRdm_nElements
+    call GetTwoRdmState(twoRdmState, state)
+    call GetTwoRdmState(dTwoRdmState, dState)
 
-    twoRdmState(1:nE) => state(1:)
-    orbs(1:nG, 1:nOS) => state(nE + 1:)
-
-    dTwoRdmState(1:nE) => dState(1:)
-    dOrbs(1:nG, 1:nOS) => dState(nE + 1:)
+    call GetOrbs(orbs, state)
+    call GetOrbs(dOrbs, dState)
 
     call TwoRdm_FillRdm1FromTwoRdmState(rdm1, twoRdmState)
     call TwoRdm_FillRdm2FromTwoRdmState(rdm2, twoRdmState)
@@ -191,8 +184,9 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Linear split-step part: the one-body operator on the orbitals only (the
-  !> 2-RDM is constant), dOrbs = -i h orbs without projection. With weak
-  !> orbitals h is replaced by H_L (header).
+  !> 2-RDM is constant), dOrbs = -i L orbs without projection,
+  !> L = Method_Mb_OrbBased_ApplyLinOp (h, or only the gauge coupling if
+  !> exactFieldFreeQ). With weak orbitals h is replaced by H_L (header).
   subroutine TimeDerivativeOrbsLin(dState, state, time)
     use M_Utils_Constants
     use M_Grid
@@ -325,21 +319,14 @@ contains
 
     real(R64), allocatable :: natOcc(:), weights(:)
     complex(R64), allocatable :: natOrbs(:, :), rdm1Spatial(:, :)
-    integer(I32) :: nO, nOS, nB, nW, ibt, iStart, iEnd, j1, k1, w
+    integer(I32) :: nOS, nB, nW, ibt, iStart, iEnd, j1, k1, w
     real(R64) :: reg
 
     nOS = Orbs_nOrbsInState
-    nO = Method_Mb_OrbBased_nOrbsSum
     reg = Method_Mb_OrbBased_regularizationParameter
+    nW = Method_Mb_OrbBased_Td2rdm_nWeakOrbs
 
-    allocate (rdm1Spatial(nOS, nOS))
-    if (nO .eq. nOS) then
-      rdm1Spatial(:, :) = rdm1(1:nOS, 1:nOS)
-    else if (nO .eq. 2 * nOS) then
-      rdm1Spatial(:, :) = rdm1(1:nOS, 1:nOS) + rdm1(nOS + 1:, nOS + 1:)
-    else
-      error stop "invalid nO to nOS relation in FillWeakSplit"
-    end if
+    call Method_Mb_OrbBased_FillSpatialRdm1(rdm1Spatial, rdm1)
 
     allocate (invRdm1(nOS, nOS), activeProj(nOS, nOS), weakNatOrbs(nOS, nOS))
     invRdm1(:, :) = 0.0_R64
@@ -352,7 +339,6 @@ contains
       if (iStart > nOS) exit
       iEnd = Method_Mb_OrbBased_nOrbsEnd(ibt)
       nB = iEnd - iStart + 1
-      nW = Method_Mb_OrbBased_Td2rdm_nWeakOrbs
 
       ! descending occupations: the last nW natural orbitals are weak
       call RdmDiagonalize_Rdm1(natOcc, natOrbs, rdm1Spatial(iStart:iEnd, iStart:iEnd))
@@ -484,15 +470,13 @@ contains
     complex(R64), intent(in), contiguous    :: weakNatOrbs(:, :)
     real(R64), intent(in)                   :: time
 
-    complex(R64), allocatable :: h1(:, :), hOrbs(:, :), h1aw(:, :), weakProj(:, :), activeProj(:, :)
+    complex(R64), allocatable :: h1(:, :), h1aw(:, :), weakProj(:, :), activeProj(:, :)
     integer(I32) :: i, nO, nOS
 
     nOS = Orbs_nOrbsInState
     nO = Method_Mb_OrbBased_nOrbsSum
 
-    allocate (hOrbs, mold=orbs)
-    hOrbs(:, :) = 0.0_R64
-    call Method_Mb_OrbBased_ApplySingleBodyOp(hOrbs, orbs, time, h1_=h1)
+    call Method_Mb_OrbBased_FillH1(h1, orbs, time)
 
     weakProj = matmul(weakNatOrbs, transpose(conjg(weakNatOrbs)))
     activeProj = -weakProj

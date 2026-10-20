@@ -10,14 +10,17 @@
 !> Absorbed orbitals are no longer orthonormal: the electron number is
 !> Tr(rho S) and the occupations are the eigenvalues of S^1/2 rho S^1/2 with
 !> the orbital overlap matrix S (i.e. of the density matrix inside the box).
-subroutine WriteLaserObservables(rdm1, time, charge, energy, newFilesQ)
+!> The 1-RDM is taken from Method_state via the method-agnostic
+!> Method_Mb_OrbBased_FillRdm1 (MCTDHF and TD-2RDM alike).
+subroutine WriteLaserObservables(time, charge, energy, newFilesQ)
   use M_Utils_LapackLib
   use M_Utils_PrinterObservableYlm
   use M_Grid
   use M_Orbs
   use M_SysGauge_Ylm_Velocity
+  use M_Method
+  use M_Method_Mb_OrbBased
 
-  complex(R64), intent(in), contiguous :: rdm1(:, :)
   real(R64), intent(in) :: time
   real(R64), intent(in) :: charge
   real(R64), intent(in) :: energy
@@ -25,11 +28,13 @@ subroutine WriteLaserObservables(rdm1, time, charge, energy, newFilesQ)
 
   real(R64) :: dipole, acceleration, nElectrons
   real(R64), allocatable :: evals(:), occ(:)
-  complex(R64), allocatable :: s(:, :), evecs(:, :), sSqrt(:, :), rhoUp(:, :)
+  complex(R64), allocatable :: rdm1(:, :), s(:, :), evecs(:, :), sSqrt(:, :), rhoUp(:, :)
   integer(I32) :: nOS, i, j, io
   character(len=7) :: openStatus
 
   nOS = Orbs_nOrbsInState
+
+  call Method_Mb_OrbBased_FillRdm1(rdm1, Method_state)
 
   call PrinterObservableYlm_DumpDipole(rdm1, Orbs_orbs, "", .false., time, dipole_=dipole)
   call PrinterObservableYlm_DumpDipoleAcceleration(rdm1, Orbs_orbs, charge, "", .false., time, &

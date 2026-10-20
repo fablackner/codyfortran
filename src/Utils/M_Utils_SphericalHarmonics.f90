@@ -17,9 +17,9 @@ module M_Utils_SphericalHarmonics
   implicit none
 
   !> Gaunt table for m3 = m1 + m2 (the only nonvanishing case), indexed as
-  !> (GauntIndex(l1,m1), GauntIndex(l2,m2), l3+1) with
-  !> SphericalHarmonics_GauntIndex over |m1|, |m2| <= the tabulated m bound. Read-only after setup, so lookups are thread-safe;
-  !> building it concurrently with lookups is not.
+  !> (ChannelIndex(l1,m1,M), ChannelIndex(l2,m2,M), l3+1) with
+  !> M = SphericalHarmonics_gauntTableM. Read-only after setup, so lookups are
+  !> thread-safe; building it concurrently with lookups is not.
   real(R64), allocatable :: SphericalHarmonics_gauntTable(:, :, :)
 
   !> Tabulated bounds; -1 while no table exists
@@ -64,18 +64,18 @@ contains
         newM <= SphericalHarmonics_gauntTableM) return
 
     if (allocated(SphericalHarmonics_gauntTable)) deallocate (SphericalHarmonics_gauntTable)
-    allocate (SphericalHarmonics_gauntTable(SphericalHarmonics_GauntIndex(newL1 + 1, -min(newL1 + 1, newM), newM) - 1, &
-                                            SphericalHarmonics_GauntIndex(newL2 + 1, -min(newL2 + 1, newM), newM) - 1, &
+    allocate (SphericalHarmonics_gauntTable(SphericalHarmonics_NChannels(newL1, newM), &
+                                            SphericalHarmonics_NChannels(newL2, newM), &
                                             newL3 + 1))
     SphericalHarmonics_gauntTable = 0.0_R64
 
     !$omp parallel do default(shared) private(l1, m1, l2, m2, l3, i1, i2) schedule(dynamic)
     do l1 = 0, newL1
       do m1 = -min(l1, newM), min(l1, newM)
-        i1 = SphericalHarmonics_GauntIndex(l1, m1, newM)
+        i1 = SphericalHarmonics_ChannelIndex(l1, m1, newM)
         do l2 = 0, newL2
           do m2 = -min(l2, newM), min(l2, newM)
-            i2 = SphericalHarmonics_GauntIndex(l2, m2, newM)
+            i2 = SphericalHarmonics_ChannelIndex(l2, m2, newM)
             do l3 = abs(l1 - l2), min(l1 + l2, newL3)
               ! Selection rules: parity and |m3| <= l3 (with m3 = m1 + m2)
               if (mod(l1 + l2 + l3, 2) .ne. 0) cycle
@@ -98,22 +98,49 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-  !> Compact table index of (l, m) for |m| <= min(l, mmax): channels are
-  !> ordered by l, then m, and each l contributes 2 min(l, mmax) + 1 entries
-  !> (l² + l + m + 1 when mmax >= l).
-  pure function SphericalHarmonics_GauntIndex(l, m, mmax) result(res)
+  !> Number of channels preceding shell l in a layout with |m| <= min(l, mmax).
+  !>
+  !> Shells l' < l hold (2*min(l',mmax)+1) channels: l**2 while l <= mmax,
+  !> afterwards each further shell adds (2*mmax+1).
+  pure function SphericalHarmonics_ChannelOffset(l, mmax) result(res)
+
+    integer(I32), intent(in) :: l
+    integer(I32), intent(in) :: mmax
+    integer(I32) :: res
+
+    if (l <= mmax) then
+      res = l * l
+    else
+      res = mmax * mmax + (l - mmax) * (2 * mmax + 1)
+    end if
+
+  end function
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  !> 1-based compact index of channel (l, m) for |m| <= min(l, mmax):
+  !> channels are l-major with m ascending (l² + l + m + 1 when mmax >= l).
+  pure function SphericalHarmonics_ChannelIndex(l, m, mmax) result(res)
 
     integer(I32), intent(in) :: l
     integer(I32), intent(in) :: m
     integer(I32), intent(in) :: mmax
     integer(I32) :: res
 
-    if (l <= mmax + 1) then
-      res = l * l
-    else
-      res = (mmax + 1)**2 + (l - mmax - 1) * (2 * mmax + 1)
-    end if
-    res = res + m + min(l, mmax) + 1
+    res = SphericalHarmonics_ChannelOffset(l, mmax) + m + min(l, mmax) + 1
+
+  end function
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  !> Number of channels 0 <= l <= lmax, |m| <= min(l, mmax).
+  pure function SphericalHarmonics_NChannels(lmax, mmax) result(res)
+
+    integer(I32), intent(in) :: lmax
+    integer(I32), intent(in) :: mmax
+    integer(I32) :: res
+
+    res = SphericalHarmonics_ChannelOffset(lmax + 1, mmax)
 
   end function
 
@@ -131,8 +158,8 @@ contains
         l3 <= SphericalHarmonics_gauntTableL3 .and. &
         abs(m1) <= SphericalHarmonics_gauntTableM .and. &
         abs(m2) <= SphericalHarmonics_gauntTableM) then
-      res = SphericalHarmonics_gauntTable(SphericalHarmonics_GauntIndex(l1, m1, SphericalHarmonics_gauntTableM), &
-                                          SphericalHarmonics_GauntIndex(l2, m2, SphericalHarmonics_gauntTableM), l3 + 1)
+      res = SphericalHarmonics_gauntTable(SphericalHarmonics_ChannelIndex(l1, m1, SphericalHarmonics_gauntTableM), &
+                                          SphericalHarmonics_ChannelIndex(l2, m2, SphericalHarmonics_gauntTableM), l3 + 1)
     else
       res = SphericalHarmonics_GauntCoefficient(l1, m1, l2, m2, l3, m1 + m2)
     end if

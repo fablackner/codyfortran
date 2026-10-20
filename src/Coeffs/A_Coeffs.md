@@ -121,10 +121,11 @@ stride_bt = ∏_{bt' < bt} nConfigurations(bt')
 | Procedure | Description |
 |-----------|-------------|
 | `Coeffs_ApplyH1FillRdm1` | Apply Ĥ₁ = Σ h¹_{pq} a†_p a_q; optionally compute 1-RDM |
-| `Coeffs_ApplyH2FillRdm2` | Apply Ĥ₂ = ½Σ h²_{pqrs} a†_p a†_q a_s a_r; optionally compute 2-RDM |
+| `Coeffs_ApplyH2FillRdm2` | Apply Ĥ₂ = Σ h²_{pqrs} a†_p a†_q a_s a_r with h²_{pqrs} = ½⟨pq\|W\|rs⟩; optionally compute 2-RDM |
 
 Index convention (shared with `Method_Mb_OrbBased_FillH1/H2`, TwoRdm and the
-orbital equations of motion): h¹_{pq} = ⟨p|h|q⟩, rdm1(p,q) = ⟨a†_q a_p⟩ and
+orbital equations of motion): h¹_{pq} = ⟨p|h|q⟩, h²_{pqrs} = ½⟨pq|W|rs⟩ (the ½
+is part of h2, as filled by `Method_Mb_OrbBased_FillH2`), rdm1(p,q) = ⟨a†_q a_p⟩ and
 rdm2(p,q,r,s) = ⟨a†_r a†_s a_q a_p⟩. The Generic backend's connectivity loops
 act with the transposed index order internally; the packing helpers
 (`FillH1Lin`, `FillH2Lin`, `FillRdm{1,2}FromRdm{1,2}Lin`) translate. The
@@ -286,6 +287,9 @@ call Coeffs_SaveCoeffs(coeffs)  ! Writes coeffs.in
 ! Later...
 ! Use CoeffsInit with "load": {} to reload
 ```
+
+`Coeffs_SaveTwoRdm(coeffs)` writes the 2-RDM blocks `rdm2BtXX_YY.in` (initial
+state for `twoRdmInit.load`) via `Method_Mb_OrbBased_SaveRdm2Blocks`.
 
 ---
 

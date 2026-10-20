@@ -22,6 +22,9 @@
 !>
 !> **Module data:**
 !>   - `lmax`: Maximum angular momentum in the expansion
+!>   - `mmax`: Maximum |m| of the expansion (default min(2 grid mmax, lmax))
+!>   - `nChannels`: Number of (l,m) channels of the interaction layout
+!>   - `nPoints`: Length of a source/potential array (nChannels × nRadial)
 !>   - `mIndependentQ`: True if potential is m-independent (central field)
 module M_SysInteraction_Ylm
   use M_Utils_Types
@@ -50,6 +53,10 @@ module M_SysInteraction_Ylm
   !> |m| <= min(l, mmax)). Defaults to min(2*Grid_Ylm_mmax, lmax): a product
   !> of two orbitals carries at most |m| = 2*Grid_Ylm_mmax.
   integer(I32) :: SysInteraction_Ylm_mmax
+  !> Number of (l,m) channels of the interaction layout, Grid_Ylm_NChannels(lmax, mmax).
+  integer(I32) :: SysInteraction_Ylm_nChannels
+  !> Length of a source/potential array: nChannels * Grid_Ylm_nRadial.
+  integer(I32) :: SysInteraction_Ylm_nPoints
   !> If true, the interaction does not depend on the magnetic quantum number m
   !> (only |m| or l matters), enabling additional optimizations.
   logical      :: SysInteraction_Ylm_mIndependentQ
