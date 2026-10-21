@@ -1,6 +1,7 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> MCTDHF ground state of Be (Ylm grid, m = 0 orbitals) by imaginary-time
-!> propagation, as in Lackner et al., PRA 95, 033414 (2017).
+!> MCTDHF ground state of an atom (Ylm grid; Be with m = 0 orbitals as in
+!> Lackner et al., PRA 95, 033414 (2017), or Ne, app/ne/hhg) by imaginary-time
+!> propagation.
 !>
 !> Imaginary-time Strang splitting exp(-h/2) exp(-W) exp(-h/2):
 !> - one-body part: every orbital is propagated with exp(-h dtau/2) at fixed
@@ -13,15 +14,18 @@
 !>   with h2, orbitals with the projected correlation term) in imaginary time.
 !> After each part the orbitals are Loewdin-orthonormalized with the
 !> compensating CI transformation, so the many-body state is only changed by
-!> the propagation itself (plain Gram-Schmidt would bias the fixed point).
+!> the propagation itself (plain Gram-Schmidt would bias the fixed point), and
+!> the CI vector is normalized.
 !>
 !> Initial orbitals either from orbsInit (program.lmaxIn < 0) or embedded from
 !> orbXX_YY.in written on a grid with smaller lmax (program.lmaxIn >= 0, same
-!> radial grid); the CI vector from coeffsInit. The imaginary time step is
-!> reduced (dtauFactor) whenever the energy change per check drops below
-!> dtauSwitch, which removes the O(dtau^2) splitting bias of the fixed point.
-!> The stiff non-linear part is integrated with program.nSubStepsNonLin RK4
-!> sub-steps per step.
+!> radial grid and grid.ylm.mmax); the CI vector from coeffsInit. The
+!> imaginary time step is reduced (dtauFactor) whenever the energy change per
+!> check drops below dtauSwitch, which removes the O(dtau^2) splitting bias
+!> of the fixed point. The stiff non-linear part is integrated with
+!> program.nSubStepsNonLin RK4 sub-steps per step, or, if
+!> program.dtauNonLinMax is given, with as many as needed to keep every
+!> sub-step at or below it (fewer as dtau shrinks).
 !>
 !> Output: orbXX_YY.in, coeffs.in (also written after every check, so a run
 !>         can be restarted), rdm2BtXX_YY.in (TD-2RDM initial state),
@@ -48,7 +52,7 @@ program P_ImagTimeMctdhf
 
   implicit none
 
-  real(R64)    :: tau, dtau, dtauMin, dtauFactor, dtauSwitch, convThresh, energy, energyOld
+  real(R64)    :: tau, dtau, dtauMin, dtauFactor, dtauSwitch, convThresh, energy, energyOld, dtauNonLinMax
   integer(I32) :: lmaxIn, nStepsCheck, maxChecks, nSubStepsNonLin, iCheck, iStep, io
   real(R64), allocatable :: natOcc(:)
   complex(R64), allocatable :: rdm1(:, :), natOrbs(:, :)
@@ -85,6 +89,7 @@ program P_ImagTimeMctdhf
   nStepsCheck = Json_Get("program.nStepsCheck", 20)
   maxChecks = Json_Get("program.maxChecks", 1000)
   nSubStepsNonLin = Json_Get("program.nSubStepsNonLin", 1)
+  dtauNonLinMax = Json_Get("program.dtauNonLinMax", 0.0_R64)
 
   call Grid_Setup
   call SysKinetic_Setup
@@ -181,21 +186,33 @@ contains
   subroutine ImagTimeStep(dtauStep)
     real(R64), intent(in) :: dtauStep
 
-    integer(I32) :: iSub
+    integer(I32) :: iSub, nSub
 
     call ImagTimeLin(0.5_R64 * dtauStep)
-    call LowdinKeepingState(Coeffs_coeffs, Orbs_orbs)
+    call Reorthonormalize
 
     ! The non-linear part is stiff for weakly occupied orbitals (inverse
     ! 1-RDM), hence the explicit sub-steps
-    do iSub = 1, nSubStepsNonLin
-      call integratorList(2) % e % Integrate(Method_state, 0.0_R64, dtauStep / nSubStepsNonLin)
-      call LowdinKeepingState(Coeffs_coeffs, Orbs_orbs)
+    nSub = nSubStepsNonLin
+    if (dtauNonLinMax > 0.0_R64) nSub = max(1, ceiling(dtauStep / dtauNonLinMax * (1.0_R64 - 1e-12_R64)))
+    do iSub = 1, nSub
+      call integratorList(2) % e % Integrate(Method_state, 0.0_R64, dtauStep / nSub)
+      call Reorthonormalize
     end do
 
     call ImagTimeLin(0.5_R64 * dtauStep)
-    call LowdinKeepingState(Coeffs_coeffs, Orbs_orbs)
+    call Reorthonormalize
 
+  end subroutine
+
+  !> Loewdin orthonormalization of the orbitals with the compensating CI
+  !> transformation, then normalization of the CI vector: the Loewdin step
+  !> moves the orbital norms (exp(-eps dtau) per orbital) into the CI vector,
+  !> and the non-linear derivative projects with 1 - |c><c|, which requires
+  !> |c| = 1 (otherwise it amplifies, e.g. for Ne with eps(1s) = -50 a.u.).
+  subroutine Reorthonormalize
+
+    call LowdinKeepingState(Coeffs_coeffs, Orbs_orbs)
     call Coeffs_Normalize(Coeffs_coeffs)
 
   end subroutine

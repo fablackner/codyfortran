@@ -204,18 +204,28 @@ the caps of non-orbital operands. The accessors do not range-check: callers
 must request |m| ≤ min(l, cap), which is guaranteed by validating inputs at
 fabrication (e.g. OrbsInit checks every |m| ≤ mmax).
 
-**Axially symmetric node representation (m = 0).** The tables are built in
-`Grid_Ylm` Setup (`SetupQuadratureM0`) and are used by `SpatialProductM0` and by
-Method's `ApplyCorrelationOpYlmM0` (`S_Method_Mb_OrbBased.f90`); see also the
-Ylm spatial product bullet under Performance Notes.
+**Node representation of fixed-m fields.** A field whose channels all have
+the same m is Σ_l f_lm(r) Θ_lm(θ) e^{imφ} with real Θ_lm (Y_lm = Θ_lm e^{imφ},
+Condon–Shortley phase). `Grid_Ylm_ToNodes` evaluates Σ_l f_lm(r) Θ_lm(x_q) on
+the Gauss–Legendre nodes x_q in cos θ and leaves the phase implicit: the
+pointwise product of node fields with m₁ and m₂ represents m₁ + m₂, the complex
+conjugate −m, and a product is integrated over φ (factor 2π, included in the
+node weights) only when its m add up to zero. Such products are polynomials in
+cos θ (the sin^|m| θ factors pair up), so the quadrature is exact for total
+degree ≤ 4 lmax + 5, as for m = 0. The tables are built in `Grid_Ylm` Setup
+(`SetupQuadrature`, normalized associated Legendre recurrences) and are used by
+`SpatialProductM0` and by Method's `ApplyCorrelationOpYlmNodes`
+(`S_Method_Mb_OrbBased.f90`, orbitals of definite m); see also the Ylm spatial
+product bullet under Performance Notes.
 
 | Name | Kind | Contract |
 |------|------|----------|
-| `Grid_Ylm_ToNodesM0(fNodes, f, lmax)` | subroutine | fNodes(r, q) = Σ_l f_l(r) Y_l0(x_q); requires lmax ≤ `Grid_Ylm_lmaxNodesM0` |
-| `Grid_Ylm_FromNodesM0(f, fNodes, lmax, withWeightsQ_)` | subroutine | Projection onto Y_l0, l ≤ lmax; exact for angular degree ≤ 2 nNodesM0 − 1 − lmax; `withWeightsQ_` multiplies the output by `Grid_Ylm_radialMetricWeights` (default `.false.`) |
-| `Grid_Ylm_nNodesM0` | integer | 2 lmax + 3 Gauss–Legendre nodes in cos θ |
-| `Grid_Ylm_lmaxNodesM0` | integer | 2 lmax + 2, largest tabulated l |
-| `Grid_Ylm_nodeWeightsM0` | real(:) | 2π w_q, Σ_q = 4π |
+| `Grid_Ylm_ToNodes(fNodes, f, lmax, m, mmax_)` | subroutine | fNodes(r, q) = Σ_l f_lm(r) Θ_lm(x_q), \|m\| ≤ l ≤ lmax, for f in the layout (lmax, `mmax_`, default `Grid_Ylm_mmax`); other m are ignored; requires lmax ≤ `Grid_Ylm_lmaxNodes`, \|m\| ≤ min(`Grid_Ylm_mmaxNodes`, mmax_) |
+| `Grid_Ylm_FromNodes(f, fNodes, lmax, m, mmax_, withWeightsQ_)` | subroutine | Projection onto Y_lm, \|m\| ≤ l ≤ lmax, into the layout (lmax, `mmax_`), all other channels zero; exact for angular degree ≤ 2 nNodes − 1 − lmax; `withWeightsQ_` multiplies the output by `Grid_Ylm_radialMetricWeights` (default `.false.`) |
+| `Grid_Ylm_nNodes` | integer | 2 lmax + 3 Gauss–Legendre nodes in cos θ |
+| `Grid_Ylm_lmaxNodes` | integer | 2 lmax + 2, largest tabulated l |
+| `Grid_Ylm_mmaxNodes` | integer | min(2 mmax, 2 lmax + 2), largest tabulated \|m\| (pair densities and potentials of orbitals with \|m\| ≤ mmax) |
+| `Grid_Ylm_nodeWeights` | real(:) | 2π w_q, Σ_q = 4π |
 
 ### Prolate Grid (Homonuclear Diatomic Molecules)
 

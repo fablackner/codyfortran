@@ -119,7 +119,7 @@ of the dipole acceleration 6.1e-4 in all cases):
   dominate); the observables change by 2.5e-5 (acceleration).
 - SIL tolerance 1e-10 in real time (1e-12 in imaginary time): fewer Krylov
   vectors; the observables change by 1e-10.
-- `ApplyCorrelationOpYlmM0` with blocked ZGEMMs: results unchanged to 1e-13,
+- `ApplyCorrelationOpYlmNodes` with blocked ZGEMMs: results unchanged to 1e-13,
   the mean-field part 4× cheaper.
 - MRRR (DSYEVR) for the exact field-free blocks: setup 34 s → 13 s.
 
@@ -221,7 +221,7 @@ Building this comparison exposed and required several changes in `src/`:
   with weakly occupied natural orbitals; see `src/Method/A_Method.md`.
 - **CPU performance** (results unchanged to round-off, 1.8× per step on one
   thread, 2.1× on four): the m = 0 correlation operator
-  `ApplyCorrelationOpYlmM0` was never selected because the Ylm Coulomb
+  (now `ApplyCorrelationOpYlmNodes`) was never selected because the Ylm Coulomb
   interaction did not declare itself body-type independent; central
   potentials multiply as a radial scaling instead of the angular quadrature;
   SIL reorthogonalizes with two `ZGEMV` sweeps; the FEDVR element operator

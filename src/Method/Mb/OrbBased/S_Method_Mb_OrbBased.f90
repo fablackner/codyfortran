@@ -22,6 +22,10 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   ! local data
   !=============================================================================
 
+  !> Fraction of the squared norm below which admixtures of other m are
+  !> round-off for the definite-m node path (orbitals and 2-RDM weights).
+  real(R64), parameter :: mRoundOff = 1e-12_R64
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -95,7 +99,7 @@ contains
     Method_Mb_OrbBased_FillH2 => FillH2
     Method_Mb_OrbBased_ApplyKineticOp => ApplyKineticOp
     Method_Mb_OrbBased_ApplyCorrelationOp => ApplyCorrelationOp
-    if (YlmM0FastPathQ()) Method_Mb_OrbBased_ApplyCorrelationOp => ApplyCorrelationOpYlmM0
+    if (YlmNodesFastPathQ()) Method_Mb_OrbBased_ApplyCorrelationOp => ApplyCorrelationOpYlmNodes
     Method_Mb_OrbBased_ApplyHartreeFockOp => ApplyHartreeFockOp
     Method_Mb_OrbBased_ApplySingleBodyOp => ApplySingleBodyOp
 
@@ -268,12 +272,12 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  function YlmM0FastPathQ() result(res)
+  function YlmNodesFastPathQ() result(res)
     !---------------------------------------------------------------------------
-    ! Whether ApplyCorrelationOpYlmM0 applies: Hermitian (non-ECS) Ylm grid
-    ! with m = 0 orbitals, body-type-independent Ylm interaction with m = 0
-    ! potentials within the angular quadrature tables of the grid.
-    ! Requires Grid and SysInteraction to be fabricated.
+    ! Whether ApplyCorrelationOpYlmNodes applies: Hermitian (non-ECS) Ylm grid,
+    ! body-type-independent Ylm interaction with potentials within the angular
+    ! quadrature tables of the grid. Whether the orbitals have a definite m is
+    ! checked at every call. Requires Grid and SysInteraction to be fabricated.
     !---------------------------------------------------------------------------
     use M_Utils_Json
     use M_Grid_Ylm
@@ -286,9 +290,9 @@ contains
     if (.not. Json_GetExistence("grid.ylm")) return
     if (Json_GetExistence("grid.ylm.fedvrEcs")) return
     if (.not. Json_GetExistence("sysInteraction.ylm")) return
-    if (Grid_Ylm_mmax .ne. 0 .or. SysInteraction_Ylm_mmax .ne. 0) return
     if (.not. SysInteraction_bodyTypeIndependentQ) return
     if (SysInteraction_Ylm_lmax > 2 * Grid_Ylm_lmax + 2) return
+    if (SysInteraction_Ylm_mmax > min(2 * Grid_Ylm_mmax, 2 * Grid_Ylm_lmax + 2)) return
 
     res = .true.
 
@@ -905,10 +909,13 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine ApplyCorrelationOpYlmM0(dOrbs, orbs, invRdm1, rdm2, time, h2_)
+  subroutine ApplyCorrelationOpYlmNodes(dOrbs, orbs, invRdm1, rdm2, time, h2_)
     !---------------------------------------------------------------------------
-    ! ApplyCorrelationOp for axially symmetric (m = 0) orbitals on a Ylm grid,
-    ! evaluated on the Gauss-Legendre nodes in cos(theta) (Grid_Ylm_*NodesM0).
+    ! ApplyCorrelationOp for orbitals of definite m (each orbital lives in the
+    ! channels of a single m, e.g. m = 0 orbitals or the orbitals of an atom in
+    ! a linearly polarized field) on a Ylm grid, evaluated on the
+    ! Gauss-Legendre nodes in cos(theta) (Grid_Ylm_ToNodes/FromNodes). If an
+    ! orbital mixes several m, the generic ApplyCorrelationOp is used.
     !
     ! The generic version multiplies every pair potential V_(l2,k2) with every
     ! orbital (one spatial product each) and then combines the results with the
@@ -916,16 +923,22 @@ contains
     !   dOrbs(:,j1) += V_(l2,k2) * sum_k1 orbs(:,k1) rdm2spatial(k1,k2,j1,l2),
     ! and all products are pointwise on the nodes: the orbitals are transformed
     ! once, each pair density/potential once, and dOrbs once at the end. The
-    ! h2 elements are node quadratures of conjg(orb) V orb. The node count of
-    ! the Grid_Ylm tables makes every angular integral exact, so the result
-    ! equals the generic version up to round-off.
+    ! h2 elements are node quadratures of conjg(orb) V orb. The phases
+    ! e^(i m phi) are bookkept: the pair (l2,k2) carries M = m_k2 - m_l2, and
+    ! only the terms with m_k1 + M = m_j1 (correlation) and m_j1 + M = m_i1
+    ! (h2) are kept. The dropped h2 terms vanish by the phi integral, the
+    ! dropped correlation terms only for an M-conserving many-body state
+    ! (their 2-RDM weights vanish), which is checked (otherwise the generic
+    ! operator is used). The node count of the Grid_Ylm tables makes every
+    ! angular integral exact, so the result equals the generic version up to
+    ! round-off.
     !
     ! The pointwise sums run over blocks of nodes with two ZGEMMs per block,
     ! chi = orbs * rdm2spatial for all (pair, j1) and h2 = orbs^H * (V orbs w),
     ! so that only V * chi remains elementwise.
     !
-    ! Bound by Method_Mb_OrbBased_Fabricate for non-ECS Ylm grids with
-    ! grid.ylm.mmax = 0 and a body-type-independent Ylm interaction.
+    ! Bound by Method_Mb_OrbBased_Fabricate for non-ECS Ylm grids with a
+    ! body-type-independent Ylm interaction (YlmNodesFastPathQ).
     !---------------------------------------------------------------------------
     use M_Utils_BlasLib, only: ZGEMM
     use M_Grid
@@ -942,7 +955,7 @@ contains
     complex(R64), intent(out), allocatable, optional :: h2_(:, :, :, :)
 
     !> Nodes per block of the pointwise sums (block work arrays stay in cache).
-    integer(I32), parameter :: blockSize = 256
+    integer(I32), parameter :: blockSize = 128
 
     complex(R64), allocatable :: rdm2spatial(:, :, :, :)
     complex(R64), allocatable, target :: orbNodes(:, :), dOrbNodes(:, :), potNodes(:, :)
@@ -952,20 +965,32 @@ contains
     complex(R64), allocatable :: chi(:, :), potOrb(:, :), h2Block(:, :)
     complex(R64), allocatable :: src(:), pot(:), dOrb(:)
     real(R64), allocatable :: weightNodes(:)
-    integer(I32), allocatable :: pairK2(:), pairL2(:)
+    integer(I32), allocatable :: pairK2(:), pairL2(:), pairM(:), mOrb(:)
 
-    integer(I32) :: nO, nOS, nRad, nNodes, nPts, lmax, lmaxPot, nPairs
+    integer(I32) :: nO, nOS, nRad, nNodes, nPts, lmax, lmaxPot, mmaxPot, nPairs
     integer(I32) :: i1, j1, k1, k2, l2, iP, iB, nB, iC
-    logical :: h2Q
+    real(R64) :: normKept, normDropped
+    logical :: h2Q, definiteQ
 
     nOS = Orbs_nOrbsInState
     nO = Method_Mb_OrbBased_nOrbsSum
     nRad = Grid_Ylm_nRadial
-    nNodes = Grid_Ylm_nNodesM0
+    nNodes = Grid_Ylm_nNodes
     nPts = nRad * nNodes
     lmax = Grid_Ylm_lmax
     lmaxPot = SysInteraction_Ylm_lmax
+    mmaxPot = SysInteraction_Ylm_mmax
     h2Q = present(h2_)
+
+    allocate (mOrb(nOS))
+    definiteQ = .true.
+    do i1 = 1, nOS
+      call OrbitalM(mOrb(i1), definiteQ, orbs(:, i1))
+    end do
+    if (.not. definiteQ) then
+      call ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_)
+      return
+    end if
 
     if (h2Q) then
       if (.not. allocated(h2_)) allocate (h2_(nO, nO, nO, nO))
@@ -974,6 +999,29 @@ contains
 
     call FillCorrelationRdm2(rdm2spatial, invRdm1, rdm2)
 
+    ! The correlation sum keeps only m_k1 + m_k2 - m_l2 = m_j1; the other
+    ! weights vanish only for an M-conserving many-body state (otherwise the
+    ! generic operator is used)
+    normKept = 0.0_R64
+    normDropped = 0.0_R64
+    do l2 = 1, nOS
+      do j1 = 1, nOS
+        do k2 = 1, nOS
+          do k1 = 1, nOS
+            if (mOrb(k1) + mOrb(k2) - mOrb(l2) .eq. mOrb(j1)) then
+              normKept = normKept + abs(rdm2spatial(k1, k2, j1, l2))**2
+            else
+              normDropped = normDropped + abs(rdm2spatial(k1, k2, j1, l2))**2
+            end if
+          end do
+        end do
+      end do
+    end do
+    if (normDropped > mRoundOff * normKept) then
+      call ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_)
+      return
+    end if
+
     ! Orbitals on the angular nodes, flattened to (node point, orbital)
     allocate (orbNodes(nPts, nOS), dOrbNodes(nPts, nOS))
     dOrbNodes(:, :) = 0.0_R64
@@ -981,14 +1029,14 @@ contains
     !$omp parallel do default(shared) private(i1, nodes)
     do i1 = 1, nOS
       nodes(1:nRad, 1:nNodes) => orbNodes(:, i1)
-      call Grid_Ylm_ToNodesM0(nodes, orbs(:, i1), lmax)
+      call Grid_Ylm_ToNodes(nodes, orbs(:, i1), lmax, mOrb(i1))
     end do
     !$omp end parallel do
 
     ! Quadrature weights of the full measure
     allocate (weightNodes(nPts))
     weightNodes(:) = reshape(spread(Grid_Ylm_radialWeights(:), 2, nNodes) * &
-                             spread(Grid_Ylm_nodeWeightsM0(:), 1, nRad), [nPts])
+                             spread(Grid_Ylm_nodeWeights(:), 1, nRad), [nPts])
 
     ! Ordered pairs (k2,l2) of equal body type
     nPairs = 0
@@ -997,44 +1045,65 @@ contains
         if (Method_Mb_OrbBased_bodyTypeOfOrb(l2) .eq. Method_Mb_OrbBased_bodyTypeOfOrb(k2)) nPairs = nPairs + 1
       end do
     end do
-    allocate (pairK2(nPairs), pairL2(nPairs), potNodes(nPts, nPairs))
+    allocate (pairK2(nPairs), pairL2(nPairs), pairM(nPairs), potNodes(nPts, nPairs))
 
-    ! Pair potentials V_(l2,k2) of the sources conjg(phi_l2) phi_k2 with radial
-    ! weights; the swapped pair uses V_(k2,l2) = conjg(V_(l2,k2))
-    allocate (srcNodes(nPts))
-    allocate (src(Grid_Ylm_NChannels(lmaxPot, 0) * nRad))
+    ! Pair list: every unordered pair (k2 >= l2) is followed by its swap
     iP = 0
     do l2 = 1, nOS
       do k2 = l2, nOS
         if (Method_Mb_OrbBased_bodyTypeOfOrb(l2) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(k2)) cycle
-
-        srcNodes(:) = conjg(orbNodes(:, l2)) * orbNodes(:, k2)
-        nodes(1:nRad, 1:nNodes) => srcNodes
-        call Grid_Ylm_FromNodesM0(src, nodes, lmaxPot, withWeightsQ_=.true.)
-        call SysInteraction_FillInteractionPotential(pot, src, time, -1, -1)
-
         iP = iP + 1
         pairK2(iP) = k2
         pairL2(iP) = l2
-        nodes(1:nRad, 1:nNodes) => potNodes(:, iP)
-        call Grid_Ylm_ToNodesM0(nodes, pot, lmaxPot)
-
+        pairM(iP) = mOrb(k2) - mOrb(l2)
         if (k2 .ne. l2) then
           iP = iP + 1
           pairK2(iP) = l2
           pairL2(iP) = k2
-          potNodes(:, iP) = conjg(potNodes(:, iP - 1))
+          pairM(iP) = -pairM(iP - 1)
         end if
       end do
     end do
 
+    ! Pair potentials V_(l2,k2) of the sources conjg(phi_l2) phi_k2 with radial
+    ! weights (m = m_k2 - m_l2; zero beyond the |m| cap of the potentials); the
+    ! swapped pair uses V_(k2,l2) = conjg(V_(l2,k2))
+    !$omp parallel default(shared) private(iP, k2, l2, srcNodes, src, pot, nodes)
+    allocate (srcNodes(nPts))
+    allocate (src(Grid_Ylm_NChannels(lmaxPot, mmaxPot) * nRad))
+    !$omp do schedule(dynamic)
+    do iP = 1, nPairs
+      k2 = pairK2(iP)
+      l2 = pairL2(iP)
+      if (k2 < l2) cycle
+
+      if (abs(pairM(iP)) <= mmaxPot) then
+        srcNodes(:) = conjg(orbNodes(:, l2)) * orbNodes(:, k2)
+        nodes(1:nRad, 1:nNodes) => srcNodes
+        call Grid_Ylm_FromNodes(src, nodes, lmaxPot, pairM(iP), mmax_=mmaxPot, withWeightsQ_=.true.)
+        call SysInteraction_FillInteractionPotential(pot, src, time, -1, -1)
+
+        nodes(1:nRad, 1:nNodes) => potNodes(:, iP)
+        call Grid_Ylm_ToNodes(nodes, pot, lmaxPot, pairM(iP), mmax_=mmaxPot)
+      else
+        potNodes(:, iP) = 0.0_R64
+      end if
+
+      if (k2 .ne. l2) potNodes(:, iP + 1) = conjg(potNodes(:, iP))
+    end do
+    !$omp end do
+    deallocate (srcNodes, src)
+    !$omp end parallel
+
     ! weights(k1, (iP,j1)) = rdm2spatial(k1,k2,j1,l2) for the pair iP = (k2,l2)
+    ! and m_k1 + m_iP = m_j1
     allocate (weights(nOS, nPairs * nOS))
     weights(:, :) = 0.0_R64
     do iP = 1, nPairs
       do j1 = 1, nOS
         do k1 = 1, nOS
           if (Method_Mb_OrbBased_bodyTypeOfOrb(j1) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(k1)) cycle
+          if (mOrb(k1) + pairM(iP) .ne. mOrb(j1)) cycle
           weights(k1, (iP - 1) * nOS + j1) = rdm2spatial(k1, pairK2(iP), j1, pairL2(iP))
         end do
       end do
@@ -1083,12 +1152,13 @@ contains
     end if
     !$omp end parallel
 
-    !   h2(i1,l2,j1,k2) = 1/2 <orb_i1| V_(l2,k2) |orb_j1>
+    !   h2(i1,l2,j1,k2) = 1/2 <orb_i1| V_(l2,k2) |orb_j1>,  m_j1 + m_iP = m_i1
     if (h2Q) then
       do iP = 1, nPairs
         do j1 = 1, nOS
           do i1 = 1, nOS
             if (Method_Mb_OrbBased_bodyTypeOfOrb(i1) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(j1)) cycle
+            if (mOrb(j1) + pairM(iP) .ne. mOrb(i1)) cycle
             h2_(i1, pairL2(iP), j1, pairK2(iP)) = 0.5_R64 * h2Pairs(i1, (iP - 1) * nOS + j1)
           end do
         end do
@@ -1101,7 +1171,7 @@ contains
     !$omp do
     do i1 = 1, nOS
       nodes(1:nRad, 1:nNodes) => dOrbNodes(:, i1)
-      call Grid_Ylm_FromNodesM0(dOrb, nodes, lmax)
+      call Grid_Ylm_FromNodes(dOrb, nodes, lmax, mOrb(i1))
       dOrbs(:, i1) = dOrbs(:, i1) + dOrb(:)
     end do
     !$omp end do
@@ -1117,6 +1187,35 @@ contains
         h2_(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:) = h2_(:nOS, :nOS, :nOS, :nOS)
       end if
     end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine OrbitalM(m, definiteQ, orb)
+    !---------------------------------------------------------------------------
+    ! m of the Ylm channels holding the largest part of orb; definiteQ is set
+    ! to .false. (never to .true.) if the other channels hold more than
+    ! mRoundOff of the squared norm. Smaller admixtures are round-off (e.g.
+    ! ~1e-16 from eigen-decompositions of overlap or density matrices with
+    ! degenerate m blocks in the relaxation) and are dropped by the node
+    ! quadrature.
+    !---------------------------------------------------------------------------
+    use M_Grid_Ylm
+
+    integer(I32), intent(out)            :: m
+    logical, intent(inout)               :: definiteQ
+    complex(R64), intent(in), contiguous :: orb(:)
+
+    real(R64) :: normM(-Grid_Ylm_mmax:Grid_Ylm_mmax)
+    integer(I32) :: i
+
+    normM(:) = 0.0_R64
+    do i = 1, size(orb)
+      normM(Grid_Ylm_mCoord(i)) = normM(Grid_Ylm_mCoord(i)) + abs(orb(i))**2
+    end do
+
+    m = maxloc(normM, 1) - Grid_Ylm_mmax - 1
+    if (sum(normM) - normM(m) > mRoundOff * sum(normM)) definiteQ = .false.
 
   end subroutine
 

@@ -301,22 +301,37 @@ exact energy conservation and natural occupations against the unrestricted
 reference) and `...WeakOrbsSplit` (unrestricted, split step against that
 reference).
 
-### Axially Symmetric Ylm Fast Path
+### Definite-m Ylm Fast Path
 
-For Hermitian Ylm grids with `grid.ylm.mmax = 0` and a body-type-independent
-Ylm interaction, `Method_Mb_OrbBased_ApplyCorrelationOp` is bound to
-`ApplyCorrelationOpYlmM0`: orbitals, pair densities and pair potentials are
-evaluated on the Gauss–Legendre nodes in cos θ (`Grid_Ylm_ToNodesM0`; pair
-sources come back with radial weights via `Grid_Ylm_FromNodesM0(...,
-withWeightsQ_=.true.)`), the
-2-RDM-weighted orbital combinations are formed before multiplying with the
-potential, and every product is pointwise. The node count makes all angular
-integrals exact, so results equal the generic operator to round-off while the
-cost per pair drops from n spatial products to O(1) transforms. The potentials
-of all ordered pairs are stored on the nodes; the pointwise sums then run over
-cache-sized blocks of nodes with two ZGEMMs per block (the 2-RDM-weighted
-combinations χ for all (pair, j1) and the h2 quadratures), leaving only V·χ
-elementwise.
+For Hermitian Ylm grids with a body-type-independent Ylm interaction,
+`Method_Mb_OrbBased_ApplyCorrelationOp` is bound to
+`ApplyCorrelationOpYlmNodes`. At every call it determines the m of each
+orbital (the m channels holding all but a 1e-12 fraction of its squared norm;
+smaller admixtures are round-off, e.g. ~1e-16 left by the eigen-decompositions
+of overlap matrices with degenerate m blocks in the imaginary-time relaxation,
+and are dropped); if every orbital has a definite m (m = 0 orbitals on a `grid.ylm.mmax = 0`
+grid, or the orbitals of an atom in a linearly polarized field, e.g. Ne 2p with
+m = −1, 0, 1) orbitals, pair densities and pair potentials are evaluated on the
+Gauss–Legendre nodes in cos θ (`Grid_Ylm_ToNodes`; pair sources come back with
+radial weights via `Grid_Ylm_FromNodes(..., withWeightsQ_=.true.)`), otherwise
+the generic operator is used. The pair (l2, k2) carries M = m_k2 − m_l2; only
+the terms m_k1 + M = m_j1 in the correlation sum and m_j1 + M = m_i1 in h2 are
+kept. The dropped h2 terms vanish by the φ integral, the dropped correlation
+terms only for an M-conserving many-body state (their 2-RDM weights vanish);
+if those weights exceed the same 1e-12 fraction, the generic operator is used.
+Pairs with |M| above the |m| cap of the potentials are dropped, as in the
+generic operator. The 2-RDM-weighted
+orbital combinations are formed before multiplying with the potential, and
+every product is pointwise. The node count makes all angular integrals exact,
+so results equal the generic operator to round-off (the Ne3d MCTDHX tests with
+2p orbitals: final dipoles agree to 2e-15) while the cost per pair drops from
+n spatial products to O(1) transforms. The potentials of all ordered pairs are
+stored on the nodes (computed in parallel over the unordered pairs); the
+pointwise sums then run over cache-sized blocks of nodes with two ZGEMMs per
+block (the 2-RDM-weighted combinations χ for all (pair, j1) and the h2
+quadratures), leaving only V·χ elementwise. One MCTDHX non-linear derivative
+of Ne with 9 orbitals (1s 2s 2p 3s 3p, lmax 40, mmax 1): 3.4 s instead of 27 s
+with 1041 radial points on one thread; 0.73 s with 761 points on four threads (3.7 s generic).
 
 ---
 

@@ -2,7 +2,7 @@
 ! Helpers shared by the beryllium programs (included after `contains`).
 !
 ! - EmbedOrbitals:        load orbXX_YY.in written on a grid with a smaller
-!                         lmax (same radial grid, mmax = 0)
+!                         lmax (same radial grid and mmax)
 ! - TransformOrbitalsKeepingState:
 !                         in-space orbital transformation phi -> phi A with the
 !                         compensating CI transformation, so that the
@@ -14,8 +14,8 @@
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Fill the orbitals from orbXX_YY.in files written on a Ylm grid with the same
-!> radial grid but a smaller lmax (lmaxIn). With mmax = 0 the channel layout
-!> is l-major, so the stored orbital is a prefix of the current one and the
+!> radial grid and mmax but a smaller lmax (lmaxIn). The channel layout is
+!> l-major, so the stored orbital is a prefix of the current one and the
 !> missing high-l channels are zero.
 subroutine EmbedOrbitals(orbs, lmaxIn)
   use M_Utils_DataStorage
@@ -31,10 +31,9 @@ subroutine EmbedOrbitals(orbs, lmaxIn)
   character(len=256) :: filename
   integer(I32) :: nBt, ibt, index, i1, nIn
 
-  if (Grid_Ylm_mmax .ne. 0) error stop "EmbedOrbitals requires grid.ylm.mmax = 0"
   if (lmaxIn > Grid_Ylm_lmax) error stop "EmbedOrbitals: lmaxIn exceeds grid.ylm.lmax"
 
-  nIn = (lmaxIn + 1) * Grid_Ylm_nRadial
+  nIn = Grid_Ylm_NChannels(lmaxIn, Grid_Ylm_mmax) * Grid_Ylm_nRadial
   allocate (orbIn(nIn))
 
   nBt = Method_Mb_nBodyTypes

@@ -27,24 +27,37 @@ module M_Grid_Ylm
   end interface
 
   interface
-    !> Evaluate an axially symmetric (m = 0) field f(r, l), 0 <= l <= lmax, on
-    !> the Gauss-Legendre nodes in cos(theta): fNodes(r, q) = sum_l f_l(r) Y_l0(x_q).
-    !> Requires lmax <= Grid_Ylm_lmaxNodesM0.
-    module subroutine Grid_Ylm_ToNodesM0(fNodes, f, lmax)
+    !> Evaluate the channels (l, m), |m| <= l <= lmax, of a field with a fixed
+    !> m on the Gauss-Legendre nodes in cos(theta):
+    !>   fNodes(r, q) = sum_l f_lm(r) Theta_lm(x_q),  Y_lm = Theta_lm(theta) e^(i m phi),
+    !> with Theta_lm real. The phase e^(i m phi) is implicit: the pointwise
+    !> product of node fields with m1 and m2 represents m1 + m2, the complex
+    !> conjugate -m. f has the channel layout (lmax, mmax_) (default
+    !> Grid_Ylm_mmax); channels with another m are ignored.
+    !> Requires lmax <= Grid_Ylm_lmaxNodes and |m| <= min(Grid_Ylm_mmaxNodes, mmax_).
+    module subroutine Grid_Ylm_ToNodes(fNodes, f, lmax, m, mmax_)
       complex(R64), intent(out), contiguous :: fNodes(:, :)
       complex(R64), intent(in), contiguous  :: f(:)
       integer(I32), intent(in)              :: lmax
+      integer(I32), intent(in)              :: m
+      integer(I32), intent(in), optional    :: mmax_
     end subroutine
 
-    !> Project a field given on the Gauss-Legendre nodes onto Y_l0, l <= lmax:
-    !> f_l(r) = sum_q Grid_Ylm_nodeWeightsM0(q) Y_l0(x_q) fNodes(r, q). Exact for
-    !> fNodes of total angular degree <= 2 Grid_Ylm_nNodesM0 - 1 - lmax.
-    !> withWeightsQ_: when true, multiplies every output channel l <= lmax by
-    !> Grid_Ylm_radialMetricWeights (as in Grid_Ylm_SpatialProduct); default .false.
-    module subroutine Grid_Ylm_FromNodesM0(f, fNodes, lmax, withWeightsQ_)
+    !> Project a field with a fixed m given on the Gauss-Legendre nodes onto
+    !> Y_lm, |m| <= l <= lmax:
+    !>   f_lm(r) = sum_q Grid_Ylm_nodeWeights(q) Theta_lm(x_q) fNodes(r, q).
+    !> f has the channel layout (lmax, mmax_) (default Grid_Ylm_mmax); all
+    !> other channels are set to zero. Exact for fNodes of total angular degree
+    !> <= 2 Grid_Ylm_nNodes - 1 - lmax (in cos(theta), counting the
+    !> sin(theta)^|m| factors). withWeightsQ_: when true, multiplies every output
+    !> channel by Grid_Ylm_radialMetricWeights (as in Grid_Ylm_SpatialProduct);
+    !> default .false.
+    module subroutine Grid_Ylm_FromNodes(f, fNodes, lmax, m, mmax_, withWeightsQ_)
       complex(R64), intent(out), contiguous :: f(:)
       complex(R64), intent(in), contiguous  :: fNodes(:, :)
       integer(I32), intent(in)              :: lmax
+      integer(I32), intent(in)              :: m
+      integer(I32), intent(in), optional    :: mmax_
       logical, intent(in), optional         :: withWeightsQ_
     end subroutine
   end interface
@@ -71,13 +84,15 @@ module M_Grid_Ylm
   !> basis for problems that conserve m (e.g. linearly polarized lasers).
   integer(I32) :: Grid_Ylm_mmax
 
-  !> Gauss-Legendre representation of axially symmetric (m = 0) fields, set
-  !> up with the grid: number of nodes in cos(theta), largest l covered by
-  !> the tables, and angular weights 2 pi w_q (sum_q weight = 4 pi). The
-  !> tables cover 0 <= l <= Grid_Ylm_lmaxNodesM0.
-  integer(I32) :: Grid_Ylm_nNodesM0 = 0
-  integer(I32) :: Grid_Ylm_lmaxNodesM0 = -1
-  real(R64), allocatable :: Grid_Ylm_nodeWeightsM0(:)
+  !> Gauss-Legendre representation in cos(theta) of fields with a fixed m
+  !> (Grid_Ylm_ToNodes), set up with the grid: number of nodes, largest l and
+  !> |m| covered by the tables, and angular weights 2 pi w_q (sum = 4 pi). The
+  !> tables cover l <= 2 lmax + 2 and |m| <= min(2 mmax, 2 lmax + 2), i.e.
+  !> orbitals, pair densities and pair potentials.
+  integer(I32) :: Grid_Ylm_nNodes = 0
+  integer(I32) :: Grid_Ylm_lmaxNodes = -1
+  integer(I32) :: Grid_Ylm_mmaxNodes = -1
+  real(R64), allocatable :: Grid_Ylm_nodeWeights(:)
 
   !> Maximum radius value rmax of the radial grid.
   real(R64) :: Grid_Ylm_rmax
