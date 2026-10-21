@@ -110,13 +110,13 @@ Module doc: `src/ConfigList/A_ConfigList.md`.
 **Method**
 Domain: Dynamics & Propagation.
 Purpose: Unified method time-derivative interface for propagators.
-Key interfaces/notes: `Method_TimeDerivative(dState, state, t)`; includes Sb, TDHX, TDCI, MCTDHX, and TD-2RDM variants; optional exact field-free one-body propagation on Ylm grids (`method.mb.orbBased.exactFieldFreeQ`, `Method_PropagateExactPart`, cuBLAS via `exactFieldFreeGpuQ`, spectral cut via `exactFieldFreeCut`).
+Key interfaces/notes: `Method_TimeDerivative(dState, state, t)`; includes Sb, TDHX, TDCI, MCTDHX, and TD-2RDM variants; optional exact field-free one-body propagation on Ylm grids (`method.mb.orbBased.exactFieldFreeQ`, `Method_PropagateExactPart`, cuBLAS via `exactFieldFreeGpuQ`, spectral cut via `exactFieldFreeCut`, phi functions `Method_ApplyExactPartPhi` for exponential integrators).
 Module doc: `src/Method/A_Method.md`.
 
 **Propagator**
 Domain: Dynamics & Propagation.
 Purpose: Time-evolution facade for state propagation.
-Key interfaces/notes: `Propagator_Propagate(state, t0, t1)`; supports single integrator, split-step (order2/order4), and eigen-expansion modes; split-step linear steps compose an exactly propagated part with integrator 1 (`exactPartScheme`: strang, yoshida4, blanesMoan6).
+Key interfaces/notes: `Propagator_Propagate(state, t0, t1)`; supports single integrator, split-step (order2/order4), and eigen-expansion modes; split-step linear steps compose an exactly propagated part with integrator 1 (`exactPartScheme`: strang, yoshida4, blanesMoan6); `exponential` integrators (krogstad4, adams, adamsLawson) treat that part exactly without splitting.
 Module doc: `src/Propagator/A_Propagator.md`.
 
 **IntegratorList**

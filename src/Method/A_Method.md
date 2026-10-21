@@ -239,6 +239,16 @@ state is a jump). For Be HHG, Ec = 1000 with `strang` is ~2× faster per step
 than `blanesMoan6Swap` and shifts harmonics 21–60 by 0.02–0.04 decades
 (`app/be/README.md`). T_Ne3d_11 checks that no weight appears above the cut.
 
+**Phi functions.** MCTDHX with `exactFieldFreeQ` also binds
+`Method_ApplyExactPartPhi(res, vecs, dt)`: res = Σ_m φ_m(−i H0 dt) vecs(:, m+1)
+with φ_0(z) = e^z and φ_m(z) = (φ_{m−1}(z) − 1/(m−1)!)/z, H0 = h0 on the
+orbitals and 0 on the CI coefficients (φ_m(0) = 1/m!). The orbital part,
+`Method_Mb_OrbBased_ApplyFieldFreePhi`, transforms every vector into the h0
+eigenbasis (kept eigenvectors only), weights it with φ_m(−i E dt) (Taylor
+series for |z| < 1, recurrence otherwise) and transforms the sum back once
+(CPU only). It is consumed by the exponential integrators
+(`propagator.exponential`, src/Propagator/A_Propagator.md); real time only.
+
 Requirements (checked on the first exact step): Hermitian (non-ECS) Ylm grid, time- and
 body-type-independent kinetic and potential, central potential
 (`SysPotential_Ylm_lmax = 0`), no TD-2RDM weak orbitals. Memory: one real

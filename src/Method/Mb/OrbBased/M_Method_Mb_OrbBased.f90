@@ -67,6 +67,18 @@ module M_Method_Mb_OrbBased
       logical, intent(in) :: imagTimeQ
     end subroutine
 
+    !> Phi functions of the field-free one-body Hamiltonian:
+    !> orbs = sum_m phi_m(-i h0 dt) orbsList(:, :, m), evaluated in the
+    !> h0 eigenbasis (kept eigenvectors only) (S_Method_Mb_OrbBased_FieldFree).
+    module subroutine Method_Mb_OrbBased_ApplyFieldFreePhi(orbs, orbsList, dt)
+      !> Output: orbitals (nPoints x nOrbsInState).
+      complex(R64), intent(out), contiguous :: orbs(:, :)
+      !> Input: orbitals (nPoints x nOrbsInState x 0:K), slice m multiplies phi_m.
+      complex(R64), intent(in), contiguous :: orbsList(:, :, 0:)
+      !> Time step.
+      real(R64), intent(in) :: dt
+    end subroutine
+
     !> Projects orbitals (or orbital derivatives) onto the h0 eigenvectors
     !> below `Method_Mb_OrbBased_exactFieldFreeCut` (spectral cut), per (l,m)
     !> block (S_Method_Mb_OrbBased_FieldFree).

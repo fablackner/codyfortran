@@ -33,9 +33,18 @@ src/Propagator/
 │   └── Order4/
 │       ├── M_Propagator_SplitStep_Order4.f90  # 4th-order Yoshida composition
 │       └── S_Propagator_SplitStep_Order4.f90
-└── EigenExpansion/
-    ├── M_Propagator_EigenExpansion.f90   # Diagonalization-based propagation
-    └── S_Propagator_EigenExpansion.f90   # Exact exp(−iEᵢΔt) phase evolution
+├── EigenExpansion/
+│   ├── M_Propagator_EigenExpansion.f90   # Diagonalization-based propagation
+│   └── S_Propagator_EigenExpansion.f90   # Exact exp(−iEᵢΔt) phase evolution
+└── Exponential/
+    ├── M_Propagator_Exponential.f90      # Exponential integrators: factory + shared building blocks
+    ├── S_Propagator_Exponential.f90      # Scheme dispatch, Krogstad step, history helpers
+    ├── Adams/
+    │   ├── M_Propagator_Exponential_Adams.f90        # Exponential Adams PECE
+    │   └── S_Propagator_Exponential_Adams.f90
+    └── AdamsLawson/
+        ├── M_Propagator_Exponential_AdamsLawson.f90  # Adams PECE in the interaction picture
+        └── S_Propagator_Exponential_AdamsLawson.f90
 ```
 
 ### Design Pattern: Strategy + Facade
@@ -47,6 +56,7 @@ src/Propagator/
 | **Single** | Monolithic integration (no splitting) via IntegratorList |
 | **SplitStep** | Suzuki–Trotter operator decomposition |
 | **EigenExpansion** | Exact diagonalization + phase factors |
+| **Exponential** | Exponential integrators around the method's exactly propagated part |
 
 ---
 
@@ -62,7 +72,7 @@ src/Propagator/
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         Propagator_Fabricate()                               │
 │  1. Read JSON "propagator" block                                            │
-│  2. Dispatch to Single/SplitStep/EigenExpansion based on key               │
+│  2. Dispatch to Single/SplitStep/EigenExpansion/Exponential based on key   │
 │  3. Backend binds Propagator_Setup, Propagator_Propagate pointers          │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -187,6 +197,46 @@ Diagonalize once, apply phases forever. Best for time-independent Ĥ:
 }
 ```
 
+### Exponential Integrators
+
+For u' = L u + N(t, u) with L the exactly propagated part of the method
+(`Method_PropagateExactPart` and its phi functions `Method_ApplyExactPartPhi`,
+e.g. h0 with `method.mb.orbBased.exactFieldFreeQ`) and N the sum of the
+TimeDerivative callbacks of IntegratorList(1) and IntegratorList(2) (their
+Integrate procedures are not used). There is no operator splitting between L
+and N; real time only.
+
+| scheme | order | N per step | notes |
+|---|---|---|---|
+| `"krogstad4"` | 4 | 4 | exponential Runge–Kutta (Krogstad 2005), one step |
+| `"adams"` | k + 1 | 2 | exponential Adams PECE, `nSteps` = k (1..6, default 4) |
+| `"adamsLawson"` | k + 1 | 2 | Adams PECE in the interaction picture of L (Auzinger et al. 2021), `nSteps` = k |
+
+The multistep schemes need a fixed step size: a step that does not continue
+the previous one (other t0 or step size) restarts the history with Krogstad
+steps. A state changed between steps (absorber) is used as it is.
+
+They interpolate N (or, for `adamsLawson`, N in the interaction picture) in
+time, so components of N that oscillate with the phases of L limit the step:
+h times the largest exactly propagated frequency (for the spectral cut,
+h · `exactFieldFreeCut`) should stay well below 1. On the Be HHG benchmark
+(velocity gauge, cut 1000, dt 0.0025) Strang splitting was the most accurate;
+`adams` was stable only with a cut of 300 (1.6× faster, harmonics 21–60 about
+0.2 decades further off), `adamsLawson` stayed stable at cut 1000 (1.75×
+faster, 0.4 decades), and `krogstad4` cost as much as Strang at 0.25 decades
+(app/be/README.md). They are options for observables less sensitive than
+high harmonics, e.g. ionization yields.
+
+```json
+{
+  "propagator": {
+    "exponential": {
+      "adams": { "nSteps": 4 }
+    }
+  }
+}
+```
+
 ---
 
 ## Public Interface
@@ -222,12 +272,14 @@ end subroutine
 | **SplitStep/Order2** | Strang ABA | O(Δt²) | 3 integrator calls | Separable Ĥ = T̂ + V̂ |
 | **SplitStep/Order4** | Yoshida ABABABA | O(Δt⁴) | 7 integrator calls | High accuracy, separable Ĥ |
 | **EigenExpansion** | Exact diagonalization | Machine precision | O(n²) matmul | Small dim, long times |
+| **Exponential** | Exponential RK / Adams around the exact part | O(Δt⁴) or O(Δt^(k+1)) | 2–4 N + phi combinations | Exact part dominant, no splitting |
 
 ### When to Use Each
 
 - **Single:** Default choice. Let the integrator (RK4, SIL, Expokit) handle everything.
 - **SplitStep:** When Ĥ = T̂ + V̂ where each part is cheap to apply (e.g., FFT for T̂, diagonal for V̂).
 - **EigenExpansion:** Small systems (dim ≲ 10⁴), time-independent Ĥ, need many time steps.
+- **Exponential:** The method propagates a stiff part exactly and provides its phi functions (MCTDHX with `exactFieldFreeQ`); no splitting error, but the step must resolve the exactly propagated frequencies coupled by N.
 
 ---
 
@@ -391,6 +443,9 @@ end program
 Relevant test patterns:
 - `T_*_Tdci*` — Tests using TDCI with various propagators
 - `T_*_Mctdhx*` — Tests using MCTDHX dynamics
+
+- `T_Propagator_Exponential` — convergence order and norm conservation of
+  the exponential integrators on a small model with exact test bindings
 
 Run propagator-related tests:
 ```bash

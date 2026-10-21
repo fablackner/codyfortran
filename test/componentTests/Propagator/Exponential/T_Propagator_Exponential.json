@@ -1,0 +1,15 @@
+{
+    "integratorList": {
+        "rk1": {
+            "o4Expl": { }
+        },
+        "rk2": {
+            "o4Expl": { }
+        }
+    },
+    "propagator": {
+        "exponential": {
+            "krogstad4": { }
+        }
+    }
+}

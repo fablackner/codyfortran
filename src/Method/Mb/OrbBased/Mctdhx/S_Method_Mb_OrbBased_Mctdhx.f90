@@ -33,7 +33,10 @@ contains
     Method_TimeDerivative => TimeDerivative
     Method_Mb_OrbBased_TimeDerivativeOrbsLin => TimeDerivativeOrbsLin
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin => TimeDerivativeCoeffsPlusOrbsNonLin
-    if (Method_Mb_OrbBased_exactFieldFreeQ) Method_PropagateExactPart => PropagateExactPart
+    if (Method_Mb_OrbBased_exactFieldFreeQ) then
+      Method_PropagateExactPart => PropagateExactPart
+      Method_ApplyExactPartPhi => ApplyExactPartPhi
+    end if
 
   end subroutine
 
@@ -203,6 +206,42 @@ contains
 
     call GetOrbs(orbs, state)
     call Method_Mb_OrbBased_PropagateFieldFree(orbs, t1 - t0, imagTimeQ)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Phi functions of the exact part: field-free h0 on the orbitals, zero
+  !> generator (phi_m(0) = 1/m!) on the CI coefficients.
+  subroutine ApplyExactPartPhi(res, vecs, dt)
+    use M_Grid
+    use M_Orbs
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(out), contiguous, target :: res(:)
+    complex(R64), intent(in), contiguous, target :: vecs(:, :)
+    real(R64), intent(in) :: dt
+
+    complex(R64), contiguous, pointer :: coeffs(:), orbs(:, :)
+    complex(R64), contiguous, pointer :: coeffsM(:), orbsM(:, :)
+    complex(R64), allocatable :: orbsList(:, :, :)
+    real(R64) :: invFactorial
+    integer(I32) :: m
+
+    call GetCoeffs(coeffs, res)
+    call GetOrbs(orbs, res)
+    allocate (orbsList(Grid_nPoints, Orbs_nOrbsInState, 0:size(vecs, 2) - 1))
+
+    coeffs(:) = (0.0_R64, 0.0_R64)
+    invFactorial = 1.0_R64
+    do m = 0, size(vecs, 2) - 1
+      if (m > 0) invFactorial = invFactorial / real(m, kind=R64)
+      call GetCoeffs(coeffsM, vecs(:, m + 1))
+      call GetOrbs(orbsM, vecs(:, m + 1))
+      coeffs(:) = coeffs(:) + invFactorial * coeffsM(:)
+      orbsList(:, :, m) = orbsM(:, :)
+    end do
+
+    call Method_Mb_OrbBased_ApplyFieldFreePhi(orbs, orbsList, dt)
 
   end subroutine
 

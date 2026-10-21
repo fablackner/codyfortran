@@ -8,6 +8,7 @@
 !> - `single`: Direct time integration via IntegratorList (RK, SIL, etc.)
 !> - `splitStep`: Suzuki–Trotter factorization (order2, order4)
 !> - `eigenExpansion`: Diagonalization + phase evolution
+!> - `exponential`: Exponential integrators around the exactly propagated part
 !>
 !> Exactly one backend key must be present under `"propagator"`.
 submodule(M_Propagator) S_Propagator
@@ -23,6 +24,7 @@ contains
 !>   1. `"propagator.single"` → Propagator_Single_Fabricate
 !>   2. `"propagator.splitStep"` → Propagator_SplitStep_Fabricate
 !>   3. `"propagator.eigenExpansion"` → Propagator_EigenExpansion_Fabricate
+!>   4. `"propagator.exponential"` → Propagator_Exponential_Fabricate
 !>
 !> On success, the module-level procedure pointers `Propagator_Setup` and
 !> `Propagator_Propagate` are bound to the chosen backend's implementations.
@@ -32,6 +34,7 @@ contains
     use M_Propagator_Single
     use M_Propagator_SplitStep
     use M_Propagator_EigenExpansion
+    use M_Propagator_Exponential
 
     call Say_Fabricate("propagator")
 
@@ -52,8 +55,11 @@ contains
     else if (Json_GetExistence("propagator.eigenExpansion")) then
       call Propagator_EigenExpansion_Fabricate
 
+    else if (Json_GetExistence("propagator.exponential")) then
+      call Propagator_Exponential_Fabricate
+
     else
-      error stop "propagator is missing one of: single, splitStep, eigenExpansion"
+      error stop "propagator is missing one of: single, splitStep, eigenExpansion, exponential"
     end if
 
   end subroutine

@@ -132,4 +132,23 @@ module M_Method
     end subroutine
   end interface
 
+  !> Pointer to the phi functions of the exactly propagated part, for
+  !> exponential integrators (propagator.exponential); unassociated if the
+  !> method does not provide them.
+  procedure(I_Method_ApplyExactPartPhi), pointer :: Method_ApplyExactPartPhi => null()
+  abstract interface
+    !> res = sum_m phi_m(-i H0 dt) vecs(:, m), m = 0 .. size(vecs, 2) - 1,
+    !> with phi_0(z) = exp(z) and phi_m(z) = (phi_{m-1}(z) - 1/(m-1)!) / z
+    !> (H0 the generator of `Method_PropagateExactPart`, real time only).
+    subroutine I_Method_ApplyExactPartPhi(res, vecs, dt)
+      import :: R64
+      !> Output: linear combination of the phi functions applied to vecs.
+      complex(R64), intent(out), contiguous, target :: res(:)
+      !> Input: vectors (state size x (K + 1)), column m + 1 multiplies phi_m.
+      complex(R64), intent(in), contiguous, target :: vecs(:, :)
+      !> Time step.
+      real(R64), intent(in) :: dt
+    end subroutine
+  end interface
+
 end module

@@ -147,6 +147,25 @@ at dt = 0.005 every scheme, with or without cut, is off by ~0.5 decades above
 harmonic 20. MCTDHF only; TD-2RDM inputs stay uncut, so use it for MCTDHF
 studies, not for the MCTDHF/TD-2RDM comparison.
 
+**Exponential integrators (`propagator.exponential`, not the default).** Same
+small grid and pulse, 4 threads, against the uncut reference (Strang with cut
+1000 at dt 0.0025: harmonics 21–40 / 41–60 off by 0.019 / 0.036 decades,
+2266 s):
+
+| scheme | cut | dt | h21–40 / h41–60 | wall |
+|---|---|---|---|---|
+| `adamsLawson`, k = 4 | 1000 | 0.0025 | 0.36 / 0.42 | 1298 s |
+| `adams`, k = 4 | 300 | 0.0025 | 0.19 / 0.23 | 1450 s |
+| `adams`, k = 4 | 100 | 0.005 | 0.70 / 0.52 | 723 s |
+| `krogstad4` | 1000 | 0.0025 | 0.28 / 0.26 | 2418 s |
+
+N itself is not stiff (Jacobian spectral radius ~26 a.u. at the ground
+state). What limits these schemes is that N couples orbital components
+oscillating with h0 frequencies up to the cut (2.5 rad per step at cut 1000,
+dt 0.0025), which the interpolation of N in time cannot follow: `adams`
+diverges at cut 1000 for k ≥ 3 and runs stably at cut 300. Splitting avoids
+the interpolation (N is integrated with h0 frozen).
+
 **Purification.** With `conserveEnergyQ` the D/Q correction is orthogonal to
 h2, so `laser/P_LaserTd2rdm` rebuilds h2 from the current orbitals before
 every purification (previously h2 was refreshed only at output steps). With

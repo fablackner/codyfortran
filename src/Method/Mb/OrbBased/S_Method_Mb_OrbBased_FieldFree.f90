@@ -97,6 +97,93 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_ApplyFieldFreePhi(orbs, orbsList, dt)
+    !---------------------------------------------------------------------------
+    ! Per block: every slice is transformed to the eigenbasis, weighted with
+    ! phi_m(-i E dt) and summed; one back transformation (CPU only, the host
+    ! keeps the eigenvectors also in the GPU variant).
+    !---------------------------------------------------------------------------
+    use M_Utils_BlasLib, only: DGEMM
+    use M_Grid_Ylm
+
+    complex(R64), intent(out), contiguous :: orbs(:, :)
+    complex(R64), intent(in), contiguous :: orbsList(:, :, 0:)
+    real(R64), intent(in) :: dt
+
+    integer(I32) :: nRad, nPhi, l, nCol, nK, m, k
+    real(R64), allocatable :: x(:, :), y(:, :)
+    complex(R64), allocatable :: phi(:, :), acc(:, :)
+
+    if (.not. allocated(blockEvecs)) call BuildBlocks
+
+    nRad = Grid_Ylm_nRadial
+    nPhi = size(orbsList, 3)
+    orbs(:, :) = (0.0_R64, 0.0_R64)
+
+    !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, m, k, x, y, phi, acc)
+    do l = 0, Grid_Ylm_lmax
+      nCol = NColumns(l, size(orbs, 2))
+      nK = nKeep(l)
+      allocate (x(nRad, 2 * nCol), y(nK, 2 * nCol), phi(nK, 0:nPhi - 1), acc(nK, nCol))
+
+      do k = 1, nK
+        phi(k, :) = PhiFunctions(cmplx(0.0_R64, -blockEvals(k, l) * dt, kind=R64), nPhi - 1)
+      end do
+
+      acc(:, :) = (0.0_R64, 0.0_R64)
+      do m = 0, nPhi - 1
+        call GatherBlock(x, orbsList(:, :, m), l)
+        call DGEMM('T', 'N', nK, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, :, l), nRad, x, nRad, 0.0_R64, y, nK)
+        acc(:, :) = acc(:, :) + spread(phi(:, m), 2, nCol) * cmplx(y(:, 1:nCol), y(:, nCol + 1:), kind=R64)
+      end do
+
+      y(:, 1:nCol) = real(acc, kind=R64)
+      y(:, nCol + 1:) = aimag(acc)
+      call DGEMM('N', 'N', nRad, 2 * nCol, nK, 1.0_R64, blockEvecs(:, :, l), nRad, y, nK, 0.0_R64, x, nRad)
+      call ScatterBlock(orbs, x, l)
+
+      deallocate (x, y, phi, acc)
+    end do
+    !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> phi_0(z) ... phi_K(z): Taylor series for |z| < 1 (the recurrence
+  !> phi_m = (phi_{m-1} - 1/(m-1)!) / z cancels there), the recurrence otherwise.
+  pure function PhiFunctions(z, nMax) result(res)
+    complex(R64), intent(in) :: z
+    integer(I32), intent(in) :: nMax
+    complex(R64) :: res(0:nMax)
+
+    integer(I32), parameter :: nTaylor = 30
+    integer(I32) :: m, j
+    complex(R64) :: term
+    real(R64) :: invFactorial
+
+    if (abs(z) < 1.0_R64) then
+      do m = 0, nMax
+        ! sum_j z^j / (j + m)!
+        invFactorial = 1.0_R64 / gamma(real(m + 1, kind=R64))
+        term = cmplx(invFactorial, 0.0_R64, kind=R64)
+        res(m) = term
+        do j = 1, nTaylor
+          term = term * z / real(j + m, kind=R64)
+          res(m) = res(m) + term
+        end do
+      end do
+    else
+      res(0) = exp(z)
+      invFactorial = 1.0_R64
+      do m = 1, nMax
+        res(m) = (res(m - 1) - invFactorial) / z
+        invFactorial = invFactorial / real(m, kind=R64)
+      end do
+    end if
+
+  end function
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine PropagateFieldFreeGpu(orbs, dt, imagTimeQ)
     !---------------------------------------------------------------------------
     ! GPU variant (method.mb.orbBased.exactFieldFreeGpuQ): the eigenvectors
