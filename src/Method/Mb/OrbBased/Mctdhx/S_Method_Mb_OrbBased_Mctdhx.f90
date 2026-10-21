@@ -178,6 +178,7 @@ contains
     call GetOrbs(dOrbs, dState)
 
     call Method_Mb_OrbBased_ApplyLinOp(dOrbs, orbs, time)
+    call Method_Mb_OrbBased_ApplySpectralCut(dOrbs)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
 
@@ -251,6 +252,7 @@ contains
 
     call Coeffs_ProjectOnSubspace(dCoeffs, coeffs)
     call Orbs_ProjectOnSubspace(dOrbs, orbs)
+    call Method_Mb_OrbBased_ApplySpectralCut(dOrbs)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
 

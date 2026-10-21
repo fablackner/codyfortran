@@ -61,6 +61,11 @@ PRODUCTION = {
     # src/Method/A_Method.md); same accuracy as SIL at this dt, 2.5-5x faster
     # (README); not available with weak orbitals
     "exactFieldFree": True,
+    # spectral cut of h0 for MCTDHF (method.mb.orbBased.exactFieldFreeCut,
+    # 0 = off): drops the h0 eigenvectors above it, which makes the plain
+    # Strang composition as accurate as Blanes-Moan, ~2x faster per step, at a
+    # 0.02-0.04 decade change of harmonics 21-60 (README); TD-2RDM is not cut
+    "spectralCut": 0.0,
     # run the exact field-free transformations with cuBLAS (requires a build
     # with cmake -DCODY_USE_CUDA=ON)
     "gpu": False,
@@ -94,6 +99,8 @@ def method(p, kind):
         orb_based["exactFieldFreeQ"] = True
         if p["gpu"]:
             orb_based["exactFieldFreeGpuQ"] = True
+        if kind == "mctdhx" and p["spectralCut"] > 0.0:
+            orb_based["exactFieldFreeCut"] = p["spectralCut"]
     return {"mb": {"nBodyTypes": 2, "nBodies": [2, 2], "bodyStatistics": ["f", "f"],
                    "orbBased": orb_based}}
 
@@ -104,14 +111,18 @@ def purification():
                                    "conserveEnergyQ": False}}}
 
 
-def propagator(p):
+def propagator(p, kind):
     # second-order split step; with the exact field-free propagator the linear
     # step is the fourth-order Blanes-Moan composition of exp(-i h0 dt) and
     # the gauge SIL (src/Propagator/A_Propagator.md); the swapped variant has
-    # 6 instead of 7 exact substeps at the same accuracy (README)
+    # 6 instead of 7 exact substeps at the same accuracy (README). With the
+    # spectral cut the Strang composition suffices.
     split = {"order2": {}}
     if p["exactFieldFree"]:
-        split["exactPartScheme"] = "blanesMoan6Swap"
+        if kind == "mctdhx" and p["spectralCut"] > 0.0:
+            split["exactPartScheme"] = "strang"
+        else:
+            split["exactPartScheme"] = "blanesMoan6Swap"
     return {"splitStep": split}
 
 
@@ -179,7 +190,7 @@ def time_average(p):
     d["orbsInit"] = {"load": {}}
     d.update(two_rdm())
     d.update(split_step())
-    d["propagator"] = propagator(p)
+    d["propagator"] = propagator(p, "td2rdm")
     if p["purifyAverageQ"]:
         d["purification"] = purification()
     d["program"] = {"averagingTime": p["averagingTime"], "outputStep": p["outputStep"],
@@ -204,7 +215,7 @@ def laser(p, pulse, kind):
         if pulse["purification"]:
             d["purification"] = purification()
     d.update(split_step())
-    d["propagator"] = propagator(p)
+    d["propagator"] = propagator(p, kind)
     d["absorber"] = {"ylm": {"cosinus": {"onset": p["absorberOnset"],
                                          "order": p["absorberOrder"]}}}
     duration = 2.0 * math.pi * pulse["nCycles"] / OMEGA
@@ -235,6 +246,10 @@ def main():
     ap.add_argument("--no-exact-field-free", action="store_true",
                     help="propagate the whole one-body part with SIL instead of "
                          "the exact field-free propagator")
+    ap.add_argument("--spectral-cut", type=float, default=PRODUCTION["spectralCut"],
+                    metavar="ECUT",
+                    help="MCTDHF only: drop the h0 eigenvectors above ECUT a.u. "
+                         "and use the Strang composition (e.g. 1000; default: 0, off)")
     ap.add_argument("--gpu", action="store_true",
                     help="exact field-free transformations on the GPU (cuBLAS; "
                          "build with cmake -DCODY_USE_CUDA=ON)")
@@ -248,10 +263,16 @@ def main():
         p["exactFieldFree"] = False
     if args.gpu:
         p["gpu"] = True
+    p["spectralCut"] = args.spectral_cut
     if p["nWeakOrbs"] > 0 and p["exactFieldFree"]:
         # TD-2RDM weak orbitals replace h by H_L; keep both methods on one scheme
         print("note: --nweak-orbs switches off the exact field-free propagator")
         p["exactFieldFree"] = False
+    if p["spectralCut"] > 0.0:
+        if not p["exactFieldFree"]:
+            ap.error("--spectral-cut requires the exact field-free propagator")
+        print("note: the spectral cut changes the MCTDHF model only; TD-2RDM "
+              "inputs stay uncut and are not directly comparable")
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inputs")
     if args.test:
         out = args.test

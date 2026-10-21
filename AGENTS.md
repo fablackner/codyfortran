@@ -110,7 +110,7 @@ Module doc: `src/ConfigList/A_ConfigList.md`.
 **Method**
 Domain: Dynamics & Propagation.
 Purpose: Unified method time-derivative interface for propagators.
-Key interfaces/notes: `Method_TimeDerivative(dState, state, t)`; includes Sb, TDHX, TDCI, MCTDHX, and TD-2RDM variants; optional exact field-free one-body propagation on Ylm grids (`method.mb.orbBased.exactFieldFreeQ`, `Method_PropagateExactPart`, cuBLAS via `exactFieldFreeGpuQ`).
+Key interfaces/notes: `Method_TimeDerivative(dState, state, t)`; includes Sb, TDHX, TDCI, MCTDHX, and TD-2RDM variants; optional exact field-free one-body propagation on Ylm grids (`method.mb.orbBased.exactFieldFreeQ`, `Method_PropagateExactPart`, cuBLAS via `exactFieldFreeGpuQ`, spectral cut via `exactFieldFreeCut`).
 Module doc: `src/Method/A_Method.md`.
 
 **Propagator**

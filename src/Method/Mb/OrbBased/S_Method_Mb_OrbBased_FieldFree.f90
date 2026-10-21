@@ -16,6 +16,13 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_FieldFree
   ! to radial unit vectors placed in all channels at once. Exact propagation
   ! removes the stiffness of h0 (centrifugal barrier and kinetic energy near
   ! the origin) from the Krylov integrator of the linear split step.
+  !
+  ! Spectral cut (method.mb.orbBased.exactFieldFreeCut = Ec): only the nKeep_l
+  ! eigenvectors with E < Ec are kept. The highest FEDVR eigenvalues (up to
+  ! ~1e5 a.u., from the dense Lobatto points at the element boundaries) are
+  ! unphysical; restricting the dynamics to P = sum_{E < Ec} |u><u| (exact
+  ! part on the kept vectors, P applied to the orbital derivatives) removes
+  ! them as a source of stiffness.
   !-----------------------------------------------------------------------------
 
   use, intrinsic :: iso_c_binding, only: c_ptr, c_null_ptr
@@ -34,6 +41,9 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_FieldFree
 
   !> Square roots of the radial metric weights.
   real(R64), allocatable :: sqrtWeights(:)
+
+  !> Number of kept eigenvectors per l (all without spectral cut), (0:lmax).
+  integer(I32), allocatable :: nKeep(:)
 
   !> GPU variant (method.mb.orbBased.exactFieldFreeGpuQ): eigenvectors on the
   !> device, device work arrays and the host staging buffer.
@@ -54,7 +64,7 @@ contains
     real(R64), intent(in) :: dt
     logical, intent(in) :: imagTimeQ
 
-    integer(I32) :: nRad, l, nCol
+    integer(I32) :: nRad, l, nCol, nK
     real(R64), allocatable :: x(:, :), y(:, :)
 
     if (.not. allocated(blockEvecs)) call BuildBlocks
@@ -66,16 +76,18 @@ contains
 
     nRad = Grid_Ylm_nRadial
 
-    !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, x, y)
+    !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, x, y)
     do l = 0, Grid_Ylm_lmax
       nCol = NColumns(l, size(orbs, 2))
-      allocate (x(nRad, 2 * nCol), y(nRad, 2 * nCol))
+      nK = nKeep(l)
+      allocate (x(nRad, 2 * nCol), y(nK, 2 * nCol))
 
-      ! Eigenbasis coefficients U^T x, phases, back transformation U y
+      ! Eigenbasis coefficients U^T x, phases, back transformation U y (kept
+      ! eigenvectors only, which also projects onto them)
       call GatherBlock(x, orbs, l)
-      call DGEMM('T', 'N', nRad, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, :, l), nRad, x, nRad, 0.0_R64, y, nRad)
+      call DGEMM('T', 'N', nK, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, :, l), nRad, x, nRad, 0.0_R64, y, nK)
       call ApplyPhases(y, l, dt, imagTimeQ)
-      call DGEMM('N', 'N', nRad, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, :, l), nRad, y, nRad, 0.0_R64, x, nRad)
+      call DGEMM('N', 'N', nRad, 2 * nCol, nK, 1.0_R64, blockEvecs(:, :, l), nRad, y, nK, 0.0_R64, x, nRad)
       call ScatterBlock(orbs, x, l)
 
       deallocate (x, y)
@@ -171,8 +183,15 @@ contains
       nCol = NColumns(l, nOS)
       offsetU = int(nRad, kind=I64) * nRad * l
       offsetX = blockSize * l
-      call CublasLib_Dgemm(transA, 'N', nRad, 2 * nCol, nRad, 1.0_R64, deviceEvecs, offsetU, nRad, &
-                           deviceIn, offsetX, nRad, 0.0_R64, deviceOut, offsetX, nRad)
+      ! kept eigenvectors only: U_K^T x has nKeep rows (the rows below are
+      ! not used by the back transformation U_K y)
+      if (transA .eq. 'T') then
+        call CublasLib_Dgemm('T', 'N', nKeep(l), 2 * nCol, nRad, 1.0_R64, deviceEvecs, offsetU, nRad, &
+                             deviceIn, offsetX, nRad, 0.0_R64, deviceOut, offsetX, nRad)
+      else
+        call CublasLib_Dgemm('N', 'N', nRad, 2 * nCol, nKeep(l), 1.0_R64, deviceEvecs, offsetU, nRad, &
+                             deviceIn, offsetX, nRad, 0.0_R64, deviceOut, offsetX, nRad)
+      end if
     end do
     call CublasLib_CopyToHost(hostBlocks, deviceOut, 0_I64)
 
@@ -235,11 +254,13 @@ contains
     complex(R64) :: c
 
     allocate (phase(size(y, 1)))
-    if (imagTimeQ) then
-      phase(:) = cmplx(exp(-blockEvals(:, l) * dt), 0.0_R64, kind=R64)
-    else
-      phase(:) = cmplx(cos(blockEvals(:, l) * dt), -sin(blockEvals(:, l) * dt), kind=R64)
-    end if
+    associate (evals => blockEvals(1:size(y, 1), l))
+      if (imagTimeQ) then
+        phase(:) = cmplx(exp(-evals * dt), 0.0_R64, kind=R64)
+      else
+        phase(:) = cmplx(cos(evals * dt), -sin(evals * dt), kind=R64)
+      end if
+    end associate
 
     nCol = size(y, 2) / 2
     do iCol = 1, nCol
@@ -249,6 +270,43 @@ contains
         y(k, nCol + iCol) = aimag(c)
       end do
     end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_ProjectBelowFieldFreeCut(orbs)
+    !---------------------------------------------------------------------------
+    ! orbs <- P orbs with P = 1 - U_H U_H^T per block in the symmetrized basis,
+    ! U_H the eigenvectors above the cut (few compared to the kept ones).
+    !---------------------------------------------------------------------------
+    use M_Utils_BlasLib, only: DGEMM
+    use M_Grid_Ylm
+
+    complex(R64), intent(inout), contiguous :: orbs(:, :)
+
+    integer(I32) :: nRad, l, nCol, nK, nH
+    real(R64), allocatable :: x(:, :), y(:, :)
+
+    if (.not. allocated(blockEvecs)) call BuildBlocks
+
+    nRad = Grid_Ylm_nRadial
+
+    !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, nH, x, y)
+    do l = 0, Grid_Ylm_lmax
+      nK = nKeep(l)
+      nH = nRad - nK
+      if (nH .eq. 0) cycle
+      nCol = NColumns(l, size(orbs, 2))
+      allocate (x(nRad, 2 * nCol), y(nH, 2 * nCol))
+
+      call GatherBlock(x, orbs, l)
+      call DGEMM('T', 'N', nH, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, nK + 1:, l), nRad, x, nRad, 0.0_R64, y, nH)
+      call DGEMM('N', 'N', nRad, 2 * nCol, nH, -1.0_R64, blockEvecs(:, nK + 1:, l), nRad, y, nH, 1.0_R64, x, nRad)
+      call ScatterBlock(orbs, x, l)
+
+      deallocate (x, y)
+    end do
+    !$omp end parallel do
 
   end subroutine
 
@@ -412,6 +470,19 @@ contains
 
     write (*, '(A,I0,A,ES12.4,A,ES12.4)') " exact field-free blocks diagonalized for l <= ", lmax, &
       ": eigenvalues from", minval(blockEvals), " to", maxval(blockEvals)
+
+    ! Spectral cut: the eigenvalues are ascending, keep the first nKeep_l
+    allocate (nKeep(0:lmax))
+    if (Method_Mb_OrbBased_exactFieldFreeCut > 0.0_R64) then
+      do l = 0, lmax
+        nKeep(l) = count(blockEvals(:, l) < Method_Mb_OrbBased_exactFieldFreeCut)
+      end do
+      if (minval(nKeep) < 1) error stop "method.mb.orbBased.exactFieldFreeCut is below the lowest h0 eigenvalue"
+      write (*, '(A,ES10.2,A,I0,A,I0,A,I0)') " spectral cut", Method_Mb_OrbBased_exactFieldFreeCut, &
+        ": eigenvectors kept per l from ", minval(nKeep), " to ", maxval(nKeep), " of ", nRad
+    else
+      nKeep(:) = nRad
+    end if
 
     !------------------------------------
     ! optional GPU: eigenvectors stay on the device

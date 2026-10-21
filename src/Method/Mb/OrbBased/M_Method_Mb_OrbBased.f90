@@ -66,6 +66,14 @@ module M_Method_Mb_OrbBased
       !> Imaginary-time propagation exp(-h0 dt).
       logical, intent(in) :: imagTimeQ
     end subroutine
+
+    !> Projects orbitals (or orbital derivatives) onto the h0 eigenvectors
+    !> below `Method_Mb_OrbBased_exactFieldFreeCut` (spectral cut), per (l,m)
+    !> block (S_Method_Mb_OrbBased_FieldFree).
+    module subroutine Method_Mb_OrbBased_ProjectBelowFieldFreeCut(orbs)
+      !> Orbitals (nPoints x nOrbsInState), projected in place.
+      complex(R64), intent(inout), contiguous :: orbs(:, :)
+    end subroutine
   end interface
 
   !=============================================================================
@@ -317,6 +325,27 @@ module M_Method_Mb_OrbBased
   !> `Method_PropagateExactPart` and the linear split-step integrator only
   !> propagates the gauge coupling (`Method_Mb_OrbBased_ApplyLinOp`).
   logical :: Method_Mb_OrbBased_exactFieldFreeQ = .false.
+
+  !> Spectral cut (method.mb.orbBased.exactFieldFreeCut, 0 = off): the
+  !> orbitals are restricted to the h0 eigenvectors with energy below this
+  !> value. The exact part drops the eigenvectors above it, and the linear and
+  !> nonlinear orbital derivatives are projected with
+  !> `Method_Mb_OrbBased_ApplySpectralCut`, so the unphysical high-energy
+  !> FEDVR states are never populated.
+  real(R64) :: Method_Mb_OrbBased_exactFieldFreeCut = 0.0_R64
+
+  !> Pointer to the projection of orbital derivatives onto the h0 eigenvectors
+  !> below the spectral cut (`Method_Mb_OrbBased_ProjectBelowFieldFreeCut`),
+  !> or a no-op without cut.
+  procedure(I_Method_Mb_OrbBased_ApplySpectralCut), pointer :: Method_Mb_OrbBased_ApplySpectralCut
+  abstract interface
+    !> Projects the orbitals in place onto the space kept by the spectral cut.
+    subroutine I_Method_Mb_OrbBased_ApplySpectralCut(orbs)
+      import :: R64
+      !> In/out: orbitals (nPoints x nOrbsInState), projected in place.
+      complex(R64), intent(inout), contiguous :: orbs(:, :)
+    end subroutine
+  end interface
 
   !> Pointer to the one-body operator propagated by the linear split-step
   !> integrator (`TimeDerivativeOrbsLin`): the full one-body Hamiltonian, or

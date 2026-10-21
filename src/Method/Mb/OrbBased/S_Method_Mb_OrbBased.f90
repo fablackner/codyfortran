@@ -36,6 +36,8 @@ contains
     !                                               propagation in split steps (default false)
     !   - method.mb.orbBased.exactFieldFreeGpuQ:    cuBLAS variant of the exact
     !                                               propagation (default false)
+    !   - method.mb.orbBased.exactFieldFreeCut:     Spectral cut energy of h0
+    !                                               (default 0 = off; mctdhx only)
     !
     ! Binds default operator-application procedures, then branches to the
     ! selected method (TDCI, TDHX, MCTDHX, TD-2RDM, or TD-2RDM-StaticOrbs).
@@ -124,6 +126,21 @@ contains
       Method_Mb_OrbBased_ApplyLinOp => ApplyGaugeOpLin
     else
       Method_Mb_OrbBased_ApplyLinOp => ApplySingleBodyOpLin
+    end if
+
+    ! Spectral cut of h0 (needs the eigenvectors of the exact part); the
+    ! orbital derivatives of MCTDHX are projected onto the kept eigenvectors
+    Method_Mb_OrbBased_exactFieldFreeCut = Json_Get("method.mb.orbBased.exactFieldFreeCut", 0.0_R64)
+    if (Method_Mb_OrbBased_exactFieldFreeCut .ne. 0.0_R64) then
+      if (.not. Method_Mb_OrbBased_exactFieldFreeQ) &
+        error stop "method.mb.orbBased.exactFieldFreeCut requires method.mb.orbBased.exactFieldFreeQ"
+      if (.not. Json_GetExistence("method.mb.orbBased.mctdhx")) &
+        error stop "method.mb.orbBased.exactFieldFreeCut is only implemented for method.mb.orbBased.mctdhx"
+      if (Method_Mb_OrbBased_exactFieldFreeCut < 0.0_R64) &
+        error stop "method.mb.orbBased.exactFieldFreeCut must be positive"
+      Method_Mb_OrbBased_ApplySpectralCut => Method_Mb_OrbBased_ProjectBelowFieldFreeCut
+    else
+      Method_Mb_OrbBased_ApplySpectralCut => NoOpProcedures_ApplyAbsorber
     end if
 
     !------------------------------------

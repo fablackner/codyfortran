@@ -130,6 +130,23 @@ reversed outer splitting B(½Δt) A(Δt) B(½Δt) (1.2× faster per step but twi
 the acceleration error, i.e. slower at equal accuracy), padded or re-laid-out
 DGEMMs (≤ 4%; the 999 × 999 × 10 products already run at 60% of peak).
 
+**Spectral cut (optional, `python3 make_inputs.py --spectral-cut 1000`).** The
+highest h0 eigenvalues of the FEDVR grid (up to 3.6e5 a.u.) are unphysical.
+`method.mb.orbBased.exactFieldFreeCut` drops the eigenvectors above the cut
+(1000 a.u. keeps 895–900 of 950 per l) from the exact part and projects the
+orbital derivatives onto the rest (src/Method/A_Method.md). Without that
+stiffness the plain Strang composition (2 instead of 12 exact transformations)
+is as accurate as Blanes–Moan: at the peak 2.12 s vs 4.78 s per step (one
+thread), acceleration error 3.9e-3 vs 5.3e-3 for Blanes–Moan with the same cut,
+while Strang without cut is off by 1.8e-2. The cut changes the model slightly.
+Full strong2c pulse on a small grid (rmax 40, ground states relaxed with the
+cut, dt = 0.0025) against the uncut Blanes–Moan reference: the harmonics 21–60
+change by 0.02–0.04 decades (2e-3 for the uncut schemes) at 1.7× less wall
+time; cuts of 300 and 1000 give the same change. Larger steps do not pay off:
+at dt = 0.005 every scheme, with or without cut, is off by ~0.5 decades above
+harmonic 20. MCTDHF only; TD-2RDM inputs stay uncut, so use it for MCTDHF
+studies, not for the MCTDHF/TD-2RDM comparison.
+
 **Purification.** With `conserveEnergyQ` the D/Q correction is orthogonal to
 h2, so `laser/P_LaserTd2rdm` rebuilds h2 from the current orbitals before
 every purification (previously h2 was refreshed only at output steps). With

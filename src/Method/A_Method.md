@@ -223,6 +223,22 @@ stay on the device, each call gathers all blocks on the host, sends them once,
 applies the phases on the host between the two transformations and returns
 them. Results agree with the CPU path to round-off.
 
+**Spectral cut.** `"exactFieldFreeCut": Ec` (MCTDHX only, default 0 = off)
+restricts the orbitals to the h0 eigenvectors with E < Ec, P = Σ_{E<Ec} |u⟩⟨u|.
+The highest FEDVR eigenvalues (~10⁵ a.u., from the dense Lobatto points at
+the element boundaries) are unphysical, but they make the Strang composition
+of h0 and the gauge coupling inaccurate. With the cut the exact part
+transforms with the kept eigenvectors only (it projects onto P), and
+`Method_Mb_OrbBased_ApplySpectralCut` applies P to the linear and nonlinear
+orbital derivatives of MCTDHX, so P is invariant under the whole step. The pointer is
+bound in `Method_Mb_OrbBased_Fabricate` to
+`Method_Mb_OrbBased_ProjectBelowFieldFreeCut` (two GEMMs with the few dropped
+eigenvectors, P = 1 − U_H U_Hᵀ) or to a no-op. The cut changes the model:
+relax the ground state with the same cut (the initial projection of an uncut
+state is a jump). For Be HHG, Ec = 1000 with `strang` is ~2× faster per step
+than `blanesMoan6Swap` and shifts harmonics 21–60 by 0.02–0.04 decades
+(`app/be/README.md`). T_Ne3d_11 checks that no weight appears above the cut.
+
 Requirements (checked on the first exact step): Hermitian (non-ECS) Ylm grid, time- and
 body-type-independent kinetic and potential, central potential
 (`SysPotential_Ylm_lmax = 0`), no TD-2RDM weak orbitals. Memory: one real
