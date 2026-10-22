@@ -89,7 +89,9 @@
         }
     },
     "coeffs": {
-        "generic": { }
+        "generic": {
+            "totalM": 0
+        }
     },
     "coeffsInit": {
         "unary": { }

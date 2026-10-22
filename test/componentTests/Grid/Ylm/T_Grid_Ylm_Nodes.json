@@ -1,0 +1,12 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 3,
+            "rmax": 10.0,
+            "fedvr": {
+                "nElements": 2,
+                "nLocals": 5
+            }
+        }
+    }
+}

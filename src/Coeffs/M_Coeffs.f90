@@ -47,6 +47,7 @@
 !> | `Coeffs_ApplyExcitation`        | Apply \( a^\dagger_i a_j \) ladder operators    |
 !> | `Coeffs_Normalize`              | Normalize \(\langle\Psi|\Psi\rangle = 1\)       |
 !> | `Coeffs_ProjectOnSubspace`      | Project out a reference state (orthogonalize)   |
+!> | `Coeffs_ProjectOnSector`        | Project on the declared total-M sector          |
 !> | `Coeffs_IndexFromConfigurations`| Configuration tuple → linear index              |
 !> | `Coeffs_ConfigurationsFromIndex`| Linear index → configuration tuple              |
 !> | `Coeffs_SaveCoeffs`             | Binary I/O for checkpointing                    |
@@ -249,6 +250,29 @@ module M_Coeffs
       complex(R64), intent(inout), contiguous :: dCoeffs(:)
       !> Reference state defining the 1D subspace to remove.
       complex(R64), intent(in), contiguous :: coeffs(:)
+    end subroutine
+  end interface
+
+  !> Project the CI vector on the sector of the declared total M
+  !> (coeffs.generic.totalM): zeroes the coefficients of configurations of
+  !> other total M; NoOp without a declared sector. The Hamiltonian
+  !> application (Coeffs_ApplyH1FillRdm1, Coeffs_ApplyH2FillRdm2) acts on the
+  !> sector only, which is exact for vectors in the sector; on full-length
+  !> vectors it is H_sector ⊕ 0, so a diagonalizer, the eigen-expansion
+  !> propagator or a CI spectrum on Coeffs_nCoeffs vectors sees
+  !> Coeffs_nCoeffs - size(sector) spurious eigenvalues 0 (harmless for a
+  !> ground state of negative energy only). Called once where
+  !> the coefficients are initialized (CoeffsInit_Initialize) and on the CI
+  !> eigenvectors of the MCSCF ground solver (full-length diagonalizer); stops
+  !> with an error if more than 1e-8 of the norm would be removed (a state
+  !> outside the sector).
+  procedure(I_Coeffs_ProjectOnSector), pointer :: Coeffs_ProjectOnSector => NoOpProcedures_ProjectCoeffs
+  abstract interface
+    !> In-place projection of the CI vector (length Coeffs_nCoeffs).
+    subroutine I_Coeffs_ProjectOnSector(coeffs)
+      import :: R64
+      !> In/out: CI coefficients.
+      complex(R64), intent(inout), contiguous :: coeffs(:)
     end subroutine
   end interface
 

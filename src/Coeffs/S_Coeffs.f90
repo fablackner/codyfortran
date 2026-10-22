@@ -54,6 +54,7 @@ contains
 
     Coeffs_Normalize => Normalize
     Coeffs_ProjectOnSubspace => ProjectOnSubspace
+    Coeffs_ProjectOnSector => NoOpProcedures_ProjectCoeffs
     Coeffs_SaveCoeffs => SaveCoeffs
     Coeffs_SaveTwoRdm => SaveTwoRdm
     Coeffs_FillRdm3Bt => FillRdm3Bt

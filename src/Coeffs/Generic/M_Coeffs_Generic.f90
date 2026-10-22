@@ -33,11 +33,14 @@
 !>
 !> ```json
 !> "coeffs": {
-!>   "generic": { }
+!>   "generic": { "totalM": 0 }
 !> }
 !> ```
 !>
-!> No additional parameters—the basis is determined entirely by `configList`.
+!> The basis is determined entirely by `configList`. The optional `totalM`
+!> (requires `method.mb.orbBased.mOfOrbs`) restricts the Hamiltonian
+!> application to the configurations of that total M (storage stays full
+!> length; `Coeffs_ProjectOnSector` projects the initial state on it).
 !>
 !> @see M_ConfigList     Configuration enumeration (Fock states)
 !> @see M_Coeffs_Hubbard Alternative backend for Hubbard lattice models

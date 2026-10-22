@@ -1,0 +1,48 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "mmax": 1,
+            "rmin": 0.0,
+            "rmax": 10.0,
+            "fedvr": {
+                "nElements": 2,
+                "nLocals": 4
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 3,
+            "nBodies": [ 2, 3, 2 ],
+            "bodyStatistics": [ "f", "f", "b" ],
+            "orbBased": {
+                "nOrbs": [ 5, 5, 3 ],
+                "mOfOrbs": [ 0, 0, -1, 0, 1, 0, 0, -1, 0, 1, -1, 0, 1 ],
+                "mctdhx": { }
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2
+            }
+        },
+        "allActive3": {
+            "bosonic": {
+                "bodyTarget": 3
+            }
+        }
+    },
+    "coeffs": {
+        "generic": {
+            "totalM": 1
+        }
+    }
+}

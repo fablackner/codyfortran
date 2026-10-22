@@ -1,10 +1,11 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut with restricted
-!> orbitals (orbs.restrictedQ) and the declared m of the orbitals
+!> orbitals (orbs.restrictedQ), the declared m of the orbitals
 !> (method.mb.orbBased.mOfOrbs: 1s 2s 2p(-1) 2p(0) 2p(1), equal for both
-!> spins), as in the Ne production runs: the node path then works on the
-!> stored spatial orbitals (mOfOrbs(1:nOrbsInState), Orbs_blockOfOrb by m
-!> only) and duplicates h2 for the second spin.
+!> spins) and the CI sector of total M = 0 (coeffs.generic.totalM), as in the
+!> Ne production runs: the node path then works on the stored spatial
+!> orbitals (mOfOrbs(1:nOrbsInState), Orbs_blockOfOrb by m only) and
+!> duplicates h2 for the second spin.
 !>
 !> The m of every orbital is conserved by all operators of a z-polarized
 !> field; the only projection on it is done once at initialization, and the

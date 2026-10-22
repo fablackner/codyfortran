@@ -52,7 +52,10 @@ singles.factor(k, iC)   = scalar factor (±1 for fermions, √n for bosons)
 singles.orbCode(k, iC)  = packed orbital indices (i,j) for a†_i a_j
 ```
 
-Same structure for `doubles` with 4 orbital indices.
+Same structure for `doubles` with 4 orbital indices. The order of the
+connections of a configuration is not part of the contract: the Generic
+Coeffs backend sorts them in place by the change of total M they cause
+(`coeffs.generic.totalM`, see A_Coeffs.md); it is the only reader.
 
 This enables O(1) Hamiltonian matrix construction in the CI/RDM modules.
 

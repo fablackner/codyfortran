@@ -220,11 +220,25 @@ recurrences) and are used by
 `method.mb.orbBased.mOfOrbs`); see also the Ylm spatial
 product bullet under Performance Notes.
 
+**Parity split.** The nodes are symmetrized exactly in Setup, x_{n+1−q} = −x_q
+(odd n, middle node x = 0), and Θ_lm(−x) = (−1)^{l+m} Θ_lm(x).
+`Grid_Ylm_ChannelsToNodes` therefore transforms the degrees with even and
+odd l − |m| (every second column of fM) separately on the nodes x_q ≥ 0 and
+restores the mirrored half by a butterfly (f = e ± o);
+`Grid_Ylm_NodesToChannels` folds the node field into its even and odd parts
+first (a local, i.e. thread-private, buffer). Both halve the GEMM work of the
+unsplit tables, which are kept for `SpatialProductM0`; the result differs
+from the unsplit transform by round-off only
+(`test/componentTests/Grid/Ylm/T_Grid_Ylm_Nodes.f90`). The symmetrization
+also changes the unsplit tables and `Grid_Ylm_nodeWeights` by round-off, so
+`SpatialProductM0` (every Ylm run, with or without
+`method.mb.orbBased.mOfOrbs`) is reproduced to round-off, not bitwise.
+
 | Name | Kind | Contract |
 |------|------|----------|
 | `Grid_Ylm_ToNodes(fNodes, f, m)` | subroutine | fNodes(r, q) = Σ_l f_lm(r) Θ_lm(x_q), \|m\| ≤ l ≤ `Grid_Ylm_lmax`, for f in the orbital layout; other m are ignored; requires \|m\| ≤ `Grid_Ylm_mmax` |
 | `Grid_Ylm_FromNodes(f, fNodes, m)` | subroutine | Projection onto Y_lm, \|m\| ≤ l ≤ `Grid_Ylm_lmax`, into the orbital layout, all other channels zero; exact for angular degree ≤ 2 nNodes − 1 − lmax |
-| `Grid_Ylm_ChannelsToNodes(fNodes, fM, m)` | subroutine | as `Grid_Ylm_ToNodes` on the channel matrix fM(r, l − \|m\| + 1), \|m\| ≤ l ≤ \|m\| + size(fM, 2) − 1 (one real GEMM on the complex arrays viewed as real) |
+| `Grid_Ylm_ChannelsToNodes(fNodes, fM, m)` | subroutine | as `Grid_Ylm_ToNodes` on the channel matrix fM(r, l − \|m\| + 1), \|m\| ≤ l ≤ \|m\| + size(fM, 2) − 1 (real GEMMs on the complex arrays viewed as real, split by parity, see below) |
 | `Grid_Ylm_NodesToChannels(fM, fNodes, m)` | subroutine | as `Grid_Ylm_FromNodes` into the channel matrix fM, without metric weights |
 | `Grid_Ylm_ProjectOnM(f, m)` | pure subroutine | zeroes all channels of f (orbital layout) with an m other than m (used by `Orbs_ProjectOnSymmetry`) |
 | `Grid_Ylm_nNodes` | integer | 2 lmax + 3 Gauss–Legendre nodes in cos θ |

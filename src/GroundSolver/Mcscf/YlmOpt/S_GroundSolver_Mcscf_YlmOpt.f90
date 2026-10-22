@@ -367,6 +367,9 @@ contains
     if (0.0_R64 < abs(overlap)) phase = overlap / abs(overlap)
 
     coeffs = (1.0_R64 - alphaCi) * coeffs + alphaCi * phase * DiagonalizerList(1) % e % evecs(:, 1)
+    ! The diagonalizer works on full-length vectors, whose eigenvectors lie in
+    ! a declared total-M sector only up to round-off
+    call Coeffs_ProjectOnSector(coeffs)
     call Coeffs_Normalize(coeffs)
 
     ! Step 4: 1-RDM from updated coefficients; monopole radial Hartree

@@ -16,9 +16,17 @@
 !>
 !> Mutual exclusivity is enforced: only the first matching key is honored.
 !> If no key is found, fabrication fails with an error stop.
+!>
+!> `CoeffsInit_Initialize` is bound to the local `Initialize`, which calls the
+!> concrete initializer and then projects on the declared total-M sector
+!> (Coeffs_ProjectOnSector, NoOp without coeffs.generic.totalM). This is the
+!> CI counterpart of Orbs_ProjectOnSymmetry in OrbsInit_Initialize.
 submodule(M_CoeffsInit) S_CoeffsInit
 
   implicit none
+
+  !> Concrete initializer bound by the delegated fabricator
+  procedure(I_CoeffsInit_Initialize), pointer, save :: InitializeConcrete => null()
 
 contains
 
@@ -62,6 +70,23 @@ contains
     else
       error stop "coeffsInit is missing one of: load, unary, excited"
     end if
+
+    InitializeConcrete => CoeffsInit_Initialize
+    CoeffsInit_Initialize => Initialize
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Concrete initializer followed by the projection on the declared total-M
+  !> sector; stops if the initial state does not lie in it (e.g. a unary or
+  !> excited configuration of other total M, or a coeffs.in of another sector).
+  subroutine Initialize(coeffs)
+    use M_Coeffs
+
+    complex(R64), intent(out), contiguous :: coeffs(:)
+
+    call InitializeConcrete(coeffs)
+    call Coeffs_ProjectOnSector(coeffs)
 
   end subroutine
 

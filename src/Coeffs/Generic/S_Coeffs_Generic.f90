@@ -34,6 +34,21 @@
 !> The transposition is invisible for real orbitals and Hamiltonians but
 !> essential for complex ones (e.g., velocity-gauge laser coupling).
 !>
+!> **Total-M sector (coeffs.generic.totalM):**
+!> With declared orbital m (method.mb.orbBased.mOfOrbs) every configuration
+!> of a body type has a definite M, and h1, h2 conserve the total M. Setup
+!> then lists the configurations of the declared total M (`sector`) and sorts
+!> the connections of the ConfigList tables of every body type in place by
+!> the change of M they cause (`sectorBt`: buckets of the singles per change,
+!> the doubles that conserve M; no other reader depends on their order). The
+!> Hamiltonian loops run over the sector and pair a single of change d on one
+!> body type with a single of change -d on the other, so no connection leaves
+!> the sector: exact for vectors in the sector, which Coeffs_ProjectOnSector
+!> enforces once at initialization. Storage stays full length, and on it the
+!> Hamiltonian acts as H_sector ⊕ 0 (see M_Coeffs). Without the
+!> key the sector holds all configurations and one bucket all connections
+!> (in their order of ConfigList), so the loops are those of the full space.
+!>
 !> **Excitation Application:**
 !> Exploits tensor-product structure: only the affected body-type slice changes.
 !> Uses a reusable buffer (`coeffsBuffer`) to avoid repeated allocation.
@@ -44,9 +59,22 @@
 !> - `h2Lin(nO⁴)`: Linearized 2-body Hamiltonian (symmetry-adapted storage)
 !> - `rdm1Lin/rdm2Lin`: Thread-local accumulators (linearized)
 !> - `coeffsBuffer`: Module-level buffer for excitation operations
+!> - `sector`, `sectorBt`: CI sector and the buckets of its connections (see above)
 submodule(M_Coeffs_Generic) S_Coeffs_Generic
+  use M_ConfigList, only: T_ConfigList_Excitation
 
   implicit none
+
+  !> Per body type: M of every configuration and the buckets of the sorted
+  !> ConfigList tables (SortIntoMBuckets): the singles of configuration iC
+  !> with change d of M are k = singlesFirst(d, iC) .. singlesFirst(d + 1, iC)
+  !> - 1, d = -dMMax..dMMax; the doubles that conserve M are
+  !> k = doublesFirst(0, iC) .. doublesFirst(1, iC) - 1.
+  type :: T_SectorBt
+    integer(I32), allocatable :: mOfConfig(:)
+    integer(I32), allocatable :: singlesFirst(:, :)
+    integer(I32), allocatable :: doublesFirst(:, :)
+  end type
 
 !=============================================================================
 ! module-scope persistent data
@@ -54,6 +82,19 @@ submodule(M_Coeffs_Generic) S_Coeffs_Generic
 
   !> Reusable buffer for ApplyExcitation to avoid repeated allocation
   complex(R64), allocatable, save :: coeffsBuffer(:)
+
+  !> coeffs.generic.totalM declared, and its value (0 if not)
+  logical, save      :: sectorQ
+  integer(I32), save :: totalM
+
+  !> Largest change of M of a single (0 without sector: one bucket)
+  integer(I32), save :: dMMax
+
+  !> Indices of the configurations of total M equal to totalM (all without sector)
+  integer(I32), allocatable, save :: sector(:)
+
+  !> M of the configurations and buckets of the connections per body type
+  type(T_SectorBt), allocatable, save :: sectorBt(:)
 
 contains
 
@@ -65,6 +106,7 @@ contains
   module subroutine Coeffs_Generic_Fabricate
     use M_Utils_Json
     use M_Utils_Say
+    use M_Method_Mb_OrbBased
     use M_Coeffs
     use M_ConfigList
 
@@ -90,6 +132,133 @@ contains
     Coeffs_ApplyExcitation => ApplyExcitation
     Coeffs_IndexFromConfigurations => IndexFromConfigurations
     Coeffs_ConfigurationsFromIndex => ConfigurationsFromIndex
+    Coeffs_Setup => Setup
+
+    !------------------------------------
+    ! declared total-M sector
+    !------------------------------------
+
+    sectorQ = Json_GetExistence("coeffs.generic.totalM")
+    totalM = 0
+    if (sectorQ) then
+      totalM = Json_Get("coeffs.generic.totalM", 0)
+      if (.not. Method_Mb_OrbBased_definiteMQ) error stop "coeffs.generic.totalM requires method.mb.orbBased.mOfOrbs"
+      Coeffs_ProjectOnSector => ProjectOnSector
+    end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Build the sector and sort the ConfigList tables into its buckets. The M of
+!> a configuration is the sum of the declared m over its occupations
+!> n_i (a†_i a_i |C⟩ = n_i |C⟩); 0 without sector, so that the sector holds
+!> all configurations and the buckets all connections.
+  subroutine Setup
+    use M_Utils_Say
+    use M_Method_Mb
+    use M_Method_Mb_OrbBased
+    use M_Coeffs
+    use M_ConfigList
+
+    type(T_SectorBt), allocatable :: bts(:)
+    logical, allocatable :: inSectorQ(:)
+    integer(I32) :: configurations(Method_Mb_nBodyTypes)
+    integer(I32) :: bt, iC, iCNew, i, shift, iCoeff
+    real(R64) :: occupation
+
+    call Say_Setup("coeffs.generic")
+
+    dMMax = 0
+    if (sectorQ) dMMax = maxval(Method_Mb_OrbBased_mOfOrb) - minval(Method_Mb_OrbBased_mOfOrb)
+
+    allocate (bts(Method_Mb_nBodyTypes))
+    do bt = 1, Method_Mb_nBodyTypes
+      associate (e => configList(bt) % e)
+        allocate (bts(bt) % mOfConfig(e % nConfigurations), source=0)
+        if (sectorQ) then
+          shift = sum(Method_Mb_OrbBased_nOrbs(1:bt - 1))
+          do iC = 1, e % nConfigurations
+            do i = 1, Method_Mb_OrbBased_nOrbs(bt)
+              call e % ExciteConfiguration(iCNew, occupation, [i], [i], iC)
+              if (iCNew .ne. 0) bts(bt) % mOfConfig(iC) = bts(bt) % mOfConfig(iC) + &
+                                                         nint(occupation) * Method_Mb_OrbBased_mOfOrb(shift + i)
+            end do
+          end do
+        end if
+
+        call SortIntoMBuckets(bts(bt) % singlesFirst, e % singles, bts(bt) % mOfConfig, dMMax)
+        call SortIntoMBuckets(bts(bt) % doublesFirst, e % doubles, bts(bt) % mOfConfig, 0)
+      end associate
+    end do
+    call move_alloc(bts, sectorBt)
+
+    allocate (inSectorQ(Coeffs_nCoeffs))
+    do iCoeff = 1, Coeffs_nCoeffs
+      call ConfigurationsFromIndex(configurations, iCoeff)
+      inSectorQ(iCoeff) = sum([(sectorBt(bt) % mOfConfig(configurations(bt)), bt=1, Method_Mb_nBodyTypes)]) .eq. totalM
+    end do
+    sector = pack([(iCoeff, iCoeff=1, Coeffs_nCoeffs)], inSectorQ)
+
+    if (sectorQ) write (*, '(A,I0,A,I0,A,I0,A)') " coeffs.generic.totalM = ", totalM, ": sector of ", &
+      size(sector), " of ", Coeffs_nCoeffs, " configurations"
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Sort the connections of every configuration of `table` in place (stably)
+!> by the change d = mOfConfig(target) - mOfConfig(iC) of M they cause, into
+!> the buckets d = -dMax..dMax: first(d, iC) .. first(d + 1, iC) - 1.
+!> Connections of larger change follow the last bucket and are not used; with
+!> all d = 0 (no sector) the order stays unchanged.
+  subroutine SortIntoMBuckets(first, table, mOfConfig, dMax)
+    integer(I32), intent(out), allocatable       :: first(:, :)
+    type(T_ConfigList_Excitation), intent(inout) :: table
+    integer(I32), intent(in)                     :: mOfConfig(:)
+    integer(I32), intent(in)                     :: dMax
+
+    integer(I32), allocatable :: dOf(:), order(:)
+    integer(I32) :: iC, n, d, k
+
+    allocate (first(-dMax:dMax + 1, size(table % nConnected)))
+
+    do iC = 1, size(table % nConnected)
+      n = table % nConnected(iC)
+      dOf = mOfConfig(table % excitedC(1:n, iC)) - mOfConfig(iC)
+      where (abs(dOf) > dMax) dOf = dMax + 1
+      order = [(pack([(k, k=1, n)], dOf .eq. d), d=-dMax, dMax + 1)]
+      do d = -dMax, dMax + 1
+        first(d, iC) = 1 + count(dOf < d)
+      end do
+      table % excitedC(1:n, iC) = table % excitedC(order, iC)
+      table % factor(1:n, iC) = table % factor(order, iC)
+      table % orbCode(1:n, iC) = table % orbCode(order, iC)
+    end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Zero the coefficients outside the sector; error stop if more than 1e-8 of
+!> the norm would be removed.
+  subroutine ProjectOnSector(coeffs)
+    complex(R64), intent(inout), contiguous :: coeffs(:)
+
+    real(R64), parameter :: tolerance = 1.0e-8_R64
+
+    logical, allocatable :: outsideQ(:)
+    real(R64) :: norm, normRemoved
+
+    allocate (outsideQ(size(coeffs)))
+    outsideQ(:) = .true.
+    outsideQ(sector) = .false.
+
+    norm = sum(abs(coeffs)**2)
+    normRemoved = sum(abs(coeffs)**2, mask=outsideQ)
+    if (normRemoved > tolerance * norm) then
+      write (*, '(A,I0,A,ES10.3)') " fraction of the norm outside total M = ", totalM, ": ", normRemoved / norm
+      error stop "Coeffs_ProjectOnSector: coefficients do not lie in the sector of coeffs.generic.totalM"
+    end if
+
+    where (outsideQ) coeffs = 0.0_R64
 
   end subroutine
 
@@ -107,6 +276,7 @@ contains
 !> If `rdm1_` is requested, simultaneously accumulates:
 !>   rdm1(q,p) += factor × conj(coeffs(jCoeff)) × coeffs(iCoeff)
 !> (the transposition is done by the packing helpers, see Index Convention)
+!> Rows and connections are those of the sector (singles of bucket 0).
 !>
 !> @param[in]    coeffs   CI coefficient vector
 !> @param[out]   rdm1_    (optional) 1-RDM output, allocated if present
@@ -123,7 +293,7 @@ contains
     complex(R64), intent(inout), contiguous, target, optional    :: dCoeffs_(:)
     complex(R64), intent(in), contiguous, optional               :: h1_(:, :)
 
-    integer(I32) :: iBt1C, iCoeff, jC
+    integer(I32) :: iBt1C, iS, iCoeff, jC
     integer(I32) :: k1, iBt1, iTmp, orbCode, nO
     complex(R64) :: factor
     complex(R64), allocatable :: h1Lin(:)
@@ -138,14 +308,15 @@ contains
     if (present(h1_)) allocate (h1Lin(nO**2))
     if (present(h1_)) call FillH1Lin(h1Lin, h1_)
 
-    !$omp parallel default(shared) private(iCoeff, iTmp, iBt1, iBt1C, configurations, k1, orbCode, factor, jC, rdm1LinThread)
+    !$omp parallel default(shared) private(iS, iCoeff, iTmp, iBt1, iBt1C, configurations, k1, orbCode, factor, jC, rdm1LinThread)
 
     if (present(rdm1_)) allocate (rdm1LinThread(nO**2))
     if (present(rdm1_)) rdm1LinThread(:) = 0.0_R64
 
     !$omp do
-    do iCoeff = 1, Coeffs_nCoeffs
+    do iS = 1, size(sector)
 
+      iCoeff = sector(iS)
       iTmp = 1
 
       call Coeffs_ConfigurationsFromIndex(configurations, iCoeff)
@@ -155,8 +326,8 @@ contains
         ! Extract configuration index for this body type
         iBt1C = configurations(iBt1)
 
-        ! Loop over connected configurations via single excitations
-        do k1 = 1, configList(iBt1) % e % singles % nConnected(iBt1C)
+        ! Loop over connected configurations via single excitations that conserve M
+        do k1 = sectorBt(iBt1) % singlesFirst(0, iBt1C), sectorBt(iBt1) % singlesFirst(1, iBt1C) - 1
 
           orbCode = configList(iBt1) % e % singles % orbCode(k1, iBt1C)
           factor = configList(iBt1) % e % singles % factor(k1, iBt1C)
@@ -203,6 +374,9 @@ contains
 !> The inter-body term is non-trivial because excitations on different body
 !> types commute, allowing factorization as (single on bt1) ⊗ (single on bt2).
 !>
+!> Rows and connections are those of the sector: doubles that conserve M, and
+!> singles of change d on bt1 paired with singles of change -d on bt2.
+!>
 !> @param[in]    coeffs   CI coefficient vector
 !> @param[out]   rdm2_    (optional) 2-RDM output, allocated if present
 !> @param[inout] dCoeffs_ (optional) accumulator for H2|Ψ⟩
@@ -219,8 +393,8 @@ contains
     complex(R64), intent(in), contiguous, optional               :: h2_(:, :, :, :)
 
     integer(I32) :: iBt1C, iBt2C
-    integer(I32) :: iCoeff, jC, jCTmp
-    integer(I32) :: k1, k2, iBt1, iBt2, iTmp, jTmp, orbCode, orbCodeTmp
+    integer(I32) :: iS, iCoeff, jC, jCTmp
+    integer(I32) :: k1, k2, d, iBt1, iBt2, iTmp, jTmp, orbCode, orbCodeTmp
     integer(I32) :: nO
     complex(R64) :: factor, factorTmp
 
@@ -236,15 +410,16 @@ contains
     if (present(h2_)) allocate (h2Lin(nO**4))
     if (present(h2_)) call FillH2Lin(h2Lin, h2_)
 
-    !$omp parallel default(shared) private(iCoeff, iTmp, iBt1, iBt1C, configurations, k1, orbCode, factor, jC, orbCodeTmp, &
-    !$omp                                  factorTmp, jCTmp, jTmp, iBt2, iBt2C, k2, rdm2LinThreads)
+    !$omp parallel default(shared) private(iS, iCoeff, iTmp, iBt1, iBt1C, configurations, k1, orbCode, factor, jC, orbCodeTmp, &
+    !$omp                                  factorTmp, jCTmp, jTmp, iBt2, iBt2C, k2, d, rdm2LinThreads)
 
     if (present(rdm2_)) allocate (rdm2LinThreads(nO**4))
     if (present(rdm2_)) rdm2LinThreads(:) = 0.0_R64
 
     !$omp do
-    do iCoeff = 1, Coeffs_nCoeffs
+    do iS = 1, size(sector)
 
+      iCoeff = sector(iS)
       iTmp = 1
 
       call Coeffs_ConfigurationsFromIndex(configurations, iCoeff)
@@ -256,7 +431,7 @@ contains
         !----------------------------------------------------------------------
         ! Intra-body interaction: double excitation within same body type
         !----------------------------------------------------------------------
-        do k1 = 1, configList(iBt1) % e % doubles % nConnected(iBt1C)
+        do k1 = sectorBt(iBt1) % doublesFirst(0, iBt1C), sectorBt(iBt1) % doublesFirst(1, iBt1C) - 1
 
           orbCode = configList(iBt1) % e % doubles % orbCode(k1, iBt1C)
           factor = configList(iBt1) % e % doubles % factor(k1, iBt1C)
@@ -274,42 +449,45 @@ contains
         if (iBt1 .eq. Method_Mb_nBodyTypes) cycle
 
         !----------------------------------------------------------------------
-        ! Inter-body interaction: combine singles from different body types
+        ! Inter-body interaction: combine singles from different body types,
+        ! of change d of M on iBt1 and -d on iBt2
         !----------------------------------------------------------------------
-        do k1 = 1, configList(iBt1) % e % singles % nConnected(iBt1C)
+        do d = -dMMax, dMMax
+          do k1 = sectorBt(iBt1) % singlesFirst(d, iBt1C), sectorBt(iBt1) % singlesFirst(d + 1, iBt1C) - 1
 
-          orbCodeTmp = configList(iBt1) % e % singles % orbCode(k1, iBt1C)
-          orbCodeTmp = (orbCodeTmp - 1) * nO * nO
+            orbCodeTmp = configList(iBt1) % e % singles % orbCode(k1, iBt1C)
+            orbCodeTmp = (orbCodeTmp - 1) * nO * nO
 
-          factorTmp = configList(iBt1) % e % singles % factor(k1, iBt1C)
-          jCTmp = configList(iBt1) % e % singles % excitedC(k1, iBt1C)
+            factorTmp = configList(iBt1) % e % singles % factor(k1, iBt1C)
+            jCTmp = configList(iBt1) % e % singles % excitedC(k1, iBt1C)
 
-          jCTmp = (jCTmp - iBt1C)
-          jCTmp = iCoeff + jCTmp * iTmp
+            jCTmp = (jCTmp - iBt1C)
+            jCTmp = iCoeff + jCTmp * iTmp
 
-          jTmp = iTmp * configList(iBt1) % e % nConfigurations
+            jTmp = iTmp * configList(iBt1) % e % nConfigurations
 
-          do iBt2 = iBt1 + 1, Method_Mb_nBodyTypes
+            do iBt2 = iBt1 + 1, Method_Mb_nBodyTypes
 
-            iBt2C = configurations(iBt2)
+              iBt2C = configurations(iBt2)
 
-            do k2 = 1, configList(iBt2) % e % singles % nConnected(iBt2C)
+              do k2 = sectorBt(iBt2) % singlesFirst(-d, iBt2C), sectorBt(iBt2) % singlesFirst(-d + 1, iBt2C) - 1
 
-              orbCode = orbCodeTmp + configList(iBt2) % e % singles % orbCode(k2, iBt2C)
-              factor = factorTmp * configList(iBt2) % e % singles % factor(k2, iBt2C)
-              jC = configList(iBt2) % e % singles % excitedC(k2, iBt2C)
+                orbCode = orbCodeTmp + configList(iBt2) % e % singles % orbCode(k2, iBt2C)
+                factor = factorTmp * configList(iBt2) % e % singles % factor(k2, iBt2C)
+                jC = configList(iBt2) % e % singles % excitedC(k2, iBt2C)
 
-              jC = (jC - iBt2C)
-              jC = jCTmp + jC * jTmp
+                jC = (jC - iBt2C)
+                jC = jCTmp + jC * jTmp
 
-              if (present(dCoeffs_)) dCoeffs_(iCoeff) = dCoeffs_(iCoeff) + factor * h2Lin(orbCode) * coeffs(jC)
-              if (present(rdm2_)) rdm2LinThreads(orbCode) = rdm2LinThreads(orbCode) + factor * conjg(coeffs(jC)) * coeffs(iCoeff)
+                if (present(dCoeffs_)) dCoeffs_(iCoeff) = dCoeffs_(iCoeff) + factor * h2Lin(orbCode) * coeffs(jC)
+                if (present(rdm2_)) rdm2LinThreads(orbCode) = rdm2LinThreads(orbCode) + factor * conjg(coeffs(jC)) * coeffs(iCoeff)
 
+              end do
+
+              jTmp = jTmp * configList(iBt2) % e % nConfigurations
             end do
 
-            jTmp = jTmp * configList(iBt2) % e % nConfigurations
           end do
-
         end do
 
         iTmp = iTmp * configList(iBt1) % e % nConfigurations

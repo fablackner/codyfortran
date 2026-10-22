@@ -18,6 +18,18 @@ submodule(M_Grid_Ylm) S_Grid_Ylm
   real(R64), allocatable :: quadY(:, :, :)
   real(R64), allocatable :: quadWY(:, :, :)
 
+  !> Parity-split tables of Grid_Ylm_ChannelsToNodes/NodesToChannels. With
+  !> the symmetric nodes x_(n+1-q) = -x_q (n = Grid_Ylm_nNodes, middle node
+  !> x_c = 0, c = (n + 1)/2) and Theta_lm(-x) = (-1)^(l+m) Theta_lm(x), the
+  !> even (l - m = 2(i - 1)) and odd (l - m = 2i - 1) degrees of row i are
+  !> needed only on the nodes q >= c, the odd ones in reversed node order:
+  !>   quadYEven(i, q, m)  = Theta_lm(x_q),          q = c .. n,
+  !>   quadYOdd(i, j, m)   = Theta_lm(x_(n+1-j)),    j = 1 .. c - 1,
+  !> quadWYEven/quadWYOdd the transposed tables with the weights 2 pi w_q
+  !> (zero for l > Grid_Ylm_lmaxNodes).
+  real(R64), allocatable :: quadYEven(:, :, :), quadYOdd(:, :, :)
+  real(R64), allocatable :: quadWYEven(:, :, :), quadWYOdd(:, :, :)
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -147,13 +159,17 @@ contains
     use stdlib_quadrature, only: gauss_legendre
 
     real(R64), allocatable :: x(:), w(:), sinTheta(:)
-    integer(I32) :: l, m, lmaxNodes, mmaxNodes
+    integer(I32) :: l, m, i, p, lmaxNodes, mmaxNodes, nNodes, nRows, iMid
 
     lmaxNodes = Grid_Ylm_lmaxNodes
     mmaxNodes = Grid_Ylm_mmaxNodes
+    nNodes = Grid_Ylm_nNodes
 
-    allocate (x(Grid_Ylm_nNodes), w(Grid_Ylm_nNodes))
+    ! Exactly symmetric nodes and weights (the parity split relies on them)
+    allocate (x(nNodes), w(nNodes))
     call gauss_legendre(x, w)
+    x(:) = 0.5_R64 * (x(:) - x(nNodes:1:-1))
+    w(:) = 0.5_R64 * (w(:) + w(nNodes:1:-1))
     sinTheta = sqrt(1.0_R64 - x(:)**2)
 
     if (allocated(quadY)) deallocate (quadY)
@@ -188,6 +204,32 @@ contains
     end do
 
     Grid_Ylm_nodeWeights = 2.0_R64 * PI * w(:)
+
+    ! Parity-split tables: row i of parity p holds l = m + p + 2(i - 1)
+    iMid = (nNodes + 1) / 2
+    nRows = lmaxNodes / 2 + 1
+    if (allocated(quadYEven)) deallocate (quadYEven, quadYOdd, quadWYEven, quadWYOdd)
+    allocate (quadYEven(nRows, iMid:nNodes, 0:mmaxNodes), quadYOdd(nRows, iMid - 1, 0:mmaxNodes))
+    allocate (quadWYEven(iMid:nNodes, nRows, 0:mmaxNodes), quadWYOdd(iMid - 1, nRows, 0:mmaxNodes))
+    quadYEven(:, :, :) = 0.0_R64
+    quadYOdd(:, :, :) = 0.0_R64
+    quadWYEven(:, :, :) = 0.0_R64
+    quadWYOdd(:, :, :) = 0.0_R64
+    do m = 0, mmaxNodes
+      do i = 1, nRows
+        do p = 0, 1
+          l = m + p + 2 * (i - 1)
+          if (l > lmaxNodes) cycle
+          if (p .eq. 0) then
+            quadYEven(i, :, m) = quadY(l, iMid:nNodes, m)
+            quadWYEven(:, i, m) = quadWY(iMid:nNodes, l, m)
+          else
+            quadYOdd(i, :, m) = quadY(l, nNodes:iMid + 1:-1, m)
+            quadWYOdd(:, i, m) = quadWY(nNodes:iMid + 1:-1, l, m)
+          end if
+        end do
+      end do
+    end do
 
   end subroutine
 
@@ -522,7 +564,11 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> The real GEMMs act on the complex arrays viewed as real (2 nRad, ...)
   !> matrices: the tables are real, so real and imaginary parts transform
-  !> alike and stay interleaved.
+  !> alike and stay interleaved. The even and odd degrees (every second
+  !> column of fM) are transformed separately on the nodes q >= c by the
+  !> parity-split tables; the butterfly f(q) = e(q) + o(q), f(n+1-q) =
+  !> e(q) - o(q) restores the other half. Theta_l,-m = (-1)^m Theta_lm enters
+  !> as the GEMM factor.
   module subroutine Grid_Ylm_ChannelsToNodes(fNodes, fM, m)
     use, intrinsic :: iso_c_binding, only: c_loc, c_f_pointer
     use M_Utils_BlasLib, only: DGEMM
@@ -532,11 +578,14 @@ contains
     integer(I32), intent(in)                      :: m
 
     real(R64), contiguous, pointer :: fNodesR(:, :), fMR(:, :)
-    integer(I32) :: nRad2, nL, mAbs
+    real(R64) :: sgn, e, o
+    integer(I32) :: nRad2, nL, mAbs, nNodes, iMid, j, q, i
 
     mAbs = abs(m)
     nL = size(fM, 2)
     nRad2 = 2 * size(fNodes, 1)
+    nNodes = Grid_Ylm_nNodes
+    iMid = (nNodes + 1) / 2
 
     if (mAbs + nL - 1 > Grid_Ylm_lmaxNodes) error stop "Grid_Ylm_ChannelsToNodes: lmax exceeds the quadrature tables"
     if (mAbs > Grid_Ylm_mmaxNodes) error stop "Grid_Ylm_ChannelsToNodes: |m| exceeds the quadrature tables"
@@ -546,15 +595,37 @@ contains
       return
     end if
 
-    call c_f_pointer(c_loc(fNodes), fNodesR, [nRad2, Grid_Ylm_nNodes])
+    sgn = merge(-1.0_R64, 1.0_R64, m < 0 .and. mod(mAbs, 2) .eq. 1)
+    call c_f_pointer(c_loc(fNodes), fNodesR, [nRad2, nNodes])
     call c_f_pointer(c_loc(fM), fMR, [nRad2, nL])
-    call DGEMM('N', 'N', nRad2, Grid_Ylm_nNodes, nL, 1.0_R64, fMR, nRad2, quadY(mAbs, 1, mAbs), &
-               Grid_Ylm_lmaxNodes + 1, 0.0_R64, fNodesR, nRad2)
-    if (m < 0 .and. mod(mAbs, 2) .eq. 1) fNodes(:, :) = -fNodes(:, :)
+
+    ! Even part on the nodes iMid .. n, odd part on the nodes n .. iMid + 1
+    ! stored in the columns 1 .. iMid - 1
+    call DGEMM('N', 'N', nRad2, nNodes - iMid + 1, (nL + 1) / 2, sgn, fMR, 2 * nRad2, &
+               quadYEven(1, iMid, mAbs), size(quadYEven, 1), 0.0_R64, fNodesR(:, iMid:), nRad2)
+    if (nL > 1) then
+      call DGEMM('N', 'N', nRad2, iMid - 1, nL / 2, sgn, fMR(:, 2:), 2 * nRad2, &
+                 quadYOdd(1, 1, mAbs), size(quadYOdd, 1), 0.0_R64, fNodesR, nRad2)
+    else
+      fNodesR(:, 1:iMid - 1) = 0.0_R64
+    end if
+
+    do j = 1, iMid - 1
+      q = nNodes + 1 - j
+      do i = 1, nRad2
+        e = fNodesR(i, q)
+        o = fNodesR(i, j)
+        fNodesR(i, q) = e + o
+        fNodesR(i, j) = e - o
+      end do
+    end do
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Parity split as in Grid_Ylm_ChannelsToNodes: the node field is folded
+  !> into its even (f(q) + f(n+1-q), q > c, and f(c)) and odd (f(q) - f(n+1-q))
+  !> parts, which project onto the even and odd degrees.
   module subroutine Grid_Ylm_NodesToChannels(fM, fNodes, m)
     use, intrinsic :: iso_c_binding, only: c_loc, c_f_pointer
     use M_Utils_BlasLib, only: DGEMM
@@ -564,22 +635,39 @@ contains
     integer(I32), intent(in)                      :: m
 
     real(R64), contiguous, pointer :: fNodesR(:, :), fMR(:, :)
-    integer(I32) :: nRad2, nL, mAbs
+    real(R64), allocatable :: fold(:, :)
+    real(R64) :: sgn
+    integer(I32) :: nRad2, nL, mAbs, nNodes, iMid, j, q
 
     mAbs = abs(m)
     nL = size(fM, 2)
     nRad2 = 2 * size(fNodes, 1)
+    nNodes = Grid_Ylm_nNodes
+    iMid = (nNodes + 1) / 2
 
     if (mAbs + nL - 1 > Grid_Ylm_lmaxNodes) error stop "Grid_Ylm_NodesToChannels: lmax exceeds the quadrature tables"
     if (mAbs > Grid_Ylm_mmaxNodes) error stop "Grid_Ylm_NodesToChannels: |m| exceeds the quadrature tables"
 
     if (nL .eq. 0) return
 
-    call c_f_pointer(c_loc(fNodes), fNodesR, [nRad2, Grid_Ylm_nNodes])
+    sgn = merge(-1.0_R64, 1.0_R64, m < 0 .and. mod(mAbs, 2) .eq. 1)
+    call c_f_pointer(c_loc(fNodes), fNodesR, [nRad2, nNodes])
     call c_f_pointer(c_loc(fM), fMR, [nRad2, nL])
-    call DGEMM('N', 'N', nRad2, nL, Grid_Ylm_nNodes, 1.0_R64, fNodesR, nRad2, quadWY(1, mAbs, mAbs), &
-               Grid_Ylm_nNodes, 0.0_R64, fMR, nRad2)
-    if (m < 0 .and. mod(mAbs, 2) .eq. 1) fM(:, :) = -fM(:, :)
+
+    ! Even part in the columns iMid .. n, odd part (nodes n .. iMid + 1) in
+    ! the columns 1 .. iMid - 1 (local, hence private to the calling thread)
+    allocate (fold(nRad2, nNodes))
+    fold(:, iMid) = fNodesR(:, iMid)
+    do j = 1, iMid - 1
+      q = nNodes + 1 - j
+      fold(:, q) = fNodesR(:, q) + fNodesR(:, j)
+      fold(:, j) = fNodesR(:, q) - fNodesR(:, j)
+    end do
+
+    call DGEMM('N', 'N', nRad2, (nL + 1) / 2, nNodes - iMid + 1, sgn, fold(1, iMid), nRad2, &
+               quadWYEven(iMid, 1, mAbs), size(quadWYEven, 1), 0.0_R64, fMR, 2 * nRad2)
+    if (nL > 1) call DGEMM('N', 'N', nRad2, nL / 2, iMid - 1, sgn, fold(1, 1), nRad2, &
+                           quadWYOdd(1, 1, mAbs), size(quadWYOdd, 1), 0.0_R64, fMR(:, 2:), 2 * nRad2)
 
   end subroutine
 

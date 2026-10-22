@@ -23,12 +23,15 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   !=============================================================================
 
   !> Target group (m, body type) of the definite-m node path: its columns
-  !> (pair colPair, orbital colOrb), its orbitals, the offset of its columns
-  !> in the h2 columns of all groups and the 2-RDM weights (columns x orbitals).
+  !> (pair colPair, orbital colOrb), those of stored pairs first (nColStored,
+  !> the only ones entering h2), its orbitals, the offset of its stored
+  !> columns in the h2 columns of all groups and the 2-RDM weights
+  !> (columns x orbitals).
   type :: T_TargetGroup
     integer(I32), allocatable :: colPair(:)
     integer(I32), allocatable :: colOrb(:)
     integer(I32), allocatable :: orbs(:)
+    integer(I32) :: nColStored = 0
     integer(I32) :: colOffset = 0
     complex(R64), allocatable :: weights(:, :)
   end type
@@ -39,11 +42,12 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   !> Skeleton of the node path (SetupYlmNodes): ordered pairs (k2, l2), every
   !> unordered pair followed by its swap, with M = m_k2 - m_l2 and the index of
   !> the stored potential (negative for the swap: conjugate); the target groups
-  !> with their total and largest column count; the quadrature weights.
+  !> with their total stored (h2) and largest column count; the quadrature
+  !> weights.
   integer(I32), allocatable :: nodePairK2(:), nodePairL2(:), nodePairM(:), nodePairPot(:)
   integer(I32) :: nodeNPots = 0
   type(T_TargetGroup), allocatable :: nodeGroups(:)
-  integer(I32) :: nodeNCols = 0, nodeMaxCols = 0
+  integer(I32) :: nodeNH2Cols = 0, nodeMaxCols = 0
   real(R64), allocatable :: nodeWeights(:)
 
 contains
@@ -902,6 +906,7 @@ contains
     use M_Orbs
 
     integer(I32), allocatable :: mOrb(:), btOrb(:), targetGroup(:, :), pairOfCol(:, :), orbOfCol(:, :)
+    logical, allocatable :: storedQ(:, :)
     integer(I32) :: nOS, nPairs, iG, iP, j1, k1, k2, l2
 
     nOS = Orbs_nOrbsInState
@@ -947,16 +952,20 @@ contains
     end do
     orbOfCol = spread([(k1, k1=1, nOS)], 2, nPairs)
     pairOfCol = spread([(iP, iP=1, nPairs)], 1, nOS)
+    storedQ = spread(nodePairPot > 0, 1, nOS)
 
     allocate (nodeGroups(maxval(Orbs_blockOfOrb)))
     do iG = 1, size(nodeGroups)
       associate (g => nodeGroups(iG))
         g % orbs = pack([(k1, k1=1, nOS)], Orbs_blockOfOrb .eq. iG)
-        g % colPair = pack(pairOfCol, targetGroup .eq. iG)
-        g % colOrb = pack(orbOfCol, targetGroup .eq. iG)
+        g % colPair = [pack(pairOfCol, targetGroup .eq. iG .and. storedQ), &
+                       pack(pairOfCol, targetGroup .eq. iG .and. .not. storedQ)]
+        g % colOrb = [pack(orbOfCol, targetGroup .eq. iG .and. storedQ), &
+                      pack(orbOfCol, targetGroup .eq. iG .and. .not. storedQ)]
+        g % nColStored = count(targetGroup .eq. iG .and. storedQ)
         allocate (g % weights(size(g % colPair), size(g % orbs)))
-        g % colOffset = nodeNCols
-        nodeNCols = nodeNCols + size(g % colPair)
+        g % colOffset = nodeNH2Cols
+        nodeNH2Cols = nodeNH2Cols + g % nColStored
         nodeMaxCols = max(nodeMaxCols, size(g % colPair))
       end associate
     end do
@@ -1076,7 +1085,8 @@ contains
     ! the products X = V_iP * orbs(:,k) of the columns (iP, k) of the group
     ! enter two ZGEMMs (i, j in the group),
     !   dOrbNodes_(:,j) += X weights,
-    !   h2Cols_(i, colOffset + (iP,k)) = sum w conjg(orbs(:,i)) X(:,(iP,k)).
+    !   h2Cols_(i, colOffset + (iP,k)) = sum w conjg(orbs(:,i)) X(:,(iP,k)),
+    ! the latter for the columns of stored pairs only (FillH2FromTargetColumns).
     !---------------------------------------------------------------------------
     use M_Utils_BlasLib, only: ZGEMM
     use M_Orbs
@@ -1090,7 +1100,7 @@ contains
     integer(I32), parameter :: blockSize = 128
 
     complex(R64), allocatable :: x(:, :), orbW(:, :), dOrbBlock(:, :), h2Private(:, :)
-    integer(I32) :: nOS, nPts, iB, nB, iG, iC, iJ, nC, nJ, iP, k1, j1
+    integer(I32) :: nOS, nPts, iB, nB, iG, iC, iJ, nC, nCS, nJ, iP, k1, j1
     logical :: h2Q, dOrbQ
 
     nOS = Orbs_nOrbsInState
@@ -1099,15 +1109,15 @@ contains
     dOrbQ = present(dOrbNodes_)
 
     if (h2Q) then
-      allocate (h2Cols_(nOS, nodeNCols))
+      allocate (h2Cols_(nOS, nodeNH2Cols))
       h2Cols_(:, :) = 0.0_R64
     end if
 
-    !$omp parallel default(shared) private(iB, nB, iG, iC, iJ, nC, nJ, iP, k1, j1, x, orbW, dOrbBlock, h2Private)
+    !$omp parallel default(shared) private(iB, nB, iG, iC, iJ, nC, nCS, nJ, iP, k1, j1, x, orbW, dOrbBlock, h2Private)
     allocate (x(blockSize, nodeMaxCols))
     allocate (orbW(blockSize, nOS), dOrbBlock(blockSize, nOS))
     if (h2Q) then
-      allocate (h2Private(nOS, nodeNCols))
+      allocate (h2Private(nOS, nodeNH2Cols))
       h2Private(:, :) = 0.0_R64
     end if
 
@@ -1117,7 +1127,9 @@ contains
 
       do iG = 1, size(nodeGroups)
         nC = size(nodeGroups(iG) % colPair)
+        nCS = nodeGroups(iG) % nColStored
         nJ = size(nodeGroups(iG) % orbs)
+        if (.not. dOrbQ) nC = nCS
         if (nC .eq. 0) cycle
 
         do iC = 1, nC
@@ -1139,11 +1151,11 @@ contains
           end do
         end if
 
-        if (h2Q) then
+        if (h2Q .and. nCS > 0) then
           do iJ = 1, nJ
             orbW(1:nB, iJ) = orbNodes(iB:iB + nB - 1, nodeGroups(iG) % orbs(iJ)) * nodeWeights(iB:iB + nB - 1)
           end do
-          call ZGEMM('C', 'N', nJ, nC, nB, (1.0_R64, 0.0_R64), orbW, blockSize, x, blockSize, &
+          call ZGEMM('C', 'N', nJ, nCS, nB, (1.0_R64, 0.0_R64), orbW, blockSize, x, blockSize, &
                      (1.0_R64, 0.0_R64), h2Private(1, nodeGroups(iG) % colOffset + 1), nOS)
         end if
       end do
@@ -1162,13 +1174,19 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine FillH2FromTargetColumns(h2, h2Cols)
     !---------------------------------------------------------------------------
-    !   h2(i1,l2,k,k2) = 1/2 <orb_i1| V_(l2,k2) |orb_k>  for the column (iP,k),
-    ! zero elsewhere.
+    !   h2(i1,l2,k,k2) = 1/2 <orb_i1| V_(l2,k2) |orb_k>  for the column (iP,k)
+    ! of a stored pair, the swapped pair by the Hermitian symmetry
+    !   h2(k,k2,i1,l2) = conjg(h2(i1,l2,k,k2))
+    ! (row k lies in the group of the swapped column (iP',i1); a diagonal pair
+    ! k2 = l2 is its own swapped pair), zero elsewhere.
+    ! Valid for a Hermitian metric only (precondition of the node path); a
+    ! c-product (ECS) variant must compute the swapped columns instead.
     !---------------------------------------------------------------------------
     complex(R64), intent(out), allocatable :: h2(:, :, :, :)
     complex(R64), intent(in), contiguous   :: h2Cols(:, :)
 
-    integer(I32) :: nO, iG, iC, iJ, iP
+    integer(I32) :: nO, iG, iC, iJ, iP, i1, k1
+    complex(R64) :: h2Val
 
     nO = Method_Mb_OrbBased_nOrbsSum
 
@@ -1177,10 +1195,14 @@ contains
 
     do iG = 1, size(nodeGroups)
       associate (g => nodeGroups(iG))
-        do iC = 1, size(g % colPair)
+        do iC = 1, g % nColStored
           iP = g % colPair(iC)
+          k1 = g % colOrb(iC)
           do iJ = 1, size(g % orbs)
-            h2(g % orbs(iJ), nodePairL2(iP), g % colOrb(iC), nodePairK2(iP)) = 0.5_R64 * h2Cols(iJ, g % colOffset + iC)
+            i1 = g % orbs(iJ)
+            h2Val = 0.5_R64 * h2Cols(iJ, g % colOffset + iC)
+            h2(i1, nodePairL2(iP), k1, nodePairK2(iP)) = h2Val
+            if (nodePairK2(iP) .ne. nodePairL2(iP)) h2(k1, nodePairK2(iP), i1, nodePairL2(iP)) = conjg(h2Val)
           end do
         end do
       end associate

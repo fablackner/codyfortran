@@ -80,7 +80,7 @@ Module doc: `src/OrbsInit/A_OrbsInit.md`.
 **Coeffs**
 Domain: Quantum State Containers.
 Purpose: CI coefficients, Hamiltonian application, and RDM filling.
-Key interfaces/notes: `Coeffs_ApplyH1FillRdm1`, `Coeffs_ApplyH2FillRdm2`, `Coeffs_ApplyExcitation`, and `Coeffs_FillRdm{1,2,3}Bt`; includes Generic and Hubbard variants.
+Key interfaces/notes: `Coeffs_ApplyH1FillRdm1`, `Coeffs_ApplyH2FillRdm2`, `Coeffs_ApplyExcitation`, and `Coeffs_FillRdm{1,2,3}Bt`; includes Generic and Hubbard variants; Generic optionally restricted to a declared total-M sector (`coeffs.generic.totalM`, `Coeffs_ProjectOnSector` called by CoeffsInit).
 Module doc: `src/Coeffs/A_Coeffs.md`.
 
 **CoeffsInit**

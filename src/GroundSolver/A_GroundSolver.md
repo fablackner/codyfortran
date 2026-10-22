@@ -78,6 +78,10 @@ MCTDHX-style state (CI coefficients ⊕ orbitals):
 1. **CI step**: Build h1/h2 in the current orbital basis and diagonalize the
    CI Hamiltonian H_{IJ} = ⟨Φ_I|Ĥ|Φ_J⟩ via DiagonalizerList(1); mix the
    phase-aligned ground eigenvector with the old coefficients and normalize.
+   With a declared total-M sector (`coeffs.generic.totalM`, Ylm-optimized
+   solver only) the mixed vector is first projected on it
+   (`Coeffs_ProjectOnSector`): the diagonalizer works on full-length vectors,
+   whose eigenvectors lie in the sector only up to round-off.
 
 2. **Orbital step**: Fill the correlated 1-RDM ρ¹ from the updated CI vector,
    build the RDM-weighted Fock operator

@@ -54,4 +54,7 @@ other m from the Löwdin steps of earlier runs); the Löwdin steps and the
 inverse 1-RDM are decomposed per m block, so no admixture is created
 afterwards. `orbsInit.ylm.hydrogenLike.m` stays a separate key: without
 mOfOrbs (e.g. a field that is not z-polarized) the generic operator is used
-(≈ 16 s per step).
+(≈ 16 s per step). The CI is restricted to the total-M sector of the ground
+state, `coeffs.generic.totalM = 0` (4116 of 15876 configurations, −0.24 s per
+step; `src/Coeffs/A_Coeffs.md`); the loaded coefficients are projected on it
+once.

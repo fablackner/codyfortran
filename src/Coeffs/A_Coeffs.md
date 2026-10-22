@@ -89,6 +89,45 @@ stride_bt = ∏_{bt' < bt} nConfigurations(bt')
 - Uses precomputed `singles`/`doubles` connectivity graphs from ConfigList
 - OpenMP parallelization over CI indices
 - Linearized H1/H2 storage for cache efficiency
+- Optional restriction to a total-M sector (below)
+
+**Total-M sector (`coeffs.generic.totalM`, optional):** with declared orbital
+m (`method.mb.orbBased.mOfOrbs`, required) every configuration of a body type
+has a definite M = Σ m_i n_i, and h1, h2 conserve the total M (z-polarized
+field). `Coeffs_Setup` (bound by the Generic backend) then builds
+- `sector`: the indices of the configurations of total M = `totalM`,
+- `sectorBt(bt)`: the bucket bounds of the ConfigList connection tables of each
+  body type, which Setup sorts in place (stably) by the change d of M they
+  cause: singles `singlesFirst(d, iC)` .. `singlesFirst(d+1, iC)-1`, doubles
+  that conserve M `doublesFirst(0, iC)` .. `doublesFirst(1, iC)-1` (the order
+  of the connections is not part of the ConfigList contract; no copy, so the
+  connectivity memory is that of the full space).
+
+`ApplyH1FillRdm1` and `ApplyH2FillRdm2` run `!$omp do` over the sector, take
+the singles of bucket 0 and the M-conserving doubles, and pair a single of
+change d on one body type with a single of change −d on the other, so no
+connection leaves the sector. Storage stays full length (`Coeffs_nCoeffs`,
+`coeffs.in` and the integrators unchanged); rows outside the sector are never
+touched, and the result is exact for vectors in the sector,
+which `Coeffs_ProjectOnSector` enforces once at initialization (called by
+`CoeffsInit_Initialize`, and on the CI eigenvectors of the Ylm-optimized MCSCF
+ground solver). It stops with an error if more than 1e-8 of the norm lies
+outside the sector. On full-length vectors the Hamiltonian is thus
+H_sector ⊕ 0: a diagonalizer, the eigen-expansion propagator or a CI spectrum
+of length `Coeffs_nCoeffs` sees `Coeffs_nCoeffs` − |sector| spurious
+eigenvalues 0 (11760 for Ne below), harmless only for a ground state of
+negative energy (MCSCF of atoms); excited or positive-energy spectra need the
+key removed. Without the key the sector holds all configurations and one
+bucket all connections in ConfigList order, i.e. the loops of the full
+space. Ne 9 orbitals (5+5 electrons): the M = 0 sector has 4116 of 15876
+configurations; 16 steps of the production setup take 41.2 s instead of
+45.4 s (−0.26 s per step). Tests: `test/componentTests/Coeffs/Generic/T_Coeffs_Generic_Sector`
+(sector of total M = 1 against the full space for two fermionic and one
+bosonic body type: rdm1, rdm2 and H|c⟩ of random h1, h2, exact zeros outside
+the sector, `Coeffs_ProjectOnSector`), `T_Coeffs_Generic_SectorOutside` (a
+unary configuration outside the sector stops with the error), and
+`test/simulationTests/Ne3d/T_Ne3d_15/16` (MCSCF and MCTDHF laser propagation
+of Be-like Ne6+, 34 of 100 configurations, against the full space).
 
 ### 2. Hubbard (`coeffs.hubbard`)
 
@@ -122,6 +161,7 @@ stride_bt = ∏_{bt' < bt} nConfigurations(bt')
 |-----------|-------------|
 | `Coeffs_ApplyH1FillRdm1` | Apply Ĥ₁ = Σ h¹_{pq} a†_p a_q; optionally compute 1-RDM |
 | `Coeffs_ApplyH2FillRdm2` | Apply Ĥ₂ = Σ h²_{pqrs} a†_p a†_q a_s a_r with h²_{pqrs} = ½⟨pq\|W\|rs⟩; optionally compute 2-RDM |
+| `Coeffs_ProjectOnSector` | Zero the coefficients outside the declared total-M sector (NoOp without `coeffs.generic.totalM`) |
 
 Index convention (shared with `Method_Mb_OrbBased_FillH1/H2`, TwoRdm and the
 orbital equations of motion): h¹_{pq} = ⟨p|h|q⟩, h²_{pqrs} = ½⟨pq|W|rs⟩ (the ½
@@ -173,10 +213,13 @@ call Coeffs_IndexFromConfigurations(iCoeff, configurations)  ! Tuple → linear
 ```json
 {
   "coeffs": {
-    "generic": { }
+    "generic": { "totalM": 0 }
   }
 }
 ```
+
+`totalM` is optional (requires `method.mb.orbBased.mOfOrbs`); `"generic": { }`
+uses the full space.
 
 ### Hubbard backend
 ```json
@@ -199,10 +242,11 @@ Replace `noSpinSym` with `plusSpinSym` or `minusSpinSym` for symmetry-adapted ba
 ! 1. Fabricate: read JSON, bind procedure pointers, compute nCoeffs
 call Coeffs_Fabricate
 
-! 2. Setup: build configuration tables, hopping graphs, etc.
+! 2. Setup: build configuration tables, hopping graphs, the Generic sector, etc.
 call Coeffs_Setup
 
-! 3. Initialize: set initial values (via CoeffsInit module)
+! 3. Initialize: set initial values (via CoeffsInit module; ends with
+!    Coeffs_ProjectOnSector)
 call CoeffsInit_Initialize(Coeffs_coeffs)
 
 ! 4. Use

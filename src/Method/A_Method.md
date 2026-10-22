@@ -356,6 +356,11 @@ With the declaration:
   `ApplyCorrelationOpYlmNodes` and `Method_Mb_OrbBased_FillH2` to
   `FillH2YlmNodes` (also used by `Method_GetEnergy`); the exact field-free
   part transforms only the declared columns (above).
+- **CI sector** (optional `coeffs.generic.totalM`): the CI Hamiltonian acts
+  only on the configurations of the declared total M, with full-length
+  storage (`src/Coeffs/A_Coeffs.md`); the initial coefficients are projected
+  on it once (`Coeffs_ProjectOnSector` in `CoeffsInit_Initialize`). Ne 9
+  orbitals: 4116 of 15876 configurations, −0.24 s per step.
 
 The node path evaluates orbitals (in the channels of their declared m), pair
 densities and pair potentials on the Gauss–Legendre nodes in cos θ
@@ -386,13 +391,22 @@ rule: for every group the products X = V_iP · φ_k of its columns (iP, k) are
 formed blockwise over cache-sized blocks of nodes and enter two ZGEMMs,
 dφ_j += X · weights and h2 = (φ_i w)^H · X, which touch only the 2-RDM
 weights allowed by the rule (Ne with 1s 2s 2p 3s 3p: 1921 of 6561);
-`FillH2YlmNodes` forms only the h2 columns.
+`FillH2YlmNodes` forms only the h2 columns. The columns of the stored pairs
+come first in every group (`T_TargetGroup % nColStored`) and are the only
+ones entering h2: the swapped pairs follow from the Hermitian symmetry
+h2(k, k2, i, l2) = conj(h2(i, l2, k, k2)) (`FillH2FromTargetColumns`; row k
+lies in the group of the swapped column). This needs a Hermitian metric, the
+precondition of the node path; a c-product (ECS) variant must compute the
+swapped columns instead.
 
 One MCTDHX non-linear derivative of Ne with 9 orbitals (1s 2s 2p 3s 3p,
-lmax 40, mmax 1, 761 radial points, four threads on 2 cores): 0.38 s (0.28 s
-correlation operator), against 3.7 s with the generic operator. One energy
+lmax 40, mmax 1, 761 radial points, four threads on 2 cores, measured before
+the parity split and the stored-pair h2 above): 0.38 s (0.28 s correlation
+operator), against 3.7 s with the generic operator. One energy
 evaluation (`Method_GetEnergy`, h2 by `FillH2YlmNodes`): 0.25 s instead of
-2.2 s.
+2.2 s. The parity-split node transforms (A_Grid.md) and h2 from the stored pairs
+only take 16 time steps of the Ne HHG setup (incl. setup and 3 energy
+evaluations) from 48.7 s to 45.4 s.
 
 ---
 

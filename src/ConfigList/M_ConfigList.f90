@@ -107,7 +107,9 @@ module M_ConfigList
   !>   encodes a†_i1 a†_i2 a_j2 a_j1 (note operator ordering convention)
   !>
   !> The complex type for `factor` supports future complex Hamiltonians; real
-  !> factors are stored with zero imaginary part.
+  !> factors are stored with zero imaginary part. The order of the connections
+  !> k of a configuration is not part of the contract (the Generic Coeffs
+  !> backend sorts them in place by the change of total M).
   !---------------------------------------------------------------------------
   type :: T_ConfigList_Excitation
     !> Number of configurations connected to each source configuration.
@@ -144,7 +146,8 @@ module M_ConfigList
   !>
   !> ## Thread Safety
   !>
-  !> After Setup completes, all data is read-only. ExciteConfiguration is
+  !> After Setup (and the reordering of the connections by the Generic
+  !> Coeffs_Setup) completes, all data is read-only. ExciteConfiguration is
   !> thread-safe for concurrent calls with different iC values.
   !>
   !> ## Extension Points

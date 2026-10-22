@@ -93,10 +93,12 @@ def propagator(p):
 
 
 def ci():
+    # CI restricted to the total-M sector of the closed-shell ground state
+    # (M = 0; requires mOfOrbs, src/Coeffs/A_Coeffs.md)
     return {
         "configList": {"allActive1": {"fermionic": {"bodyTarget": 1}},
                        "allActive2": {"fermionic": {"bodyTarget": 2}}},
-        "coeffs": {"generic": {}},
+        "coeffs": {"generic": {"totalM": 0}},
     }
 
 

@@ -33,6 +33,18 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine NoOpProcedures_ProjectCoeffs(coeffs)
+    use M_Utils_UnusedVariables
+
+    complex(R64), intent(inout), contiguous  :: coeffs(:)
+
+    ! this is just a dummy routine that does nothing
+
+    if (.false.) call UnusedVariables_Mark(coeffs)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine NoOpProcedures_ApplyInteractionOp(dOrbs, orbs, i2, j2, time)
     use M_Utils_UnusedVariables
     complex(R64), intent(inout), contiguous :: dOrbs(:, :)

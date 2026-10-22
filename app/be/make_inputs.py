@@ -129,10 +129,12 @@ def propagator(p, kind):
 
 
 def ci():
+    # CI restricted to the total-M sector M = 0 (requires mOfOrbs; with all
+    # m = 0 it holds every configuration, src/Coeffs/A_Coeffs.md)
     return {
         "configList": {"allActive1": {"fermionic": {"bodyTarget": 1}},
                        "allActive2": {"fermionic": {"bodyTarget": 2}}},
-        "coeffs": {"generic": {}},
+        "coeffs": {"generic": {"totalM": 0}},
     }
 
 

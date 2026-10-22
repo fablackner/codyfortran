@@ -33,6 +33,15 @@ Excited/                  ← Apply â†/â operators to |Φ₀⟩
 
 **Pattern:** Interface module (`M_`) exports procedure pointers; submodule (`S_`) provides implementation. Fabrication reads JSON and binds pointers at runtime.
 
+**Sector projection:** after the dispatch, `CoeffsInit_Fabricate` binds
+`CoeffsInit_Initialize` to a local `Initialize` that calls the concrete
+initializer and then `Coeffs_ProjectOnSector` (NoOp without
+`coeffs.generic.totalM`): the initial state is projected once on the declared
+total-M sector, the CI counterpart of `Orbs_ProjectOnSymmetry` in
+`OrbsInit_Initialize`. It stops with an error if more than 1e-8 of the norm
+lies outside the sector (a unary or excited configuration of other total M,
+a `coeffs.in` of another sector).
+
 ---
 
 ## Available Backends
@@ -141,6 +150,7 @@ end subroutine
 - **Dimension mismatch:** `coeffs(:)` must match the CI space size from `ConfigList`. The Load backend assumes the file has exactly the right size.
 - **Body types in Excited:** For single-species systems, set `bodyType1 = bodyType2 = 1`.
 - **Branching order:** In `S_CoeffsInit.f90`, Load takes precedence over Unary over Excited. Only one backend is activated.
+- **Total-M sector:** with `coeffs.generic.totalM` the initial state must lie in the sector (see Sector projection).
 
 ---
 
