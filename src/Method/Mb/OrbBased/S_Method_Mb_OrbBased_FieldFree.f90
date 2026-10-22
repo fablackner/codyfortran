@@ -49,17 +49,19 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_FieldFree
   !> Number of kept eigenvectors per l (all without spectral cut), (0:lmax).
   integer(I32), allocatable :: nKeep(:)
 
-  !> (orbital, m) columns of the block of l that are transformed, as indices
-  !> (iOrb - 1) (2 min(l, mmax) + 1) + m + min(l, mmax) + 1 in the order of
-  !> GatherBlock: the column of the declared m of every orbital, or all
-  !> columns without declared m.
+  !> (orbital, m) columns of the block of l that are transformed: the column
+  !> of the declared m of every orbital, or all columns without declared m;
+  !> nColMax is the largest count over l.
   type :: T_BlockColumns
-    integer(I32), allocatable :: cols(:)
+    integer(I32), allocatable :: orb(:)
+    integer(I32), allocatable :: m(:)
   end type
   type(T_BlockColumns), allocatable :: blockColumns(:)
+  integer(I32) :: nColMax = 0
 
   !> GPU variant (method.mb.orbBased.exactFieldFreeGpuQ): eigenvectors on the
-  !> device, device work arrays and the host staging buffer.
+  !> device, device work arrays and the host staging buffer (2 nColMax
+  !> columns per l).
   logical :: gpuQ = .false.
   type(c_ptr) :: deviceEvecs = c_null_ptr
   type(c_ptr) :: deviceX = c_null_ptr
@@ -80,8 +82,6 @@ contains
     integer(I32) :: nRad, l, nCol, nK
     real(R64), allocatable :: x(:, :), y(:, :)
 
-    if (.not. allocated(blockEvecs)) call BuildBlocks
-
     if (gpuQ) then
       call PropagateFieldFreeGpu(orbs, dt, imagTimeQ)
       return
@@ -91,18 +91,18 @@ contains
 
     !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, x, y)
     do l = 0, Grid_Ylm_lmax
-      nCol = size(blockColumns(l) % cols)
+      nCol = size(blockColumns(l) % orb)
       if (nCol .eq. 0) cycle
       nK = nKeep(l)
       allocate (x(nRad, 2 * nCol), y(nK, 2 * nCol))
 
       ! Eigenbasis coefficients U^T x, phases, back transformation U y (kept
       ! eigenvectors only, which also projects onto them)
-      call GatherBlock(x, orbs, l, blockColumns(l) % cols)
+      call GatherBlock(x, orbs, l)
       call DGEMM('T', 'N', nK, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, :, l), nRad, x, nRad, 0.0_R64, y, nK)
       call ApplyPhases(y, l, dt, imagTimeQ)
       call DGEMM('N', 'N', nRad, 2 * nCol, nK, 1.0_R64, blockEvecs(:, :, l), nRad, y, nK, 0.0_R64, x, nRad)
-      call ScatterBlock(orbs, x, l, blockColumns(l) % cols)
+      call ScatterBlock(orbs, x, l)
 
       deallocate (x, y)
     end do
@@ -128,15 +128,13 @@ contains
     real(R64), allocatable :: x(:, :), y(:, :)
     complex(R64), allocatable :: phi(:, :), acc(:, :)
 
-    if (.not. allocated(blockEvecs)) call BuildBlocks
-
     nRad = Grid_Ylm_nRadial
     nPhi = size(orbsList, 3)
     orbs(:, :) = (0.0_R64, 0.0_R64)
 
     !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, m, k, x, y, phi, acc)
     do l = 0, Grid_Ylm_lmax
-      nCol = size(blockColumns(l) % cols)
+      nCol = size(blockColumns(l) % orb)
       if (nCol .eq. 0) cycle
       nK = nKeep(l)
       allocate (x(nRad, 2 * nCol), y(nK, 2 * nCol), phi(nK, 0:nPhi - 1), acc(nK, nCol))
@@ -147,7 +145,7 @@ contains
 
       acc(:, :) = (0.0_R64, 0.0_R64)
       do m = 0, nPhi - 1
-        call GatherBlock(x, orbsList(:, :, m), l, blockColumns(l) % cols)
+        call GatherBlock(x, orbsList(:, :, m), l)
         call DGEMM('T', 'N', nK, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, :, l), nRad, x, nRad, 0.0_R64, y, nK)
         acc(:, :) = acc(:, :) + spread(phi(:, m), 2, nCol) * cmplx(y(:, 1:nCol), y(:, nCol + 1:), kind=R64)
       end do
@@ -155,7 +153,7 @@ contains
       y(:, 1:nCol) = real(acc, kind=R64)
       y(:, nCol + 1:) = aimag(acc)
       call DGEMM('N', 'N', nRad, 2 * nCol, nK, 1.0_R64, blockEvecs(:, :, l), nRad, y, nK, 0.0_R64, x, nRad)
-      call ScatterBlock(orbs, x, l, blockColumns(l) % cols)
+      call ScatterBlock(orbs, x, l)
 
       deallocate (x, y, phi, acc)
     end do
@@ -213,30 +211,18 @@ contains
     real(R64), intent(in) :: dt
     logical, intent(in) :: imagTimeQ
 
-    integer(I32) :: nRad, lmax, l, nCol, nColMax
-    integer(I64) :: blockSize
+    integer(I32) :: nRad, lmax, l, nCol
     real(R64), contiguous, pointer :: blocks(:, :, :)
 
     nRad = Grid_Ylm_nRadial
     lmax = Grid_Ylm_lmax
-    nColMax = MaxBlockColumns()
-    blockSize = int(nRad, kind=I64) * 2 * nColMax
-
-    ! Host staging buffer and device work arrays (2 nColMax columns per l)
-    if (.not. allocated(hostBlocks)) then
-      allocate (hostBlocks(blockSize * (lmax + 1)))
-      call CublasLib_Allocate(deviceX, blockSize * (lmax + 1))
-      call CublasLib_Allocate(deviceY, blockSize * (lmax + 1))
-    end if
-    if (size(hostBlocks, kind=I64) .ne. blockSize * (lmax + 1)) &
-      error stop "Method_Mb_OrbBased_PropagateFieldFree: orbital count changed between GPU calls"
 
     blocks(1:nRad, 1:2 * nColMax, 0:lmax) => hostBlocks
 
     !$omp parallel do default(shared) schedule(dynamic) private(l, nCol)
     do l = 0, lmax
-      nCol = size(blockColumns(l) % cols)
-      call GatherBlock(blocks(:, 1:2 * nCol, l), orbs, l, blockColumns(l) % cols)
+      nCol = size(blockColumns(l) % orb)
+      call GatherBlock(blocks(:, 1:2 * nCol, l), orbs, l)
     end do
     !$omp end parallel do
 
@@ -244,7 +230,7 @@ contains
 
     !$omp parallel do default(shared) schedule(dynamic) private(l, nCol)
     do l = 0, lmax
-      nCol = size(blockColumns(l) % cols)
+      nCol = size(blockColumns(l) % orb)
       call ApplyPhases(blocks(:, 1:2 * nCol, l), l, dt, imagTimeQ)
     end do
     !$omp end parallel do
@@ -253,8 +239,8 @@ contains
 
     !$omp parallel do default(shared) schedule(dynamic) private(l, nCol)
     do l = 0, lmax
-      nCol = size(blockColumns(l) % cols)
-      call ScatterBlock(orbs, blocks(:, 1:2 * nCol, l), l, blockColumns(l) % cols)
+      nCol = size(blockColumns(l) % orb)
+      call ScatterBlock(orbs, blocks(:, 1:2 * nCol, l), l)
     end do
     !$omp end parallel do
 
@@ -277,11 +263,11 @@ contains
 
     nRad = Grid_Ylm_nRadial
     lmax = Grid_Ylm_lmax
-    blockSize = int(nRad, kind=I64) * 2 * MaxBlockColumns()
+    blockSize = int(nRad, kind=I64) * 2 * nColMax
 
     call CublasLib_CopyToDevice(deviceIn, hostBlocks, 0_I64)
     do l = 0, lmax
-      nCol = size(blockColumns(l) % cols)
+      nCol = size(blockColumns(l) % orb)
       offsetU = int(nRad, kind=I64) * nRad * l
       offsetX = blockSize * l
       ! kept eigenvectors only: U_K^T x has nKeep rows (the rows below are
@@ -299,42 +285,28 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Largest number of transformed columns of a block (GPU staging buffer).
-  function MaxBlockColumns() result(res)
-    integer(I32) :: res
-
-    integer(I32) :: l
-
-    res = maxval([(size(blockColumns(l) % cols), l=lbound(blockColumns, 1), ubound(blockColumns, 1))])
-
-  end function
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Gathers w^{1/2} f_lm of the (orbital, m) columns cols of the block of l
+  !> Gathers w^{1/2} f_lm of the (orbital, m) columns of the block of l
   !> (blockColumns): real parts in columns 1:nCol, imaginary parts in
   !> nCol+1:2 nCol (one GEMM per transformation).
-  subroutine GatherBlock(x, orbs, l, cols)
+  subroutine GatherBlock(x, orbs, l)
     use M_Grid_Ylm
 
     real(R64), intent(out), contiguous :: x(:, :)
     complex(R64), intent(in), contiguous :: orbs(:, :)
     integer(I32), intent(in) :: l
-    integer(I32), intent(in), contiguous :: cols(:)
 
-    integer(I32) :: iOrb, m, nM, jCol, nCol
+    integer(I32) :: jCol, nCol
     complex(R64), allocatable :: fLm(:)
 
     allocate (fLm(Grid_Ylm_nRadial))
-    nM = 2 * min(l, Grid_Ylm_mmax) + 1
-    nCol = size(cols)
-
-    do jCol = 1, nCol
-      iOrb = (cols(jCol) - 1) / nM + 1
-      m = mod(cols(jCol) - 1, nM) - min(l, Grid_Ylm_mmax)
-      call Grid_Ylm_GetLmComponent(fLm, l, m, orbs(:, iOrb))
-      x(:, jCol) = sqrtWeights(:) * real(fLm(:), kind=R64)
-      x(:, nCol + jCol) = sqrtWeights(:) * aimag(fLm(:))
-    end do
+    associate (cols => blockColumns(l))
+      nCol = size(cols % orb)
+      do jCol = 1, nCol
+        call Grid_Ylm_GetLmComponent(fLm, l, cols % m(jCol), orbs(:, cols % orb(jCol)))
+        x(:, jCol) = sqrtWeights(:) * real(fLm(:), kind=R64)
+        x(:, nCol + jCol) = sqrtWeights(:) * aimag(fLm(:))
+      end do
+    end associate
 
   end subroutine
 
@@ -385,8 +357,6 @@ contains
     integer(I32) :: nRad, l, nCol, nK, nH
     real(R64), allocatable :: x(:, :), y(:, :)
 
-    if (.not. allocated(blockEvecs)) call BuildBlocks
-
     nRad = Grid_Ylm_nRadial
 
     !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, nH, x, y)
@@ -394,14 +364,14 @@ contains
       nK = nKeep(l)
       nH = nRad - nK
       if (nH .eq. 0) cycle
-      nCol = size(blockColumns(l) % cols)
+      nCol = size(blockColumns(l) % orb)
       if (nCol .eq. 0) cycle
       allocate (x(nRad, 2 * nCol), y(nH, 2 * nCol))
 
-      call GatherBlock(x, orbs, l, blockColumns(l) % cols)
+      call GatherBlock(x, orbs, l)
       call DGEMM('T', 'N', nH, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, nK + 1:, l), nRad, x, nRad, 0.0_R64, y, nH)
       call DGEMM('N', 'N', nRad, 2 * nCol, nH, -1.0_R64, blockEvecs(:, nK + 1:, l), nRad, y, nH, 1.0_R64, x, nRad)
-      call ScatterBlock(orbs, x, l, blockColumns(l) % cols)
+      call ScatterBlock(orbs, x, l)
 
       deallocate (x, y)
     end do
@@ -410,34 +380,31 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Scatters w^{-1/2} x of the columns cols of the block of l back into the
+  !> Scatters w^{-1/2} x of the columns of the block of l back into the
   !> channels (the other columns are left unchanged).
-  subroutine ScatterBlock(orbs, x, l, cols)
+  subroutine ScatterBlock(orbs, x, l)
     use M_Grid_Ylm
 
     complex(R64), intent(inout), contiguous :: orbs(:, :)
     real(R64), intent(in), contiguous :: x(:, :)
     integer(I32), intent(in) :: l
-    integer(I32), intent(in), contiguous :: cols(:)
 
-    integer(I32) :: iOrb, m, nM, jCol, nCol
+    integer(I32) :: jCol, nCol
     complex(R64), allocatable :: fLm(:)
 
     allocate (fLm(Grid_Ylm_nRadial))
-    nM = 2 * min(l, Grid_Ylm_mmax) + 1
-    nCol = size(cols)
-
-    do jCol = 1, nCol
-      iOrb = (cols(jCol) - 1) / nM + 1
-      m = mod(cols(jCol) - 1, nM) - min(l, Grid_Ylm_mmax)
-      fLm(:) = cmplx(x(:, jCol), x(:, nCol + jCol), kind=R64) / sqrtWeights(:)
-      call Grid_Ylm_SetLmComponent(orbs(:, iOrb), l, m, fLm)
-    end do
+    associate (cols => blockColumns(l))
+      nCol = size(cols % orb)
+      do jCol = 1, nCol
+        fLm(:) = cmplx(x(:, jCol), x(:, nCol + jCol), kind=R64) / sqrtWeights(:)
+        call Grid_Ylm_SetLmComponent(orbs(:, cols % orb(jCol)), l, cols % m(jCol), fLm)
+      end do
+    end associate
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine BuildBlocks
+  module subroutine Method_Mb_OrbBased_SetupFieldFree
     !---------------------------------------------------------------------------
     ! Builds and diagonalizes the symmetrized radial blocks of h0 for every l.
     !
@@ -459,7 +426,8 @@ contains
 
     real(R64), parameter :: tolerance = 1.0e-10_R64
 
-    integer(I32) :: nRad, nG, lmax, mmax, i, l, m, nFound, iOrb, mCap
+    integer(I32) :: nRad, nG, nOS, lmax, mmax, i, l, m, nFound, iOrb, mCap
+    integer(I64) :: blockSize
     logical, allocatable :: keepQ(:, :)
     logical :: potentialQ
     real(R64) :: hScale, devM, devImag, devSym
@@ -589,25 +557,28 @@ contains
     ! transformed (orbital, m) columns per l
     !------------------------------------
 
-    ! keepQ(m + mCap + 1, iOrb) in the column order of GatherBlock
+    ! keepQ(m + mCap + 1, iOrb), m running fastest
+    nOS = Orbs_nOrbsInState
     allocate (blockColumns(0:lmax))
     do l = 0, lmax
       mCap = min(l, mmax)
-      allocate (keepQ(2 * mCap + 1, Orbs_nOrbsInState))
+      allocate (keepQ(2 * mCap + 1, nOS))
       keepQ(:, :) = .true.
       if (Method_Mb_OrbBased_definiteMQ) then
         keepQ(:, :) = .false.
-        do iOrb = 1, Orbs_nOrbsInState
+        do iOrb = 1, nOS
           if (abs(Method_Mb_OrbBased_mOfOrb(iOrb)) <= mCap) &
             keepQ(Method_Mb_OrbBased_mOfOrb(iOrb) + mCap + 1, iOrb) = .true.
         end do
       end if
-      blockColumns(l) % cols = pack([(i, i=1, size(keepQ))], reshape(keepQ, [size(keepQ)]))
+      blockColumns(l) % orb = pack(spread([(iOrb, iOrb=1, nOS)], 1, 2 * mCap + 1), keepQ)
+      blockColumns(l) % m = pack(spread([(m, m=-mCap, mCap)], 2, nOS), keepQ)
+      nColMax = max(nColMax, size(blockColumns(l) % orb))
       deallocate (keepQ)
     end do
 
     !------------------------------------
-    ! optional GPU: eigenvectors stay on the device
+    ! optional GPU: eigenvectors stay on the device, staging buffers
     !------------------------------------
 
     gpuQ = Json_Get("method.mb.orbBased.exactFieldFreeGpuQ", .false.)
@@ -616,6 +587,10 @@ contains
         error stop "method.mb.orbBased.exactFieldFreeGpuQ: no CUDA device (or built without -DCODY_USE_CUDA=ON)"
       call CublasLib_Allocate(deviceEvecs, size(blockEvecs, kind=I64))
       call CublasLib_CopyToDevice(deviceEvecs, reshape(blockEvecs, [size(blockEvecs)]), 0_I64)
+      blockSize = int(nRad, kind=I64) * 2 * nColMax
+      allocate (hostBlocks(blockSize * (lmax + 1)))
+      call CublasLib_Allocate(deviceX, blockSize * (lmax + 1))
+      call CublasLib_Allocate(deviceY, blockSize * (lmax + 1))
       write (*, '(A,F8.1,A)') " exact field-free blocks on the GPU (", &
         real(size(blockEvecs, kind=I64) * 8, kind=R64) / 2.0_R64**20, " MiB)"
     end if

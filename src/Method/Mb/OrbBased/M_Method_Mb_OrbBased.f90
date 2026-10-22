@@ -25,9 +25,16 @@ module M_Method_Mb_OrbBased
     end subroutine
 
     !> Setup shared by the orbital-based methods, called first by their
-    !> Method_Setup (after Grid_Setup and Orbs_Fabricate): builds the skeleton
-    !> of the definite-m node path (pair list, target groups) if it is bound.
+    !> Method_Setup (after the Grid and Sys* setups and Orbs_Fabricate): builds
+    !> the skeleton of the definite-m node path if it is bound and the
+    !> field-free blocks if the method binds Method_PropagateExactPart.
     module subroutine Method_Mb_OrbBased_Setup
+    end subroutine
+
+    !> Builds and diagonalizes the blocks of the field-free one-body
+    !> Hamiltonian h0 = T + V_ext per l and checks the requirements of the
+    !> exact part (S_Method_Mb_OrbBased_FieldFree).
+    module subroutine Method_Mb_OrbBased_SetupFieldFree
     end subroutine
 
     !> Fills the spatial 1-RDM in the orbitals of the state: rdm1 itself for
@@ -63,9 +70,8 @@ module M_Method_Mb_OrbBased
 
     !> Propagates the orbitals exactly with the field-free one-body
     !> Hamiltonian h0 = T + V_ext: orbs <- exp(-i h0 dt) orbs, or
-    !> exp(-h0 dt) orbs if imagTimeQ. h0 is block diagonal in (l,m) on Ylm
-    !> grids and is diagonalized once per l on the first call
-    !> (S_Method_Mb_OrbBased_FieldFree).
+    !> exp(-h0 dt) orbs if imagTimeQ, in the eigenbasis of the blocks of
+    !> Method_Mb_OrbBased_SetupFieldFree.
     module subroutine Method_Mb_OrbBased_PropagateFieldFree(orbs, dt, imagTimeQ)
       !> Orbitals (nPoints x nOrbsInState), propagated in place.
       complex(R64), intent(inout), contiguous :: orbs(:, :)
@@ -107,13 +113,7 @@ module M_Method_Mb_OrbBased
 
   !> Declared m of every spin orbital (nOrbsSum, layout of nOrbs), from
   !> method.mb.orbBased.mOfOrbs; allocated only if declared. Every orbital
-  !> lives in the Ylm channels of its m (orbitals of an atom in a linearly
-  !> polarized field): the orbitals are projected on it once at
-  !> initialization (Orbs_ProjectOnSymmetry), orbital-space
-  !> eigen-decompositions act within blocks of equal m (Orbs_blockOfOrb), and
-  !> the definite-m node quadrature of the correlation operator and h2 as well
-  !> as the m-selective exact field-free part are bound by
-  !> Method_Mb_OrbBased_Fabricate.
+  !> lives in the Ylm channels of its m (A_Method.md, "Declared m").
   integer(I32), allocatable :: Method_Mb_OrbBased_mOfOrb(:)
 
   !> True if method.mb.orbBased.mOfOrbs is declared.

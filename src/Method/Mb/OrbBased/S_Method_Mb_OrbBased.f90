@@ -22,11 +22,9 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   ! local data
   !=============================================================================
 
-  !> Target group (m, body type) of the definite-m node path: the columns
-  !> (pair colPair, orbital colOrb) whose product V_pair * orbital carries
-  !> this m, the orbitals of the group, the offset of its columns in the h2
-  !> columns of all groups, and the weights (columns x orbitals) of the
-  !> correlation sum (refilled at every call).
+  !> Target group (m, body type) of the definite-m node path: its columns
+  !> (pair colPair, orbital colOrb), its orbitals, the offset of its columns
+  !> in the h2 columns of all groups and the 2-RDM weights (columns x orbitals).
   type :: T_TargetGroup
     integer(I32), allocatable :: colPair(:)
     integer(I32), allocatable :: colOrb(:)
@@ -38,16 +36,14 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   !> Whether the definite-m node path is bound (Method_Mb_OrbBased_Fabricate).
   logical :: ylmNodesQ = .false.
 
-  !> Skeleton of the definite-m node path (SetupYlmNodes, built once from
-  !> Method_Mb_OrbBased_mOfOrb in Method_Mb_OrbBased_Setup): ordered pairs
-  !> (k2, l2) of equal body type within the |m| cap of the potentials, every
-  !> unordered pair (k2 >= l2) followed by its swap, with M = m_k2 - m_l2 and
-  !> the index of the stored potential (negative for the swap, which uses the
-  !> conjugate); the target groups; the quadrature weights of the full
-  !> measure on the node points.
+  !> Skeleton of the node path (SetupYlmNodes): ordered pairs (k2, l2), every
+  !> unordered pair followed by its swap, with M = m_k2 - m_l2 and the index of
+  !> the stored potential (negative for the swap: conjugate); the target groups
+  !> with their total and largest column count; the quadrature weights.
   integer(I32), allocatable :: nodePairK2(:), nodePairL2(:), nodePairM(:), nodePairPot(:)
   integer(I32) :: nodeNPots = 0
   type(T_TargetGroup), allocatable :: nodeGroups(:)
+  integer(I32) :: nodeNCols = 0, nodeMaxCols = 0
   real(R64), allocatable :: nodeWeights(:)
 
 contains
@@ -144,7 +140,8 @@ contains
     Method_Mb_OrbBased_ApplySingleBodyOp => ApplySingleBodyOp
 
     ! Declared m: correlation operator and h2 by the definite-m node quadrature
-    ylmNodesQ = Method_Mb_OrbBased_definiteMQ .and. YlmNodesFastPathQ()
+    ylmNodesQ = .false.
+    if (Method_Mb_OrbBased_definiteMQ) ylmNodesQ = YlmNodesFastPathQ()
     if (ylmNodesQ) then
       Method_Mb_OrbBased_ApplyCorrelationOp => ApplyCorrelationOpYlmNodes
       Method_Mb_OrbBased_FillH2 => FillH2YlmNodes
@@ -176,11 +173,11 @@ contains
     end if
 
     ! Exact field-free one-body propagation: the linear split-step integrator
-    ! then only propagates the gauge coupling; the methods with a split-step
-    ! linear part bind Method_PropagateExactPart
+    ! then only propagates the gauge coupling (the target bound above); the
+    ! methods with a split-step linear part bind Method_PropagateExactPart
     Method_Mb_OrbBased_exactFieldFreeQ = Json_Get("method.mb.orbBased.exactFieldFreeQ", .false.)
     if (Method_Mb_OrbBased_exactFieldFreeQ) then
-      Method_Mb_OrbBased_ApplyLinOp => ApplyGaugeOpLin
+      Method_Mb_OrbBased_ApplyLinOp => Method_Mb_OrbBased_ApplyGaugeOp
     else
       Method_Mb_OrbBased_ApplyLinOp => ApplySingleBodyOpLin
     end if
@@ -227,8 +224,10 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_OrbBased_Setup
+    use M_Method
 
     if (ylmNodesQ) call SetupYlmNodes
+    if (associated(Method_PropagateExactPart)) call Method_Mb_OrbBased_SetupFieldFree
 
   end subroutine
 
@@ -239,21 +238,15 @@ contains
     complex(R64), intent(out), allocatable :: rdm1Spatial(:, :)
     complex(R64), intent(in), contiguous   :: rdm1(:, :)
 
-    integer(I32) :: nO, nOS
+    integer(I32) :: nOS
 
     nOS = Orbs_nOrbsInState
-    nO = Method_Mb_OrbBased_nOrbsSum
 
-    allocate (rdm1Spatial(nOS, nOS))
-
-    if (nO .eq. nOS) then
-      ! Unrestricted or single-species: direct copy
-      rdm1Spatial(:, :) = rdm1(1:nOS, 1:nOS)
-    else if (nO .eq. 2 * nOS) then
-      ! Restricted: sum over spin blocks
-      rdm1Spatial(:, :) = rdm1(1:nOS, 1:nOS) + rdm1(nOS + 1:, nOS + 1:)
+    ! Restricted: sum over the spin blocks
+    if (Orbs_restrictedQ) then
+      rdm1Spatial = rdm1(:nOS, :nOS) + rdm1(nOS + 1:, nOS + 1:)
     else
-      error stop "invalid nO to nOS relation in Method_Mb_OrbBased_FillSpatialRdm1"
+      rdm1Spatial = rdm1(:nOS, :nOS)
     end if
 
   end subroutine
@@ -334,11 +327,8 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   function YlmNodesFastPathQ() result(res)
     !---------------------------------------------------------------------------
-    ! Whether the definite-m node quadrature (ApplyCorrelationOpYlmNodes,
-    ! FillH2YlmNodes) applies to orbitals of declared m: Hermitian (non-ECS)
-    ! Ylm grid, body-type-independent Ylm interaction with potentials within
-    ! the angular quadrature tables of the grid. Requires Grid and
-    ! SysInteraction to be fabricated.
+    ! Whether the definite-m node quadrature applies: Hermitian Ylm grid and a
+    ! body-type-independent Ylm interaction within the node tables.
     !---------------------------------------------------------------------------
     use M_Utils_Json
     use M_Grid_Ylm
@@ -348,12 +338,11 @@ contains
     logical :: res
 
     res = .false.
-    if (.not. Json_GetExistence("grid.ylm")) return
-    if (Json_GetExistence("grid.ylm.fedvrEcs")) return
+    if (Grid_Ylm_cProductQ) return
     if (.not. Json_GetExistence("sysInteraction.ylm")) return
     if (.not. SysInteraction_bodyTypeIndependentQ) return
-    if (SysInteraction_Ylm_lmax > 2 * Grid_Ylm_lmax + 2) return
-    if (SysInteraction_Ylm_mmax > min(2 * Grid_Ylm_mmax, 2 * Grid_Ylm_lmax + 2)) return
+    if (SysInteraction_Ylm_lmax > Grid_Ylm_lmaxNodes) return
+    if (SysInteraction_Ylm_mmax > Grid_Ylm_mmaxNodes) return
 
     res = .true.
 
@@ -394,63 +383,19 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine FillH1(h1, orbs, time)
     !---------------------------------------------------------------------------
-    ! Builds the one-body Hamiltonian matrix in the orbital basis:
+    ! One-body Hamiltonian matrix in the orbital basis (ApplySingleBodyOp):
     !   h¹_{ij} = ⟨φ_i| T̂ + V̂_ext + Ĥ_A |φ_j⟩
     ! where Ĥ_A is the velocity-gauge coupling (zero unless sysGauge is set).
-    !
-    ! Only computes elements where both orbitals belong to the same body type.
-    ! For restricted calculations, duplicates the computed block for spin-down.
     !---------------------------------------------------------------------------
-    use M_Method
-    use M_Orbs
-    use M_Grid
-    use M_SysKinetic
-    use M_SysPotential
-
     complex(R64), intent(out), allocatable :: h1(:, :)
-    complex(R64), intent(in), contiguous                :: orbs(:, :)
+    complex(R64), intent(in), contiguous   :: orbs(:, :)
     real(R64), intent(in)                  :: time
 
-    integer(I32) :: nOS, nO, nG
-    integer(I32) :: i1, j1, i1bt, j1bt
     complex(R64), allocatable :: orbTmps(:, :)
 
-    nG = Grid_nPoints
-    nOS = Orbs_nOrbsInState
-    nO = Method_Mb_OrbBased_nOrbsSum
-
-    if (.not. allocated(h1)) allocate (h1(nO, nO))
-    h1(:, :) = 0.0_R64
-
-    ! Apply (T̂ + V̂ + Ĥ_A) to all orbitals
-    allocate (orbTmps(nG, nOS))
+    allocate (orbTmps, mold=orbs)
     orbTmps(:, :) = 0.0_R64
-
-    call Method_Mb_OrbBased_ApplyKineticOp(orbTmps, orbs, time)
-    call Method_Mb_OrbBased_ApplyPotentialOp(orbTmps, orbs, time)
-    call Method_Mb_OrbBased_ApplyGaugeOp(orbTmps, orbs, time)
-
-    ! Compute matrix elements via inner products
-    !$omp parallel do default(shared) private(i1, j1, i1bt, j1bt) collapse(2)
-    do j1 = 1, nOS
-      do i1 = 1, nOS
-
-        i1bt = Method_Mb_OrbBased_bodyTypeOfOrb(i1)
-        j1bt = Method_Mb_OrbBased_bodyTypeOfOrb(j1)
-
-        ! Skip cross-body-type elements (vanish by orthogonality)
-        if (i1bt .ne. j1bt) cycle
-
-        h1(i1, j1) = Grid_InnerProduct(orbs(:, i1), orbTmps(:, j1))
-
-      end do
-    end do
-    !$omp end parallel do
-
-    ! For restricted calculations, duplicate for second spin block
-    if (Orbs_restrictedQ) then
-      h1(nOS + 1:, nOS + 1:) = h1(:nOS, :nOS)
-    end if
+    call Method_Mb_OrbBased_ApplySingleBodyOp(orbTmps, orbs, time, h1_=h1)
 
   end subroutine
 
@@ -460,77 +405,30 @@ contains
     ! Builds the two-body Hamiltonian tensor in the orbital basis:
     !   h²_{i₁i₂j₁j₂} = ½ ∫∫ φ*_{i₁}(r₁) φ*_{i₂}(r₂) W(r₁,r₂) φ_{j₁}(r₁) φ_{j₂}(r₂) dr₁dr₂
     !
-    ! The factor ½ accounts for double-counting in the Hamiltonian.
-    ! Only computes elements where orbitals within each pair share body type.
-    ! For restricted calculations, duplicates blocks for spin combinations.
+    ! The factor ½ accounts for double-counting in the Hamiltonian. Elements
+    ! with orbitals of different body type within a pair are zero.
     !---------------------------------------------------------------------------
-    use M_Method
-    use M_SysInteraction
-    use M_Orbs
-    use M_Grid
-
     complex(R64), intent(out), allocatable :: h2(:, :, :, :)
     complex(R64), intent(in), contiguous   :: orbs(:, :)
     real(R64), intent(in)                  :: time
 
-    integer(I32) :: nG, nOS, nO
-    integer(I32) :: i2, j2
-    integer(I32) :: i2bt, j2bt
-    complex(R64), allocatable :: orbTmps(:, :), orbTmpsSwap(:, :)
+    integer(I32) :: nO
 
-    nG = Grid_nPoints
-    nOS = Orbs_nOrbsInState
     nO = Method_Mb_OrbBased_nOrbsSum
-
-    if (.not. allocated(h2)) allocate (h2(nO, nO, nO, nO))
+    allocate (h2(nO, nO, nO, nO))
     h2(:, :, :, :) = 0.0_R64
 
-    allocate (orbTmps, mold=orbs)
-    allocate (orbTmpsSwap, mold=orbs)
+    call AccumulatePairTerms(orbs, time, h2_=h2)
+    call DuplicateRestrictedSpinBlocks(h2)
 
-    ! Loop over unordered second-particle pairs (i2 >= j2); the swapped
-    ! pair (j2,i2) reuses the potential via the conjugation symmetry
-    do j2 = 1, nOS
-      do i2 = j2, nOS
-        i2bt = Method_Mb_OrbBased_bodyTypeOfOrb(i2)
-        j2bt = Method_Mb_OrbBased_bodyTypeOfOrb(j2)
-
-        ! Skip cross-body-type pairs for second particle
-        if (i2bt .ne. j2bt) cycle
-
-        orbTmps(:, :) = 0.0_R64
-
-        if (i2 .eq. j2) then
-          call Method_Mb_OrbBased_ApplyInteractionOp(orbTmps, orbs, i2, j2, time)
-
-          call FillH2Block(h2, orbs, orbTmps, i2, j2)
-        else
-          orbTmpsSwap(:, :) = 0.0_R64
-          call ApplyInteractionOpPair(orbTmps, orbTmpsSwap, orbs, i2, j2, time)
-
-          call FillH2Block(h2, orbs, orbTmps, i2, j2)
-          call FillH2Block(h2, orbs, orbTmpsSwap, j2, i2)
-        end if
-      end do
-    end do
-
-    ! For restricted calculations, duplicate blocks for spin combinations
-    ! (αα, αβ, βα, ββ all have same spatial integrals)
-    if (Orbs_restrictedQ) then
-      h2(nOS + 1:, :nOS, nOS + 1:, :nOS) = h2(:nOS, :nOS, :nOS, :nOS)
-      h2(:nOS, nOS + 1:, :nOS, nOS + 1:) = h2(:nOS, :nOS, :nOS, :nOS)
-      h2(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:) = h2(:nOS, :nOS, :nOS, :nOS)
-    end if
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine FillH2Block(h2, orbs, orbTmps, i2, j2)
     !---------------------------------------------------------------------------
-    ! Fills the first-particle matrix elements for a fixed second-particle
-    ! source pair (i2,j2):
-    !   h²_{i₁,i2,j₁,j2} = ½ ⟨φ_i₁| V_(i2,j2) |φ_j₁⟩
+    ! First-particle elements of one second-particle pair (i2,j2), orbTmps =
+    ! V_(i2,j2) orbs:  h²_{i₁,i2,j₁,j2} = ½ ⟨φ_i₁| V_(i2,j2) |φ_j₁⟩
     !---------------------------------------------------------------------------
-    use M_Grid
     use M_Orbs
 
     complex(R64), intent(inout), contiguous :: h2(:, :, :, :)
@@ -539,20 +437,39 @@ contains
     integer(I32), intent(in)                :: i2
     integer(I32), intent(in)                :: j2
 
-    integer(I32) :: i1, j1, i1bt, j1bt, nOS
+    complex(R64), allocatable :: mat(:, :)
+    integer(I32) :: nOS
 
     nOS = Orbs_nOrbsInState
+    call FillOrbitalMatrix(mat, orbs, orbTmps)
+    h2(:nOS, i2, :nOS, j2) = 0.5_R64 * mat(:, :)
 
-    !$omp parallel do default(shared) private(i1, j1, i1bt, j1bt) collapse(2)
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine FillOrbitalMatrix(mat, orbs, orbTmps)
+    !---------------------------------------------------------------------------
+    ! mat(i,j) = ⟨φ_i|orbTmps(:,j)⟩ for orbitals of equal body type, zero
+    ! otherwise (nOrbsInState x nOrbsInState).
+    !---------------------------------------------------------------------------
+    use M_Grid
+    use M_Orbs
+
+    complex(R64), intent(out), allocatable :: mat(:, :)
+    complex(R64), intent(in), contiguous   :: orbs(:, :)
+    complex(R64), intent(in), contiguous   :: orbTmps(:, :)
+
+    integer(I32) :: i1, j1, nOS
+
+    nOS = Orbs_nOrbsInState
+    allocate (mat(nOS, nOS))
+    mat(:, :) = 0.0_R64
+
+    !$omp parallel do default(shared) private(i1, j1) collapse(2)
     do j1 = 1, nOS
       do i1 = 1, nOS
-        i1bt = Method_Mb_OrbBased_bodyTypeOfOrb(i1)
-        j1bt = Method_Mb_OrbBased_bodyTypeOfOrb(j1)
-
-        ! Skip cross-body-type pairs for first particle
-        if (i1bt .ne. j1bt) cycle
-
-        h2(i1, i2, j1, j2) = 0.5_R64 * Grid_InnerProduct(orbs(:, i1), orbTmps(:, j1))
+        if (Method_Mb_OrbBased_bodyTypeOfOrb(i1) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(j1)) cycle
+        mat(i1, j1) = Grid_InnerProduct(orbs(:, i1), orbTmps(:, j1))
       end do
     end do
     !$omp end parallel do
@@ -560,93 +477,84 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine DuplicateRestrictedSpinBlocks(h2)
+    !---------------------------------------------------------------------------
+    ! Restricted orbitals: copies the spatial block of h2 to the spin
+    ! combinations αβ, βα and ββ (they share the spatial integrals; the Coeffs
+    ! backend consumes h2 in the full spin-orbital basis).
+    !---------------------------------------------------------------------------
+    use M_Orbs
+
+    complex(R64), intent(inout), contiguous :: h2(:, :, :, :)
+
+    integer(I32) :: nOS
+
+    if (.not. Orbs_restrictedQ) return
+
+    nOS = Orbs_nOrbsInState
+    h2(nOS + 1:, :nOS, nOS + 1:, :nOS) = h2(:nOS, :nOS, :nOS, :nOS)
+    h2(:nOS, nOS + 1:, :nOS, nOS + 1:) = h2(:nOS, :nOS, :nOS, :nOS)
+    h2(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:) = h2(:nOS, :nOS, :nOS, :nOS)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyKineticOp(dOrbs, orbs, time)
     !---------------------------------------------------------------------------
-    ! Applies the kinetic energy operator to all orbitals:
-    !   dOrbs(:,i) += T̂ · orbs(:,i)  for i = 1, ..., nOrbsInState
-    !
-    ! The kinetic operator is body-type-dependent (different masses possible).
+    ! dOrbs(:,i) += T̂ · orbs(:,i), with the mass of the body type of orbital i.
     !---------------------------------------------------------------------------
-    use M_Method
-    use M_Grid
-    use M_Orbs
     use M_SysKinetic
 
     complex(R64), intent(inout), contiguous :: dOrbs(:, :)
     complex(R64), intent(in), contiguous    :: orbs(:, :)
-    real(R64), intent(in)                  :: time
+    real(R64), intent(in)                   :: time
 
-    complex(R64), allocatable :: orbTmp(:)
-
-    integer(I32) :: nG, nOS
-    integer(I32) :: i1, ibt
-
-    nG = Grid_nPoints
-    nOS = Orbs_nOrbsInState
-
-    !$omp parallel default(shared) private(i1, ibt, orbTmp)
-    allocate (orbTmp(nG))
-
-    !$omp do
-    do i1 = 1, nOS
-
-      ibt = Method_Mb_OrbBased_bodyTypeOfOrb(i1)
-
-      orbTmp(:) = 0.0_R64
-      call SysKinetic_MultiplyWithKineticOp(orbTmp, orbs(:, i1), time, ibt)
-
-      dOrbs(:, i1) = dOrbs(:, i1) + orbTmp(:)
-
-    end do
-    !$omp end do
-
-    deallocate (orbTmp)
-    !$omp end parallel
+    call AccumulatePerOrbitalOp(dOrbs, orbs, time, SysKinetic_MultiplyWithKineticOp)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyGaugeOp(dOrbs, orbs, time)
     !---------------------------------------------------------------------------
-    ! Applies the velocity-gauge coupling operator to all orbitals:
-    !   dOrbs(:,i) += (A(t)·p̂/m + A²(t)/(2m)) · orbs(:,i)
-    !
-    ! The gauge operator is body-type-dependent through the mass, mirroring
-    ! the kinetic operator.
+    ! dOrbs(:,i) += (A(t)·p̂/m + A²(t)/(2m)) · orbs(:,i), with the mass of the
+    ! body type of orbital i.
     !---------------------------------------------------------------------------
-    use M_Method
-    use M_Grid
-    use M_Orbs
     use M_SysGauge
 
     complex(R64), intent(inout), contiguous :: dOrbs(:, :)
     complex(R64), intent(in), contiguous    :: orbs(:, :)
-    real(R64), intent(in)                  :: time
+    real(R64), intent(in)                   :: time
+
+    call AccumulatePerOrbitalOp(dOrbs, orbs, time, SysGauge_MultiplyWithGaugeOp)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine AccumulatePerOrbitalOp(dOrbs, orbs, time, MultiplyWithOp)
+    !---------------------------------------------------------------------------
+    ! dOrbs(:,i) += O · orbs(:,i) for every orbital, with O applied for the
+    ! body type of orbital i (kinetic and gauge operators share the interface).
+    !---------------------------------------------------------------------------
+    use M_Grid
+    use M_Orbs
+    use M_SysKinetic
+
+    complex(R64), intent(inout), contiguous :: dOrbs(:, :)
+    complex(R64), intent(in), contiguous    :: orbs(:, :)
+    real(R64), intent(in)                   :: time
+    procedure(I_SysKinetic_MultiplyWithKineticOp) :: MultiplyWithOp
 
     complex(R64), allocatable :: orbTmp(:)
+    integer(I32) :: i1
 
-    integer(I32) :: nG, nOS
-    integer(I32) :: i1, ibt
-
-    nG = Grid_nPoints
-    nOS = Orbs_nOrbsInState
-
-    !$omp parallel default(shared) private(i1, ibt, orbTmp)
-    allocate (orbTmp(nG))
-
+    !$omp parallel default(shared) private(i1, orbTmp)
+    allocate (orbTmp(Grid_nPoints))
     !$omp do
-    do i1 = 1, nOS
-
-      ibt = Method_Mb_OrbBased_bodyTypeOfOrb(i1)
-
-      orbTmp(:) = 0.0_R64
-      call SysGauge_MultiplyWithGaugeOp(orbTmp, orbs(:, i1), time, ibt)
-
+    do i1 = 1, Orbs_nOrbsInState
+      call MultiplyWithOp(orbTmp, orbs(:, i1), time, bt_=Method_Mb_OrbBased_bodyTypeOfOrb(i1))
       dOrbs(:, i1) = dOrbs(:, i1) + orbTmp(:)
-
     end do
     !$omp end do
-
     deallocate (orbTmp)
     !$omp end parallel
 
@@ -655,64 +563,33 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyPotentialOp(dOrbs, orbs, time)
     !---------------------------------------------------------------------------
-    ! Applies the external potential operator to all orbitals:
-    !   dOrbs(:,i) += V̂_ext · orbs(:,i)  for i = 1, ..., nOrbsInState
-    !
-    ! Optimizes by computing the potential once if body-type-independent,
-    ! otherwise loops over body types and applies to corresponding orbitals.
+    ! dOrbs(:,i) += V̂_ext · orbs(:,i); the potential is computed once if
+    ! body-type-independent, otherwise per body type.
     !---------------------------------------------------------------------------
-    use M_Grid
-    use M_Grid_Ylm
     use M_Orbs
     use M_Method_Mb
     use M_SysPotential
 
     complex(R64), intent(inout), contiguous :: dOrbs(:, :)
     complex(R64), intent(in), contiguous    :: orbs(:, :)
-    real(R64), intent(in) :: time
+    real(R64), intent(in)                   :: time
 
-    integer(I32) :: nG, nOS, nBt
-    integer(I32) :: iOrb, bt
-    complex(R64), allocatable :: orbTmp(:)
+    integer(I32) :: nBt, bt
     complex(R64), allocatable :: externalPotential(:)
 
-    nG = Grid_nPoints
-    nOS = Orbs_nOrbsInState
-
-    ! Restricted: only the shared spatial set is stored; the body-type-1
-    ! potential covers all stored orbitals (spin up and down coincide)
-    nBt = Method_Mb_nBodyTypes
-    if (Orbs_restrictedQ) nBt = 1
-
     if (SysPotential_bodyTypeIndependentQ) then
-      ! Body-type-independent: compute potential once, apply to all orbitals
       call SysPotential_FillExternalPotential(externalPotential, time)
-
-      !$omp parallel default(shared) private(iOrb, orbTmp)
-      allocate (orbTmp(nG))
-      !$omp do
-      do iOrb = 1, nOS
-        call SysPotential_MultiplyWithExternalPotential(orbTmp, externalPotential, orbs(:, iOrb))
-        dOrbs(:, iOrb) = dOrbs(:, iOrb) + orbTmp(:)
-      end do
-      !$omp end do
-      deallocate (orbTmp)
-      !$omp end parallel
+      call MultiplyPotentialOnOrbRange(dOrbs, orbs, externalPotential, 1, Orbs_nOrbsInState, &
+                                       SysPotential_MultiplyWithExternalPotential)
     else
-      ! Body-type-dependent: loop over types and apply to corresponding orbitals
+      ! Restricted: only the shared spatial set is stored; the body-type-1
+      ! potential covers all stored orbitals (spin up and down coincide)
+      nBt = Method_Mb_nBodyTypes
+      if (Orbs_restrictedQ) nBt = 1
       do bt = 1, nBt
         call SysPotential_FillExternalPotential(externalPotential, time, bt_=bt)
-
-        !$omp parallel default(shared) private(iOrb, orbTmp)
-        allocate (orbTmp(nG))
-        !$omp do
-        do iOrb = Method_Mb_OrbBased_nOrbsStart(bt), Method_Mb_OrbBased_nOrbsEnd(bt)
-          call SysPotential_MultiplyWithExternalPotential(orbTmp, externalPotential, orbs(:, iOrb))
-          dOrbs(:, iOrb) = dOrbs(:, iOrb) + orbTmp(:)
-        end do
-        !$omp end do
-        deallocate (orbTmp)
-        !$omp end parallel
+        call MultiplyPotentialOnOrbRange(dOrbs, orbs, externalPotential, Method_Mb_OrbBased_nOrbsStart(bt), &
+                                         Method_Mb_OrbBased_nOrbsEnd(bt), SysPotential_MultiplyWithExternalPotential)
       end do
     end if
 
@@ -721,70 +598,97 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyInteractionOp(dOrbs, orbs, i2, j2, time)
     !---------------------------------------------------------------------------
-    ! Applies the two-body interaction operator for a given (i2,j2) source pair:
+    ! Two-body interaction operator of the source pair (i2,j2):
     !   dOrbs(:,i1) += ∫ W(r₁,r₂) φ*_{i2}(r₂) φ_{j2}(r₂) dr₂ · orbs(:,i1)
-    !
-    ! This computes the "direct" interaction contribution from the density
-    ! |φ_{i2}|² (when i2=j2) or the transition density φ*_{i2}φ_{j2}.
     !---------------------------------------------------------------------------
-    use M_Grid
-    use M_Grid_Ylm
-    use M_Method_Mb
-    use M_SysInteraction
-    use M_Orbs
-
     complex(R64), intent(inout), contiguous :: dOrbs(:, :)
     complex(R64), intent(in), contiguous    :: orbs(:, :)
-    integer(I32), intent(in)               :: i2
-    integer(I32), intent(in)               :: j2
-    real(R64), intent(in)                  :: time
+    integer(I32), intent(in)                :: i2
+    integer(I32), intent(in)                :: j2
+    real(R64), intent(in)                   :: time
 
-    integer(I32) :: nOS, nBt
-    integer(I32) :: bt1, bt2
-    complex(R64), allocatable :: src(:), interactionPotential(:)
-
-    nOS = Orbs_nOrbsInState
-
-    ! Restricted: only the shared spatial set is stored; the body-type-1
-    ! interaction covers all stored orbitals (spin up and down coincide)
-    nBt = Method_Mb_nBodyTypes
-    if (Orbs_restrictedQ) nBt = 1
-
-    ! Build source density: ρ(r₂) = φ*_{i2}(r₂) φ_{j2}(r₂)
-    call SysInteraction_FillInteractionSrc(src, orbs(:, i2), orbs(:, j2))
-
-    bt2 = Method_Mb_OrbBased_bodyTypeOfOrb(i2)
-
-    if (SysInteraction_bodyTypeIndependentQ) then
-      ! Body-type-independent: compute potential once, apply to all orbitals
-      call SysInteraction_FillInteractionPotential(interactionPotential, src, time, -1, -1)
-      call MultiplyPotentialOnOrbRange(dOrbs, orbs, interactionPotential, 1, nOS)
-    else
-      ! Body-type-dependent: loop over target body types
-      do bt1 = 1, nBt
-        call SysInteraction_FillInteractionPotential(interactionPotential, src, time, bt1, bt2)
-        call MultiplyPotentialOnOrbRange(dOrbs, orbs, interactionPotential, &
-                                         Method_Mb_OrbBased_nOrbsStart(bt1), Method_Mb_OrbBased_nOrbsEnd(bt1))
-      end do
-    end if
-
-    deallocate (src, interactionPotential)
+    call ApplyInteraction(dOrbs, orbs, i2, j2, time)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine MultiplyPotentialOnOrbRange(dOrbs, orbs, interactionPotential, iOrbStart, iOrbEnd)
+  subroutine ApplyInteraction(dOrbs, orbs, i2, j2, time, dOrbsSwap_)
     !---------------------------------------------------------------------------
-    ! Accumulates dOrbs(:,i) += V · orbs(:,i) for i = iOrbStart, ..., iOrbEnd.
+    ! dOrbs += V_(i2,j2) orbs (ApplyInteractionOp) and, if present,
+    ! dOrbsSwap_ += V_(j2,i2) orbs from the conjugate potential
+    ! V_(j2,i2) = conjg(V_(i2,j2)) (requires SysInteraction_conjSymmetricQ),
+    ! which halves the potential solves over unordered pairs. The potential is
+    ! computed once if body-type-independent, otherwise per target body type.
+    !---------------------------------------------------------------------------
+    use M_Method_Mb
+    use M_SysInteraction
+    use M_Orbs
+
+    complex(R64), intent(inout), contiguous           :: dOrbs(:, :)
+    complex(R64), intent(in), contiguous              :: orbs(:, :)
+    integer(I32), intent(in)                          :: i2
+    integer(I32), intent(in)                          :: j2
+    real(R64), intent(in)                             :: time
+    complex(R64), intent(inout), contiguous, optional :: dOrbsSwap_(:, :)
+
+    integer(I32) :: nBt, bt
+    complex(R64), allocatable :: src(:)
+
+    ! Source density ρ(r₂) = φ*_{i2}(r₂) φ_{j2}(r₂)
+    call SysInteraction_FillInteractionSrc(src, orbs(:, i2), orbs(:, j2))
+
+    if (SysInteraction_bodyTypeIndependentQ) then
+      call ApplyPotential(-1, -1, 1, Orbs_nOrbsInState)
+    else
+      ! Restricted: only the shared spatial set is stored; the body-type-1
+      ! interaction covers all stored orbitals (spin up and down coincide)
+      nBt = Method_Mb_nBodyTypes
+      if (Orbs_restrictedQ) nBt = 1
+      do bt = 1, nBt
+        call ApplyPotential(bt, Method_Mb_OrbBased_bodyTypeOfOrb(i2), &
+                            Method_Mb_OrbBased_nOrbsStart(bt), Method_Mb_OrbBased_nOrbsEnd(bt))
+      end do
+    end if
+
+  contains
+
+    !> Potential for the target body type btTarget, applied to the orbitals iStart..iEnd.
+    subroutine ApplyPotential(btTarget, btSource, iStart, iEnd)
+      integer(I32), intent(in) :: btTarget
+      integer(I32), intent(in) :: btSource
+      integer(I32), intent(in) :: iStart
+      integer(I32), intent(in) :: iEnd
+
+      complex(R64), allocatable :: pot(:), potConjg(:)
+
+      call SysInteraction_FillInteractionPotential(pot, src, time, btTarget, btSource)
+      call MultiplyPotentialOnOrbRange(dOrbs, orbs, pot, iStart, iEnd, SysInteraction_MultiplyWithInteractionPotential)
+      if (.not. present(dOrbsSwap_)) return
+
+      allocate (potConjg, mold=pot)
+      call SysInteraction_ConjugateInteractionPotential(potConjg, pot)
+      call MultiplyPotentialOnOrbRange(dOrbsSwap_, orbs, potConjg, iStart, iEnd, &
+                                       SysInteraction_MultiplyWithInteractionPotential)
+
+    end subroutine
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine MultiplyPotentialOnOrbRange(dOrbs, orbs, pot, iOrbStart, iOrbEnd, MultiplyWithPotential)
+    !---------------------------------------------------------------------------
+    ! Accumulates dOrbs(:,i) += V · orbs(:,i) for i = iOrbStart, ..., iOrbEnd
+    ! (external or interaction potential, the same interface).
     !---------------------------------------------------------------------------
     use M_Grid
-    use M_SysInteraction
+    use M_SysPotential
 
     complex(R64), intent(inout), contiguous :: dOrbs(:, :)
     complex(R64), intent(in), contiguous    :: orbs(:, :)
-    complex(R64), intent(in), contiguous    :: interactionPotential(:)
+    complex(R64), intent(in), contiguous    :: pot(:)
     integer(I32), intent(in)                :: iOrbStart
     integer(I32), intent(in)                :: iOrbEnd
+    procedure(I_SysPotential_MultiplyWithExternalPotential) :: MultiplyWithPotential
 
     integer(I32) :: iOrb
     complex(R64), allocatable :: orbTmp(:)
@@ -793,7 +697,7 @@ contains
     allocate (orbTmp(Grid_nPoints))
     !$omp do
     do iOrb = iOrbStart, iOrbEnd
-      call SysInteraction_MultiplyWithInteractionPotential(orbTmp, interactionPotential, orbs(:, iOrb))
+      call MultiplyWithPotential(orbTmp, pot, orbs(:, iOrb))
       dOrbs(:, iOrb) = dOrbs(:, iOrb) + orbTmp(:)
     end do
     !$omp end do
@@ -803,95 +707,14 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine ApplyInteractionOpPair(dOrbsA, dOrbsB, orbs, i2, j2, time)
-    !---------------------------------------------------------------------------
-    ! Accumulates the interaction operator for source pair (i2,j2) into dOrbsA
-    ! and for the swapped pair (j2,i2) into dOrbsB, assuming i2 ≠ j2.
-    !
-    ! When the interaction backend guarantees the conjugation symmetry
-    !   V_(j2,i2) = conjg(V_(i2,j2)),
-    ! the second potential solve is replaced by a cheap conjugation, halving
-    ! the number of solves over unordered orbital pairs.
-    !---------------------------------------------------------------------------
-    use M_Grid
-    use M_Method_Mb
-    use M_Orbs
-    use M_SysInteraction
-
-    complex(R64), intent(inout), contiguous :: dOrbsA(:, :)
-    complex(R64), intent(inout), contiguous :: dOrbsB(:, :)
-    complex(R64), intent(in), contiguous    :: orbs(:, :)
-    integer(I32), intent(in)                :: i2
-    integer(I32), intent(in)                :: j2
-    real(R64), intent(in)                   :: time
-
-    integer(I32) :: nOS, nBt, bt1, bt2
-    complex(R64), allocatable :: src(:), interactionPotential(:), interactionPotentialConjg(:)
-
-    if (.not. SysInteraction_conjSymmetricQ) then
-      ! No usable symmetry (or no interaction configured): two full applications
-      call Method_Mb_OrbBased_ApplyInteractionOp(dOrbsA, orbs, i2, j2, time)
-      call Method_Mb_OrbBased_ApplyInteractionOp(dOrbsB, orbs, j2, i2, time)
-      return
-    end if
-
-    nOS = Orbs_nOrbsInState
-
-    ! Restricted: only the shared spatial set is stored; the body-type-1
-    ! interaction covers all stored orbitals (spin up and down coincide)
-    nBt = Method_Mb_nBodyTypes
-    if (Orbs_restrictedQ) nBt = 1
-
-    call SysInteraction_FillInteractionSrc(src, orbs(:, i2), orbs(:, j2))
-
-    bt2 = Method_Mb_OrbBased_bodyTypeOfOrb(i2)
-
-    if (SysInteraction_bodyTypeIndependentQ) then
-      call SysInteraction_FillInteractionPotential(interactionPotential, src, time, -1, -1)
-
-      allocate (interactionPotentialConjg(size(interactionPotential)))
-      call SysInteraction_ConjugateInteractionPotential(interactionPotentialConjg, interactionPotential)
-
-      call MultiplyPotentialOnOrbRange(dOrbsA, orbs, interactionPotential, 1, nOS)
-      call MultiplyPotentialOnOrbRange(dOrbsB, orbs, interactionPotentialConjg, 1, nOS)
-    else
-      do bt1 = 1, nBt
-        call SysInteraction_FillInteractionPotential(interactionPotential, src, time, bt1, bt2)
-
-        if (.not. allocated(interactionPotentialConjg)) then
-          allocate (interactionPotentialConjg(size(interactionPotential)))
-        end if
-        call SysInteraction_ConjugateInteractionPotential(interactionPotentialConjg, interactionPotential)
-
-        call MultiplyPotentialOnOrbRange(dOrbsA, orbs, interactionPotential, &
-                                         Method_Mb_OrbBased_nOrbsStart(bt1), Method_Mb_OrbBased_nOrbsEnd(bt1))
-        call MultiplyPotentialOnOrbRange(dOrbsB, orbs, interactionPotentialConjg, &
-                                         Method_Mb_OrbBased_nOrbsStart(bt1), Method_Mb_OrbBased_nOrbsEnd(bt1))
-      end do
-    end if
-
-    deallocate (src, interactionPotential, interactionPotentialConjg)
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_)
     !---------------------------------------------------------------------------
-    ! Applies the beyond-mean-field correlation operator to orbitals.
-    !
-    ! This implements the MCTDHX-style correlation contribution arising from
-    ! the 2-RDM structure beyond what Hartree-Fock captures. The algorithm:
-    !   1. Contract the spatial 2-RDM with the inverse 1-RDM invRdm1
-    !      (regularized, see Method_Mb_OrbBased_FillInverseRdm1)
-    !   2. Contract with interaction operator to accumulate in dOrbs
-    !
-    ! Optionally returns the two-body Hamiltonian matrix h2_ if requested.
+    ! Beyond-mean-field correlation operator of the orbital equations:
+    !   dOrbs(:,j₁) += Σ_{k₁,k2,l2} V_(l2,k2) orbs(:,k₁) rdm2spatial(k₁,k2,j₁,l2)
+    ! with the spatial 2-RDM contracted with the inverse 1-RDM
+    ! (FillCorrelationRdm2). Optionally returns the two-body Hamiltonian h2_
+    ! from the same pair potentials.
     !---------------------------------------------------------------------------
-    use M_Method
-    use M_Grid
-    use M_SysInteraction
-    use M_Orbs
-
     complex(R64), intent(inout), contiguous, target :: dOrbs(:, :)
     complex(R64), intent(in), contiguous, target    :: orbs(:, :)
     complex(R64), intent(in), contiguous             :: invRdm1(:, :)
@@ -899,102 +722,99 @@ contains
     real(R64), intent(in)                  :: time
     complex(R64), intent(out), allocatable, optional :: h2_(:, :, :, :)
 
-    complex(R64), allocatable :: orbTmps(:, :), orbTmpsSwap(:, :)
     complex(R64), allocatable :: rdm2spatial(:, :, :, :)
+    integer(I32) :: nO
 
-    integer(I32) :: nO, nOS
-    integer(I32) :: k2, l2
-    integer(I32) :: k2bt, l2bt
-
-    nOS = Orbs_nOrbsInState
-    nO = Method_Mb_OrbBased_nOrbsSum
+    call FillCorrelationRdm2(rdm2spatial, invRdm1, rdm2)
 
     if (present(h2_)) then
-      if (.not. allocated(h2_)) allocate (h2_(nO, nO, nO, nO))
+      nO = Method_Mb_OrbBased_nOrbsSum
+      allocate (h2_(nO, nO, nO, nO))
       h2_(:, :, :, :) = 0.0_R64
     end if
 
-    call FillCorrelationRdm2(rdm2spatial, invRdm1, rdm2)
+    call AccumulatePairTerms(orbs, time, dOrbs_=dOrbs, h2_=h2_, rdm2spatial_=rdm2spatial)
+
+    if (present(h2_)) call DuplicateRestrictedSpinBlocks(h2_)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine AccumulatePairTerms(orbs, time, dOrbs_, h2_, rdm2spatial_, rdm1_)
+    !---------------------------------------------------------------------------
+    ! Loop over the source pairs (l2,k2) of equal body type shared by h2, the
+    ! correlation and the mean-field operator: with orbTmps = V_(l2,k2) orbs,
+    ! fills the h2_ block of the pair (FillH2Block) and accumulates into dOrbs_
+    ! (required with rdm2spatial_ or rdm1_) the correlation term with the
+    ! weights rdm2spatial_ (AccumulateCorrelation) and/or the mean-field term
+    ! with rdm1_ (AccumulateHartreeFock). Unordered pairs (k2 >= l2); the
+    ! swapped pair reuses the potential via the conjugation symmetry if the
+    ! backend has it.
+    !---------------------------------------------------------------------------
+    use M_SysInteraction
+    use M_Orbs
+
+    complex(R64), intent(in), contiguous              :: orbs(:, :)
+    real(R64), intent(in)                             :: time
+    complex(R64), intent(inout), contiguous, optional :: dOrbs_(:, :)
+    complex(R64), intent(inout), contiguous, optional :: h2_(:, :, :, :)
+    complex(R64), intent(in), contiguous, optional    :: rdm2spatial_(:, :, :, :)
+    complex(R64), intent(in), contiguous, optional    :: rdm1_(:, :)
+
+    complex(R64), allocatable :: orbTmps(:, :), orbTmpsSwap(:, :)
+    integer(I32) :: k2, l2
 
     allocate (orbTmps, mold=orbs)
     allocate (orbTmpsSwap, mold=orbs)
 
-    !------------------------------------
-    ! Contract with interaction and accumulate
-    !------------------------------------
-
-    ! Loop over unordered pairs (k2 >= l2); the interaction applied for the
-    ! swapped source pair reuses the potential via the conjugation symmetry
-    do l2 = 1, nOS
-      do k2 = l2, nOS
-        l2bt = Method_Mb_OrbBased_bodyTypeOfOrb(l2)
-        k2bt = Method_Mb_OrbBased_bodyTypeOfOrb(k2)
-
-        if (l2bt .ne. k2bt) cycle
+    do l2 = 1, Orbs_nOrbsInState
+      do k2 = l2, Orbs_nOrbsInState
+        if (Method_Mb_OrbBased_bodyTypeOfOrb(l2) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(k2)) cycle
 
         orbTmps(:, :) = 0.0_R64
 
         if (k2 .eq. l2) then
           call Method_Mb_OrbBased_ApplyInteractionOp(orbTmps, orbs, l2, k2, time)
-
-          call AccumulateCorrelation(dOrbs, orbTmps, rdm2spatial, k2, l2)
-          if (present(h2_)) call FillH2CorrelationBlock(h2_, orbs, orbTmps, k2, l2)
+          call AccumulatePair(orbTmps, k2, l2)
         else
           orbTmpsSwap(:, :) = 0.0_R64
-          call ApplyInteractionOpPair(orbTmps, orbTmpsSwap, orbs, l2, k2, time)
-
-          call AccumulateCorrelation(dOrbs, orbTmps, rdm2spatial, k2, l2)
-          call AccumulateCorrelation(dOrbs, orbTmpsSwap, rdm2spatial, l2, k2)
-          if (present(h2_)) then
-            call FillH2CorrelationBlock(h2_, orbs, orbTmps, k2, l2)
-            call FillH2CorrelationBlock(h2_, orbs, orbTmpsSwap, l2, k2)
+          if (SysInteraction_conjSymmetricQ) then
+            call ApplyInteraction(orbTmps, orbs, l2, k2, time, dOrbsSwap_=orbTmpsSwap)
+          else
+            call Method_Mb_OrbBased_ApplyInteractionOp(orbTmps, orbs, l2, k2, time)
+            call Method_Mb_OrbBased_ApplyInteractionOp(orbTmpsSwap, orbs, k2, l2, time)
           end if
+          call AccumulatePair(orbTmps, k2, l2)
+          call AccumulatePair(orbTmpsSwap, l2, k2)
         end if
-
       end do
     end do
 
-    ! For restricted calculations, duplicate the h2 blocks for the spin
-    ! combinations (αα, αβ, βα, ββ share the spatial integrals); the Coeffs
-    ! backend consumes h2 in the full spin-orbital basis (matches FillH2)
-    if (present(h2_)) then
-      if (Orbs_restrictedQ) then
-        h2_(nOS + 1:, :nOS, nOS + 1:, :nOS) = h2_(:nOS, :nOS, :nOS, :nOS)
-        h2_(:nOS, nOS + 1:, :nOS, nOS + 1:) = h2_(:nOS, :nOS, :nOS, :nOS)
-        h2_(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:) = h2_(:nOS, :nOS, :nOS, :nOS)
-      end if
-    end if
+  contains
 
-    deallocate (rdm2spatial)
+    !> Terms of the source pair (lP,kP), vOrbs = V_(lP,kP) orbs.
+    subroutine AccumulatePair(vOrbs, kP, lP)
+      complex(R64), intent(in), contiguous :: vOrbs(:, :)
+      integer(I32), intent(in)             :: kP
+      integer(I32), intent(in)             :: lP
+
+      if (present(h2_)) call FillH2Block(h2_, orbs, vOrbs, lP, kP)
+      if (present(rdm2spatial_)) call AccumulateCorrelation(dOrbs_, vOrbs, rdm2spatial_, kP, lP)
+      if (present(rdm1_)) call AccumulateHartreeFock(dOrbs_, vOrbs, rdm1_, kP, lP)
+
+    end subroutine
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyCorrelationOpYlmNodes(dOrbs, orbs, invRdm1, rdm2, time, h2_)
     !---------------------------------------------------------------------------
-    ! ApplyCorrelationOp for orbitals of declared m (Method_Mb_OrbBased_mOfOrb:
-    ! each orbital lives in the channels of its m, e.g. m = 0 orbitals or the
-    ! orbitals of an atom in a linearly polarized field) on a Ylm grid,
-    ! evaluated on the Gauss-Legendre nodes in cos(theta)
-    ! (Grid_Ylm_ToNodes/FromNodes).
-    !
-    ! The generic version multiplies every pair potential V_(l2,k2) with every
-    ! orbital (one spatial product each) and then combines the results with the
-    ! 2-RDM weights,
-    !   dOrbs(:,j1) += sum_(k1,k2,l2) V_(l2,k2) * orbs(:,k1) rdm2spatial(k1,k2,j1,l2).
-    ! On the nodes all products are pointwise: the orbitals are transformed
-    ! once, each pair density/potential once, and dOrbs once at the end. The
-    ! h2 elements are node quadratures of conjg(orb) V orb. The phases
-    ! e^(i m phi) are bookkept: the pair (l2,k2) carries M = m_k2 - m_l2, and
-    ! only the terms with m_k1 + M = m_j1 (correlation) and m_j1 + M = m_i1
-    ! (h2) are kept. The dropped h2 terms vanish by the phi integral, the
-    ! dropped correlation terms for an M-conserving many-body state (their
-    ! 2-RDM weights vanish). The node count of the Grid_Ylm tables makes every
-    ! angular integral exact, so the result equals the generic version up to
-    ! round-off.
-    !
-    ! Bound by Method_Mb_OrbBased_Fabricate for declared m on non-ECS Ylm
-    ! grids with a body-type-independent Ylm interaction (YlmNodesFastPathQ).
+    ! ApplyCorrelationOp for orbitals of declared m on the Gauss-Legendre
+    ! nodes in cos(theta), where all products are pointwise: the orbitals are
+    ! transformed once, each pair potential once and dOrbs once at the end.
+    ! The pair (l2,k2) carries M = m_k2 - m_l2; only the terms with
+    ! m_k1 + M = m_j1 (correlation) and m_j1 + M = m_i1 (h2) are kept, the
+    ! others vanish. Equal to ApplyCorrelationOp up to round-off (A_Method.md).
     !---------------------------------------------------------------------------
     use M_Grid
     use M_Grid_Ylm
@@ -1040,7 +860,7 @@ contains
     !$omp do
     do i1 = 1, nOS
       nodes(1:nRad, 1:nNodes) => dOrbNodes(:, i1)
-      call Grid_Ylm_FromNodes(dOrb, nodes, Grid_Ylm_lmax, Method_Mb_OrbBased_mOfOrb(i1))
+      call Grid_Ylm_FromNodes(dOrb, nodes, Method_Mb_OrbBased_mOfOrb(i1))
       dOrbs(:, i1) = dOrbs(:, i1) + dOrb(:)
     end do
     !$omp end do
@@ -1055,8 +875,6 @@ contains
     ! FillH2 for orbitals of declared m by the node quadrature of
     ! ApplyCorrelationOpYlmNodes (pair potentials and h2 columns only):
     !   h2(i1,l2,k1,k2) = 1/2 <orb_i1| V_(l2,k2) |orb_k1>,  m_i1 = m_k1 + m_k2 - m_l2.
-    ! The other elements vanish by the phi integral. Bound together with
-    ! ApplyCorrelationOpYlmNodes.
     !---------------------------------------------------------------------------
     complex(R64), intent(out), allocatable :: h2(:, :, :, :)
     complex(R64), intent(in), contiguous   :: orbs(:, :)
@@ -1074,17 +892,17 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine SetupYlmNodes
     !---------------------------------------------------------------------------
-    ! Builds the skeleton of the node path once (Method_Mb_OrbBased_Setup)
-    ! from the declared m of the stored orbitals: the pair list, the target groups (m, body type) of the
-    ! selection rule m_k + M_iP = m_j with their columns (iP, k) and orbitals
-    ! j, and the quadrature weights on the node points.
+    ! Skeleton of the node path from the declared m of the stored orbitals: the
+    ! pair list, the target groups (the blocks Orbs_blockOfOrb) of the
+    ! selection rule m_k + M_iP = m_j with their columns (iP, k), and the
+    ! quadrature weights on the node points.
     !---------------------------------------------------------------------------
     use M_Grid_Ylm
     use M_SysInteraction_Ylm
     use M_Orbs
 
-    integer(I32), allocatable :: mOrb(:), btOrb(:), groupOfOrb(:), nColsOfGroup(:)
-    integer(I32) :: nOS, nPairs, nG, iG, iP, i1, k1, k2, l2, iC, offset
+    integer(I32), allocatable :: mOrb(:), btOrb(:), targetGroup(:, :), pairOfCol(:, :), orbOfCol(:, :)
+    integer(I32) :: nOS, nPairs, iG, iP, j1, k1, k2, l2
 
     nOS = Orbs_nOrbsInState
     mOrb = Method_Mb_OrbBased_mOfOrb(1:nOS)
@@ -1092,18 +910,11 @@ contains
 
     ! Ordered pairs (k2, l2) of equal body type within the |m| cap of the
     ! potentials (pairs beyond it are left out, as in the generic operator)
-    nPairs = 0
-    do l2 = 1, nOS
-      do k2 = 1, nOS
-        if (btOrb(l2) .ne. btOrb(k2)) cycle
-        if (abs(mOrb(k2) - mOrb(l2)) > SysInteraction_Ylm_mmax) cycle
-        nPairs = nPairs + 1
-      end do
-    end do
+    nPairs = count(spread(btOrb, 1, nOS) .eq. spread(btOrb, 2, nOS) .and. &
+                   abs(spread(mOrb, 1, nOS) - spread(mOrb, 2, nOS)) <= SysInteraction_Ylm_mmax)
     allocate (nodePairK2(nPairs), nodePairL2(nPairs), nodePairM(nPairs), nodePairPot(nPairs))
 
     iP = 0
-    nodeNPots = 0
     do l2 = 1, nOS
       do k2 = l2, nOS
         if (btOrb(l2) .ne. btOrb(k2)) cycle
@@ -1124,81 +935,35 @@ contains
       end do
     end do
 
-    ! Groups of orbitals with equal (m, body type)
-    allocate (groupOfOrb(nOS))
-    nG = 0
-    do i1 = 1, nOS
-      groupOfOrb(i1) = 0
-      do k1 = 1, i1 - 1
-        if (mOrb(k1) .eq. mOrb(i1) .and. btOrb(k1) .eq. btOrb(i1)) then
-          groupOfOrb(i1) = groupOfOrb(k1)
-          exit
-        end if
-      end do
-      if (groupOfOrb(i1) .eq. 0) then
-        nG = nG + 1
-        groupOfOrb(i1) = nG
-      end if
-    end do
-
-    ! Columns (iP, k) of every group: the target of V_iP * orbs(:,k) has
-    ! m_k + M_iP and the body type of k; count, then fill
-    allocate (nColsOfGroup(nG))
-    nColsOfGroup(:) = 0
+    ! Target group of the column (iP, k): the block of the orbitals with
+    ! m_k + M_iP and the body type of k (0 if there is none)
+    allocate (targetGroup(nOS, nPairs))
     do iP = 1, nPairs
       do k1 = 1, nOS
-        iG = TargetGroup(k1, iP)
-        if (iG > 0) nColsOfGroup(iG) = nColsOfGroup(iG) + 1
+        j1 = findloc(mOrb .eq. mOrb(k1) + nodePairM(iP) .and. btOrb .eq. btOrb(k1), .true., dim=1)
+        targetGroup(k1, iP) = 0
+        if (j1 > 0) targetGroup(k1, iP) = Orbs_blockOfOrb(j1)
       end do
     end do
+    orbOfCol = spread([(k1, k1=1, nOS)], 2, nPairs)
+    pairOfCol = spread([(iP, iP=1, nPairs)], 1, nOS)
 
-    allocate (nodeGroups(nG))
-    offset = 0
-    do iG = 1, nG
+    allocate (nodeGroups(maxval(Orbs_blockOfOrb)))
+    do iG = 1, size(nodeGroups)
       associate (g => nodeGroups(iG))
-        g % orbs = pack([(i1, i1=1, nOS)], groupOfOrb .eq. iG)
-        allocate (g % colPair(nColsOfGroup(iG)), g % colOrb(nColsOfGroup(iG)))
-        allocate (g % weights(nColsOfGroup(iG), size(g % orbs)))
-        g % colOffset = offset
-        offset = offset + nColsOfGroup(iG)
+        g % orbs = pack([(k1, k1=1, nOS)], Orbs_blockOfOrb .eq. iG)
+        g % colPair = pack(pairOfCol, targetGroup .eq. iG)
+        g % colOrb = pack(orbOfCol, targetGroup .eq. iG)
+        allocate (g % weights(size(g % colPair), size(g % orbs)))
+        g % colOffset = nodeNCols
+        nodeNCols = nodeNCols + size(g % colPair)
+        nodeMaxCols = max(nodeMaxCols, size(g % colPair))
       end associate
-    end do
-
-    nColsOfGroup(:) = 0
-    do iP = 1, nPairs
-      do k1 = 1, nOS
-        iG = TargetGroup(k1, iP)
-        if (iG .eq. 0) cycle
-        nColsOfGroup(iG) = nColsOfGroup(iG) + 1
-        iC = nColsOfGroup(iG)
-        nodeGroups(iG) % colPair(iC) = iP
-        nodeGroups(iG) % colOrb(iC) = k1
-      end do
     end do
 
     ! Quadrature weights of the full measure on the node points
     nodeWeights = reshape(spread(Grid_Ylm_radialWeights(:), 2, Grid_Ylm_nNodes) * &
                           spread(Grid_Ylm_nodeWeights(:), 1, Grid_Ylm_nRadial), [Grid_Ylm_nRadial * Grid_Ylm_nNodes])
-
-  contains
-
-    !> Group of the target of V_iP * orbs(:,k), 0 if no orbital has its m.
-    function TargetGroup(k, iPair) result(res)
-      integer(I32), intent(in) :: k
-      integer(I32), intent(in) :: iPair
-      integer(I32) :: res
-
-      integer(I32) :: j
-
-      res = 0
-      do j = 1, nOS
-        if (mOrb(j) .eq. mOrb(k) + nodePairM(iPair) .and. btOrb(j) .eq. btOrb(k)) then
-          res = groupOfOrb(j)
-          return
-        end if
-      end do
-
-    end function
 
   end subroutine
 
@@ -1247,7 +1012,7 @@ contains
     !$omp parallel do default(shared) private(i1, nodes)
     do i1 = 1, Orbs_nOrbsInState
       nodes(1:nRad, 1:nNodes) => orbNodes(:, i1)
-      call Grid_Ylm_ToNodes(nodes, orbs(:, i1), Grid_Ylm_lmax, Method_Mb_OrbBased_mOfOrb(i1))
+      call Grid_Ylm_ToNodes(nodes, orbs(:, i1), Method_Mb_OrbBased_mOfOrb(i1))
     end do
     !$omp end parallel do
 
@@ -1257,10 +1022,8 @@ contains
   subroutine FillPairPotentialsYlmNodes(potNodes, orbNodes, time)
     !---------------------------------------------------------------------------
     ! Pair potentials V_(l2,k2) of the sources conjg(phi_l2) phi_k2 of the
-    ! unordered pairs on the nodes (the swapped pair has
-    ! V_(k2,l2) = conjg(V_(l2,k2))), in parallel over the pairs: on the
-    ! channel matrix of the single m = m_k2 - m_l2 of the pair, with radial
-    ! metric weights, by SysInteraction_Ylm_FillInteractionPotentialM.
+    ! unordered pairs on the nodes, in parallel over the pairs, on the channel
+    ! matrix of the single m = m_k2 - m_l2 of the pair.
     !---------------------------------------------------------------------------
     use M_Grid_Ylm
     use M_SysInteraction_Ylm
@@ -1294,7 +1057,7 @@ contains
         srcM(:, iL) = srcM(:, iL) * Grid_Ylm_radialMetricWeights(:)
       end do
 
-      call SysInteraction_Ylm_FillInteractionPotentialM(potM, srcM, mP, time, bt1_=-1, bt2_=-1)
+      call SysInteraction_Ylm_FillInteractionPotentialM(potM, srcM, mP, time)
 
       nodes(1:nRad, 1:nNodes) => potNodes(:, nodePairPot(iP))
       call Grid_Ylm_ChannelsToNodes(nodes, potM, mP)
@@ -1310,13 +1073,10 @@ contains
   subroutine AccumulateTargetSumsYlmNodes(orbNodes, potNodes, h2Cols_, dOrbNodes_)
     !---------------------------------------------------------------------------
     ! Pointwise sums of the node path over blocks of nodes, per target group:
-    ! the products X = V_iP * orbs(:,k) of the columns (iP, k) of the group (the
-    ! only elementwise work) enter two ZGEMMs,
-    !   dOrbNodes_(:,j) += X weights            (correlation sum over (iP, k)),
-    !   h2Cols_(i, colOffset + (iP,k)) = sum w conjg(orbs(:,i)) X(:,(iP,k)),
-    ! i and j in the group, which touch only the terms allowed by the selection
-    ! rule. Only the potentials of unordered pairs are stored; the swapped pair
-    ! uses the conjugate.
+    ! the products X = V_iP * orbs(:,k) of the columns (iP, k) of the group
+    ! enter two ZGEMMs (i, j in the group),
+    !   dOrbNodes_(:,j) += X weights,
+    !   h2Cols_(i, colOffset + (iP,k)) = sum w conjg(orbs(:,i)) X(:,(iP,k)).
     !---------------------------------------------------------------------------
     use M_Utils_BlasLib, only: ZGEMM
     use M_Orbs
@@ -1330,25 +1090,24 @@ contains
     integer(I32), parameter :: blockSize = 128
 
     complex(R64), allocatable :: x(:, :), orbW(:, :), dOrbBlock(:, :), h2Private(:, :)
-    integer(I32) :: nOS, nPts, nCols, iB, nB, iG, iC, iJ, nC, nJ, iP, k1, j1
+    integer(I32) :: nOS, nPts, iB, nB, iG, iC, iJ, nC, nJ, iP, k1, j1
     logical :: h2Q, dOrbQ
 
     nOS = Orbs_nOrbsInState
     nPts = size(orbNodes, 1)
-    nCols = sum([(size(nodeGroups(iG) % colPair), iG=1, size(nodeGroups))])
     h2Q = present(h2Cols_)
     dOrbQ = present(dOrbNodes_)
 
     if (h2Q) then
-      allocate (h2Cols_(nOS, nCols))
+      allocate (h2Cols_(nOS, nodeNCols))
       h2Cols_(:, :) = 0.0_R64
     end if
 
     !$omp parallel default(shared) private(iB, nB, iG, iC, iJ, nC, nJ, iP, k1, j1, x, orbW, dOrbBlock, h2Private)
-    allocate (x(blockSize, maxval([(size(nodeGroups(iG) % colPair), iG=1, size(nodeGroups))])))
+    allocate (x(blockSize, nodeMaxCols))
     allocate (orbW(blockSize, nOS), dOrbBlock(blockSize, nOS))
     if (h2Q) then
-      allocate (h2Private(nOS, nCols))
+      allocate (h2Private(nOS, nodeNCols))
       h2Private(:, :) = 0.0_R64
     end if
 
@@ -1404,17 +1163,13 @@ contains
   subroutine FillH2FromTargetColumns(h2, h2Cols)
     !---------------------------------------------------------------------------
     !   h2(i1,l2,k,k2) = 1/2 <orb_i1| V_(l2,k2) |orb_k>  for the column (iP,k),
-    ! zero elsewhere; restricted: duplicated for the spin combinations (see
-    ! ApplyCorrelationOp).
+    ! zero elsewhere.
     !---------------------------------------------------------------------------
-    use M_Orbs
-
     complex(R64), intent(out), allocatable :: h2(:, :, :, :)
     complex(R64), intent(in), contiguous   :: h2Cols(:, :)
 
-    integer(I32) :: nO, nOS, iG, iC, iJ, iP
+    integer(I32) :: nO, iG, iC, iJ, iP
 
-    nOS = Orbs_nOrbsInState
     nO = Method_Mb_OrbBased_nOrbsSum
 
     allocate (h2(nO, nO, nO, nO))
@@ -1431,11 +1186,7 @@ contains
       end associate
     end do
 
-    if (Orbs_restrictedQ) then
-      h2(nOS + 1:, :nOS, nOS + 1:, :nOS) = h2(:nOS, :nOS, :nOS, :nOS)
-      h2(:nOS, nOS + 1:, :nOS, nOS + 1:) = h2(:nOS, :nOS, :nOS, :nOS)
-      h2(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:) = h2(:nOS, :nOS, :nOS, :nOS)
-    end if
+    call DuplicateRestrictedSpinBlocks(h2)
 
   end subroutine
 
@@ -1445,7 +1196,7 @@ contains
     ! Spatial 2-RDM contracted with the inverse 1-RDM M = invRdm1, the weights
     ! of the correlation operator:
     !   rdm2spatial(i1,i2,j1,j2) = sum_k rho2(i1,i2,k,j2) M(k,j1),
-    ! with the spin-summed 2-RDM in the restricted case.
+    ! with the spin-summed 2-RDM (αα + αβ + βα + ββ) in the restricted case.
     !---------------------------------------------------------------------------
     use M_Orbs
 
@@ -1453,42 +1204,23 @@ contains
     complex(R64), intent(in), contiguous   :: invRdm1(:, :)
     complex(R64), intent(in), contiguous   :: rdm2(:, :, :, :)
 
-    complex(R64), allocatable :: correlOp(:, :, :, :)
-
-    integer(I32) :: nO, nOS
-    integer(I32) :: j1, k1
+    complex(R64), allocatable :: rho2(:, :, :, :)
+    integer(I32) :: nOS, j1, k1
 
     nOS = Orbs_nOrbsInState
-    nO = Method_Mb_OrbBased_nOrbsSum
 
-    !------------------------------------
-    ! Build spatial 2-RDM (spin-summed for restricted case)
-    !------------------------------------
-
-    allocate (rdm2spatial(nOS, nOS, nOS, nOS))
-
-    if (nO .eq. nOS) then
-      ! Unrestricted or single-species: direct copy
-      rdm2spatial(:, :, :, :) = rdm2(1:nOS, 1:nOS, 1:nOS, 1:nOS)
-
-    else if (nO .eq. 2 * nOS) then
-      ! Restricted: sum over spin blocks (αα + αβ + βα + ββ)
-      rdm2spatial(:, :, :, :) = rdm2(1:nOS, 1:nOS, 1:nOS, 1:nOS) + &
-                                rdm2(nOS + 1:, :nOS, nOS + 1:, :nOS) + &
-                                rdm2(:nOS, nOS + 1:, :nOS, nOS + 1:) + &
-                                rdm2(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:)
+    if (Orbs_restrictedQ) then
+      rho2 = rdm2(:nOS, :nOS, :nOS, :nOS) + rdm2(nOS + 1:, :nOS, nOS + 1:, :nOS) + &
+             rdm2(:nOS, nOS + 1:, :nOS, nOS + 1:) + rdm2(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:)
     else
-      error stop "invalid nO to nOS relation in FillCorrelationRdm2"
+      rho2 = rdm2(:nOS, :nOS, :nOS, :nOS)
     end if
 
-    allocate (correlOp, mold=rdm2spatial)
-
-    ! Apply: rdm2spatial_{i₁,i₂,j₁,l₂} = Σ_k correlOp_{i₁,i₂,k,l₂} · M_{k,j₁}
-    correlOp(:, :, :, :) = rdm2spatial(:, :, :, :)
+    allocate (rdm2spatial, mold=rho2)
     rdm2spatial(:, :, :, :) = 0.0_R64
     do j1 = 1, nOS
       do k1 = 1, nOS
-        rdm2spatial(:, :, j1, :) = rdm2spatial(:, :, j1, :) + correlOp(:, :, k1, :) * invRdm1(k1, j1)
+        rdm2spatial(:, :, j1, :) = rdm2spatial(:, :, j1, :) + rho2(:, :, k1, :) * invRdm1(k1, j1)
       end do
     end do
 
@@ -1528,40 +1260,6 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine FillH2CorrelationBlock(h2, orbs, orbTmps, k2, l2)
-    !---------------------------------------------------------------------------
-    ! Fills the h2 matrix elements of one (k2,l2) source pair:
-    !   h²_{i₁,l2,j₁,k2} = ½ ⟨φ_i₁| V_(l2,k2) |φ_j₁⟩
-    !---------------------------------------------------------------------------
-    use M_Grid
-    use M_Orbs
-
-    complex(R64), intent(inout), contiguous :: h2(:, :, :, :)
-    complex(R64), intent(in), contiguous    :: orbs(:, :)
-    complex(R64), intent(in), contiguous    :: orbTmps(:, :)
-    integer(I32), intent(in)                :: k2
-    integer(I32), intent(in)                :: l2
-
-    integer(I32) :: i1, j1, i1bt, j1bt, nOS
-
-    nOS = Orbs_nOrbsInState
-
-    !$omp parallel do default(shared) private(i1, j1, i1bt, j1bt) collapse(2)
-    do j1 = 1, nOS
-      do i1 = 1, nOS
-        i1bt = Method_Mb_OrbBased_bodyTypeOfOrb(i1)
-        j1bt = Method_Mb_OrbBased_bodyTypeOfOrb(j1)
-
-        if (i1bt .ne. j1bt) cycle
-
-        h2(i1, l2, j1, k2) = 0.5_R64 * Grid_InnerProduct(orbs(:, i1), orbTmps(:, j1))
-      end do
-    end do
-    !$omp end parallel do
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplyHartreeFockOp(dOrbs, orbs, rdm1, time)
     !---------------------------------------------------------------------------
     ! Applies the mean-field (Hartree-Fock) operator to orbitals.
@@ -1572,52 +1270,12 @@ contains
     ! The first term is the direct (Coulomb/Hartree) contribution,
     ! the second is the exchange contribution (same-spin only).
     !---------------------------------------------------------------------------
-    use M_Method
-    use M_Grid
-    use M_SysInteraction
-    use M_Orbs
-
     complex(R64), intent(inout), contiguous, target :: dOrbs(:, :)
     complex(R64), intent(in), contiguous, target    :: orbs(:, :)
     complex(R64), intent(in), contiguous             :: rdm1(:, :)
     real(R64), intent(in)                  :: time
 
-    complex(R64), allocatable :: orbTmps(:, :), orbTmpsSwap(:, :)
-    integer(I32) :: nOS
-    integer(I32) :: k2, l2
-    integer(I32) :: l2bt, k2bt
-
-    allocate (orbTmps, mold=orbs)
-    allocate (orbTmpsSwap, mold=orbs)
-
-    nOS = Orbs_nOrbsInState
-
-    ! Loop over unordered pairs (k2 >= l2); the interaction applied for the
-    ! swapped source pair reuses the potential via the conjugation symmetry
-    do l2 = 1, nOS
-      do k2 = l2, nOS
-        l2bt = Method_Mb_OrbBased_bodyTypeOfOrb(l2)
-        k2bt = Method_Mb_OrbBased_bodyTypeOfOrb(k2)
-
-        ! Skip cross-body-type pairs (vanishing density matrix elements)
-        if (l2bt .ne. k2bt) cycle
-
-        orbTmps(:, :) = 0.0_R64
-
-        if (k2 .eq. l2) then
-          ! Apply interaction for source pair (l2,k2)
-          call Method_Mb_OrbBased_ApplyInteractionOp(orbTmps, orbs, l2, k2, time)
-
-          call AccumulateHartreeFock(dOrbs, orbTmps, rdm1, k2, l2)
-        else
-          orbTmpsSwap(:, :) = 0.0_R64
-          call ApplyInteractionOpPair(orbTmps, orbTmpsSwap, orbs, l2, k2, time)
-
-          call AccumulateHartreeFock(dOrbs, orbTmps, rdm1, k2, l2)
-          call AccumulateHartreeFock(dOrbs, orbTmpsSwap, rdm1, l2, k2)
-        end if
-      end do
-    end do
+    call AccumulatePairTerms(orbs, time, dOrbs_=dOrbs, rdm1_=rdm1)
 
   end subroutine
 
@@ -1677,77 +1335,40 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine ApplyGaugeOpLin(dOrbs, orbs, time)
-    !---------------------------------------------------------------------------
-    ! Linear split-step operator with exact field-free propagation: only the
-    ! gauge coupling (T + V_ext are propagated by Method_PropagateExactPart).
-    !---------------------------------------------------------------------------
-    complex(R64), intent(inout), contiguous :: dOrbs(:, :)
-    complex(R64), intent(in), contiguous    :: orbs(:, :)
-    real(R64), intent(in)                   :: time
-
-    call Method_Mb_OrbBased_ApplyGaugeOp(dOrbs, orbs, time)
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine ApplySingleBodyOp(dOrbs, orbs, time, h1_)
     !---------------------------------------------------------------------------
     ! Applies the one-body Hamiltonian (kinetic + external potential + gauge
     ! coupling) to orbitals:
     !   dOrbs(:,i) += (T̂ + V̂_ext + Ĥ_A) · orbs(:,i)
     !
-    ! Optionally returns the one-body Hamiltonian matrix h1_ if requested.
-    ! For restricted calculations, duplicates the computed block.
+    ! Optionally returns h1_(i,j) = ⟨φ_i|dOrbs(:,j)⟩ from the accumulated
+    ! result (equal body type; duplicated for the second spin block if
+    ! restricted).
     !---------------------------------------------------------------------------
-    use M_Method
     use M_Orbs
-    use M_Grid
-    use M_SysKinetic
-    use M_SysPotential
 
     complex(R64), intent(inout), contiguous, target :: dOrbs(:, :)
     complex(R64), intent(in), contiguous, target    :: orbs(:, :)
     real(R64), intent(in)               :: time
     complex(R64), intent(out), allocatable, optional :: h1_(:, :)
 
-    integer(I32) :: i1, j1, i1bt, j1bt, nOS, nO
+    complex(R64), allocatable :: h1Spatial(:, :)
+    integer(I32) :: nOS, nO
 
-    nOS = Orbs_nOrbsInState
-    nO = Method_Mb_OrbBased_nOrbsSum
-
-    ! Apply operators (results accumulate in dOrbs)
     call Method_Mb_OrbBased_ApplyKineticOp(dOrbs, orbs, time)
     call Method_Mb_OrbBased_ApplyPotentialOp(dOrbs, orbs, time)
     call Method_Mb_OrbBased_ApplyGaugeOp(dOrbs, orbs, time)
 
-    ! Optionally compute matrix elements from the accumulated result
-    if (present(h1_)) then
+    if (.not. present(h1_)) return
 
-      if (.not. allocated(h1_)) allocate (h1_(nO, nO))
-      h1_(:, :) = 0.0_R64
+    nOS = Orbs_nOrbsInState
+    nO = Method_Mb_OrbBased_nOrbsSum
+    call FillOrbitalMatrix(h1Spatial, orbs, dOrbs)
 
-      !$omp parallel do default(shared) private(i1, j1, i1bt, j1bt) collapse(2)
-      do j1 = 1, nOS
-        do i1 = 1, nOS
-
-          i1bt = Method_Mb_OrbBased_bodyTypeOfOrb(i1)
-          j1bt = Method_Mb_OrbBased_bodyTypeOfOrb(j1)
-
-          if (i1bt .ne. j1bt) cycle
-
-          h1_(i1, j1) = Grid_InnerProduct(orbs(:, i1), dOrbs(:, j1))
-
-        end do
-      end do
-      !$omp end parallel do
-
-      ! Duplicate for second spin block in restricted case
-      if (Orbs_restrictedQ) then
-        h1_(nOS + 1:, nOS + 1:) = h1_(:nOS, :nOS)
-      end if
-
-    end if
+    allocate (h1_(nO, nO))
+    h1_(:, :) = 0.0_R64
+    h1_(:nOS, :nOS) = h1Spatial(:, :)
+    if (Orbs_restrictedQ) h1_(nOS + 1:, nOS + 1:) = h1Spatial(:, :)
 
   end subroutine
 

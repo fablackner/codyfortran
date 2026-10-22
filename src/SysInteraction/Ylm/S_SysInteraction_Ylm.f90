@@ -133,21 +133,19 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine SysInteraction_Ylm_FillInteractionPotentialM(potM, srcM, m, time, bt1_, bt2_)
+  module subroutine SysInteraction_Ylm_FillInteractionPotentialM(potM, srcM, m, time)
     !$ use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(out), contiguous :: potM(:, :)
     complex(R64), intent(in), contiguous  :: srcM(:, :)
     integer(I32), intent(in)              :: m
     real(R64), intent(in)                 :: time
-    integer(I32), intent(in), optional    :: bt1_
-    integer(I32), intent(in), optional    :: bt2_
 
     integer(I32) :: iL
 
     !$omp parallel do default(shared) private(iL) schedule(dynamic) if (.not. omp_in_parallel())
     do iL = 1, size(srcM, 2)
-      call FillInteractionPotentialLm(potM(:, iL), srcM(:, iL), abs(m) + iL - 1, m, time, bt1_=bt1_, bt2_=bt2_)
+      call FillInteractionPotentialLm(potM(:, iL), srcM(:, iL), abs(m) + iL - 1, m, time)
     end do
     !$omp end parallel do
 

@@ -722,6 +722,8 @@ contains
   !> Eigenvalues ascending over all blocks (stable for equal values); with a
   !> single block the result equals LapackLib_DiagonalizeGeneric.
   subroutine LapackLib_DiagonalizeHermitianBlocks(evals, evecs, a, blockOf)
+    use stdlib_sorting, only: sort_index, int_index
+
     !> Output eigenvalues (ascending), size N.
     real(R64), intent(out), allocatable    :: evals(:)
     !> Output eigenvectors (columns), N x N, zero outside the block of each.
@@ -731,15 +733,16 @@ contains
     !> Block label of every row/column.
     integer(I32), intent(in), contiguous   :: blockOf(:)
 
-    real(R64), allocatable    :: blockEvals(:), evalsBlocks(:)
+    real(R64), allocatable    :: blockEvals(:)
     complex(R64), allocatable :: blockEvecs(:, :), evecsBlocks(:, :)
-    integer(I32), allocatable :: idx(:), order(:)
-    integer(I32) :: n, i, j, k, nFound
+    integer(I32), allocatable :: idx(:)
+    integer(int_index), allocatable :: order(:)
+    integer(I32) :: n, i, j, nFound
 
     n = size(a, 1)
     if (size(blockOf) .ne. n) error stop "LapackLib_DiagonalizeHermitianBlocks: blockOf has the wrong size"
 
-    allocate (evalsBlocks(n), evecsBlocks(n, n))
+    allocate (evals(n), evecsBlocks(n, n))
     evecsBlocks(:, :) = (0.0_R64, 0.0_R64)
 
     ! Blocks in the order of their first index
@@ -748,25 +751,14 @@ contains
       if (any(blockOf(1:i - 1) .eq. blockOf(i))) cycle
       idx = pack([(j, j=1, n)], blockOf .eq. blockOf(i))
       call WrapZHEEV(blockEvals, blockEvecs, a(idx, idx), .true.)
-      evalsBlocks(nFound + 1:nFound + size(idx)) = blockEvals(:)
+      evals(nFound + 1:nFound + size(idx)) = blockEvals(:)
       evecsBlocks(idx, nFound + 1:nFound + size(idx)) = blockEvecs(:, :)
       nFound = nFound + size(idx)
     end do
 
-    ! Stable insertion sort of the eigenvalues
-    order = [(i, i=1, n)]
-    do i = 2, n
-      k = order(i)
-      j = i - 1
-      do while (j >= 1)
-        if (evalsBlocks(order(j)) <= evalsBlocks(k)) exit
-        order(j + 1) = order(j)
-        j = j - 1
-      end do
-      order(j + 1) = k
-    end do
-
-    evals = evalsBlocks(order)
+    ! Stable sort of the eigenvalues (in place)
+    allocate (order(n))
+    call sort_index(evals, order)
     evecs = evecsBlocks(:, order)
 
   end subroutine

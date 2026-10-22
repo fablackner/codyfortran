@@ -212,8 +212,9 @@ pointwise product of node fields with m₁ and m₂ represents m₁ + m₂, the 
 conjugate −m, and a product is integrated over φ (factor 2π, included in the
 node weights) only when its m add up to zero. Such products are polynomials in
 cos θ (the sin^|m| θ factors pair up), so the quadrature is exact for total
-degree ≤ 4 lmax + 5, as for m = 0. The tables are built in `Grid_Ylm` Setup
-(`SetupQuadrature`, normalized associated Legendre recurrences) and are used by
+degree ≤ 4 lmax + 5, as for m = 0. The table sizes are set by `Grid_Ylm_Fabricate`, the
+tables in `Grid_Ylm` Setup (`SetupQuadrature`, normalized associated Legendre
+recurrences) and are used by
 `SpatialProductM0` and by Method's `ApplyCorrelationOpYlmNodes` and
 `FillH2YlmNodes` (`S_Method_Mb_OrbBased.f90`, orbitals of declared m,
 `method.mb.orbBased.mOfOrbs`); see also the Ylm spatial
@@ -221,8 +222,8 @@ product bullet under Performance Notes.
 
 | Name | Kind | Contract |
 |------|------|----------|
-| `Grid_Ylm_ToNodes(fNodes, f, lmax, m, mmax_)` | subroutine | fNodes(r, q) = Σ_l f_lm(r) Θ_lm(x_q), \|m\| ≤ l ≤ lmax, for f in the layout (lmax, `mmax_`, default `Grid_Ylm_mmax`); other m are ignored; requires lmax ≤ `Grid_Ylm_lmaxNodes`, \|m\| ≤ min(`Grid_Ylm_mmaxNodes`, mmax_) |
-| `Grid_Ylm_FromNodes(f, fNodes, lmax, m, mmax_, withWeightsQ_)` | subroutine | Projection onto Y_lm, \|m\| ≤ l ≤ lmax, into the layout (lmax, `mmax_`), all other channels zero; exact for angular degree ≤ 2 nNodes − 1 − lmax; `withWeightsQ_` multiplies the output by `Grid_Ylm_radialMetricWeights` (default `.false.`) |
+| `Grid_Ylm_ToNodes(fNodes, f, m)` | subroutine | fNodes(r, q) = Σ_l f_lm(r) Θ_lm(x_q), \|m\| ≤ l ≤ `Grid_Ylm_lmax`, for f in the orbital layout; other m are ignored; requires \|m\| ≤ `Grid_Ylm_mmax` |
+| `Grid_Ylm_FromNodes(f, fNodes, m)` | subroutine | Projection onto Y_lm, \|m\| ≤ l ≤ `Grid_Ylm_lmax`, into the orbital layout, all other channels zero; exact for angular degree ≤ 2 nNodes − 1 − lmax |
 | `Grid_Ylm_ChannelsToNodes(fNodes, fM, m)` | subroutine | as `Grid_Ylm_ToNodes` on the channel matrix fM(r, l − \|m\| + 1), \|m\| ≤ l ≤ \|m\| + size(fM, 2) − 1 (one real GEMM on the complex arrays viewed as real) |
 | `Grid_Ylm_NodesToChannels(fM, fNodes, m)` | subroutine | as `Grid_Ylm_FromNodes` into the channel matrix fM, without metric weights |
 | `Grid_Ylm_ProjectOnM(f, m)` | pure subroutine | zeroes all channels of f (orbital layout) with an m other than m (used by `Orbs_ProjectOnSymmetry`) |

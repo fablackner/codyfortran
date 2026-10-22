@@ -137,9 +137,10 @@ w(r) = strength × exp(-dampening×r) / (√(r² + softening1²) + softening2)
 | `SysInteraction_Ylm_nPoints` | Length of a source/potential array, `nChannels * Grid_Ylm_nRadial` |
 
 **Potential of one m:** `SysInteraction_Ylm_FillInteractionPotentialM(potM,
-srcM, m, time, bt1_, bt2_)` maps the source channels of one m (channel matrix
-`srcM(:, iL)`, l = |m| + iL − 1, radial metric weights included) to the
-potential channels by one radial Poisson solve per l
+srcM, m, time)` maps the source channels of one m (channel matrix
+`srcM(:, iL)`, l = |m| + iL − 1, radial metric weights included) of a
+body-type-independent interaction to the potential channels by one radial
+Poisson solve per l
 (`SysInteraction_Ylm_FillInteractionPotentialRadial`); channels with a
 negligible source (all |ρ_lm| < 1e-14) are zero. It is parallel over l unless
 called inside a parallel region. The definite-m node path of Method calls it

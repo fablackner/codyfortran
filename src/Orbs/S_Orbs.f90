@@ -139,16 +139,9 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Project the orbitals on the channels of their declared m.
-!>
-!> The removed part ||phi - P_m phi||^2 must not exceed 1e-8 of ||phi||^2:
-!> loaded or computed orbitals carry round-off admixtures of other m (e.g.
-!> up to ~1e-16 of the norm from earlier eigen-decompositions that mixed
-!> degenerate m blocks), which are removed here once; a larger part means
-!> that the orbitals do not have the declared m (e.g. mOfOrbs in another
-!> order than the orbitals). The overlaps of the orbitals change by at most
-!> the removed parts. Norms in the positive metric of the grid weights, also
-!> on c-product (ECS) grids.
+!> Project the orbitals on the channels of their declared m (removes
+!> round-off admixtures; error stop if more than 1e-8 of the norm, in the
+!> positive metric of the grid weights, would be removed).
   subroutine ProjectOnSymmetry(orbs)
     use M_Grid_Ylm
     use M_Method_Mb_OrbBased

@@ -54,7 +54,7 @@ subroutine WriteLaserObservables(time, charge, energy, newFilesQ)
   nElectrons = real(sum(rhoUp * transpose(s)), kind=R64) * (size(rdm1, 1) / nOS)
 
   call LapackLib_DiagonalizeGeneric(evals, evecs, s, .true.)
-  sSqrt = matmul(evecs, spread(sqrt(max(evals, 0.0_R64)), 2, nOS) * conjg(transpose(evecs)))
+  sSqrt = HermitianFunction(evecs, sqrt(max(evals, 0.0_R64)))
   call LapackLib_DiagonalizeGeneric(occ, evecs, matmul(conjg(transpose(sSqrt)), matmul(rhoUp, sSqrt)), .false.)
 
   openStatus = "unknown"

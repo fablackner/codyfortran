@@ -3,12 +3,10 @@
 !
 ! - EmbedOrbitals:        load orbXX_YY.in written on a grid with a smaller
 !                         lmax (same radial grid and mmax)
-! - TransformOrbitalsKeepingState:
-!                         in-space orbital transformation phi -> phi A with the
+! - LowdinKeepingState:   symmetric orthonormalization of the orbitals with the
 !                         compensating CI transformation, so that the
 !                         many-body state is unchanged
-! - LowdinKeepingState:   symmetric orthonormalization of the orbitals with the
-!                         compensating CI transformation
+! - HermitianFunction:    U diag(f) U^H
 ! - MetricWeights:        FEDVR metric of a packed state (SIL integrator)
 !
 ! The in-space matrices are block diagonal in Orbs_blockOfOrb (body type and
@@ -62,15 +60,15 @@ subroutine EmbedOrbitals(orbs, lmaxIn)
 end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Replace the orbitals by phi A for a Hermitian positive-definite in-space
-!> matrix A (block diagonal in Orbs_blockOfOrb) and transform the CI vector so
-!> that Psi = sum_I c_I Phi_I[phi] is unchanged.
+!> Loewdin orthonormalization phi <- phi A, A = S^(-1/2), of the stored
+!> orbitals (S = overlap matrix, zero between the blocks Orbs_blockOfOrb),
+!> with the CI transformation that keeps Psi = sum_I c_I Phi_I[phi] unchanged.
 !>
 !> With phi = (phi A) A^-1 the determinants transform with the one-body
-!> operator exp(K^) of K = log(A^-1) = -log(A), i.e. c <- exp(-log(A)^) c,
-!> where X^ = sum_kj X_kj a+_k a_j. The exponential is summed as a Taylor
-!> series of Coeffs_ApplyH1FillRdm1 applications (||log A|| is small).
-subroutine TransformOrbitalsKeepingState(coeffs, orbs, a)
+!> operator exp(K^) of K = -log(A) = log(S)/2, i.e. c <- exp(K^) c, where
+!> X^ = sum_kj X_kj a+_k a_j. The exponential is summed as a Taylor series of
+!> Coeffs_ApplyH1FillRdm1 applications (||log S|| is small).
+subroutine LowdinKeepingState(coeffs, orbs)
   use M_Utils_LapackLib
   use M_Grid
   use M_Coeffs
@@ -79,28 +77,34 @@ subroutine TransformOrbitalsKeepingState(coeffs, orbs, a)
 
   complex(R64), intent(inout), contiguous :: coeffs(:)
   complex(R64), intent(inout), contiguous :: orbs(:, :)
-  complex(R64), intent(in), contiguous    :: a(:, :)
 
   real(R64), allocatable :: evals(:)
-  complex(R64), allocatable :: evecs(:, :), logA(:, :), kFull(:, :)
+  complex(R64), allocatable :: evecs(:, :), s(:, :), kFull(:, :)
   complex(R64), allocatable :: term(:), termNew(:)
-  integer(I32) :: nOS, nO, k
+  integer(I32) :: nOS, nO, i, j, k
 
   nOS = Orbs_nOrbsInState
   nO = Method_Mb_OrbBased_nOrbsSum
 
-  ! Orbitals: phi <- phi A
-  orbs(:, 1:nOS) = matmul(orbs(:, 1:nOS), a)
+  allocate (s(nOS, nOS))
+  do j = 1, nOS
+    do i = 1, nOS
+      s(i, j) = 0.0_R64
+      if (Orbs_blockOfOrb(i) .ne. Orbs_blockOfOrb(j)) cycle
+      s(i, j) = Grid_InnerProduct(orbs(:, i), orbs(:, j))
+    end do
+  end do
 
-  ! K = -log(A) in the spin-orbital basis (restricted: same block for both spins)
-  call LapackLib_DiagonalizeHermitianBlocks(evals, evecs, a, Orbs_blockOfOrb)
-  if (minval(evals) <= 0.0_R64) error stop "TransformOrbitalsKeepingState: A is not positive definite"
-  logA = matmul(evecs, spread(log(evals), 2, size(evals)) * conjg(transpose(evecs)))
+  call LapackLib_DiagonalizeHermitianBlocks(evals, evecs, s, Orbs_blockOfOrb)
 
+  ! Orbitals: phi <- phi S^(-1/2)
+  orbs(:, 1:nOS) = matmul(orbs(:, 1:nOS), HermitianFunction(evecs, 1.0_R64 / sqrt(evals)))
+
+  ! K = log(S)/2 in the spin-orbital basis (restricted: same block for both spins)
   allocate (kFull(nO, nO))
   kFull(:, :) = 0.0_R64
-  kFull(1:nOS, 1:nOS) = -logA
-  if (Orbs_restrictedQ) kFull(nOS + 1:, nOS + 1:) = -logA
+  kFull(1:nOS, 1:nOS) = HermitianFunction(evecs, 0.5_R64 * log(evals))
+  if (Orbs_restrictedQ) kFull(nOS + 1:, nOS + 1:) = kFull(1:nOS, 1:nOS)
 
   ! c <- exp(K^) c
   term = coeffs
@@ -116,44 +120,15 @@ subroutine TransformOrbitalsKeepingState(coeffs, orbs, a)
 end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Loewdin orthonormalization phi <- phi S^(-1/2) of the stored orbitals
-!> (S = overlap matrix, zero between the blocks Orbs_blockOfOrb), keeping the
-!> many-body state unchanged through the compensating CI transformation.
-subroutine LowdinKeepingState(coeffs, orbs)
-  use M_Utils_LapackLib
-  use M_Grid
-  use M_Orbs
+!> The Hermitian matrix U diag(f) U^H of eigenvectors U and values f.
+function HermitianFunction(evecs, f) result(res)
+  complex(R64), intent(in), contiguous :: evecs(:, :)
+  real(R64), intent(in), contiguous    :: f(:)
+  complex(R64), allocatable :: res(:, :)
 
-  complex(R64), intent(inout), contiguous :: coeffs(:)
-  complex(R64), intent(inout), contiguous :: orbs(:, :)
+  res = matmul(evecs, spread(f, 2, size(f)) * conjg(transpose(evecs)))
 
-  real(R64), allocatable :: evals(:)
-  complex(R64), allocatable :: evecs(:, :), s(:, :), sInvSqrt(:, :)
-  integer(I32) :: nOS, i, j
-
-  nOS = Orbs_nOrbsInState
-
-  allocate (s(nOS, nOS))
-  do j = 1, nOS
-    do i = 1, nOS
-      s(i, j) = 0.0_R64
-      if (Orbs_blockOfOrb(i) .ne. Orbs_blockOfOrb(j)) cycle
-      s(i, j) = Grid_InnerProduct(orbs(:, i), orbs(:, j))
-    end do
-  end do
-
-  call LapackLib_DiagonalizeHermitianBlocks(evals, evecs, s, Orbs_blockOfOrb)
-
-  allocate (sInvSqrt(nOS, nOS))
-  sInvSqrt = 0.0_R64
-  do i = 1, nOS
-    sInvSqrt(i, i) = 1.0_R64 / sqrt(evals(i))
-  end do
-  sInvSqrt = matmul(evecs, matmul(sInvSqrt, conjg(transpose(evecs))))
-
-  call TransformOrbitalsKeepingState(coeffs, orbs, sInvSqrt)
-
-end subroutine
+end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> FEDVR metric weights of a packed state [many-body part (nHead entries,

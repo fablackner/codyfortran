@@ -105,54 +105,11 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine TimeDerivative(dState, state, time)
-    use M_Utils_Timer
-    use M_Grid
-    use M_Coeffs
-    use M_Orbs
-    use M_Method
-    use M_Method_Mb_OrbBased
-    use M_Utils_Constants
-
     complex(R64), intent(out), contiguous, target :: dState(:)
     complex(R64), intent(in), contiguous, target  :: state(:)
     real(R64), intent(in)             :: time
 
-    complex(R64), contiguous, pointer :: coeffs(:)
-    complex(R64), contiguous, pointer :: dCoeffs(:)
-
-    complex(R64), contiguous, pointer :: orbs(:, :)
-    complex(R64), contiguous, pointer :: dOrbs(:, :)
-
-    complex(R64), allocatable :: h1(:, :)
-    complex(R64), allocatable :: h2(:, :, :, :)
-    complex(R64), allocatable :: rdm1(:, :)
-    complex(R64), allocatable :: invRdm1(:, :)
-    complex(R64), allocatable :: rdm2(:, :, :, :)
-
-    !call Timer_Timer("rest")
-
-    dState(:) = 0.0_R64
-
-    call GetCoeffs(coeffs, state)
-    call GetCoeffs(dCoeffs, dState)
-
-    call GetOrbs(orbs, state)
-    call GetOrbs(dOrbs, dState)
-
-    call Coeffs_ApplyH1FillRdm1(coeffs, rdm1_=rdm1)
-    call Coeffs_ApplyH2FillRdm2(coeffs, rdm2_=rdm2)
-
-    call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time, h1_=h1)
-    call Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
-    call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_=h2)
-
-    call Coeffs_ApplyH1FillRdm1(coeffs, dCoeffs_=dCoeffs, h1_=h1)
-    call Coeffs_ApplyH2FillRdm2(coeffs, dCoeffs_=dCoeffs, h2_=h2)
-
-    call Coeffs_ProjectOnSubspace(dCoeffs, coeffs)
-    call Orbs_ProjectOnSubspace(dOrbs, orbs)
-
-    dState(:) = -IU * dState(:) ! out is the time-derivative!
+    call FillTimeDerivative(dState, state, time, oneBodyQ=.true.)
 
   end subroutine
 
@@ -162,11 +119,6 @@ contains
   !> L = Method_Mb_OrbBased_ApplyLinOp (h, or only the gauge coupling if
   !> exactFieldFreeQ).
   subroutine TimeDerivativeOrbsLin(dState, state, time)
-    use M_Utils_Timer
-    use M_Grid
-    use M_Orbs
-    use M_Coeffs
-    use M_Method
     use M_Method_Mb_OrbBased
     use M_Utils_Constants
 
@@ -249,17 +201,29 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine TimeDerivativeCoeffsPlusOrbsNonLin(dState, state, time)
-    use M_Utils_Timer
-    use M_Grid
+    complex(R64), intent(out), contiguous, target :: dState(:)
+    complex(R64), intent(in), contiguous, target  :: state(:)
+    real(R64), intent(in)             :: time
+
+    call FillTimeDerivative(dState, state, time, oneBodyQ=.false.)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Full time derivative (oneBodyQ), or the non-linear split-step part: only
+  !> the interaction, since the linear part rotates the orbitals with the
+  !> unprojected h at fixed coefficients (applying h1 here as well would count
+  !> it twice); its orbital derivative is projected with the spectral cut.
+  subroutine FillTimeDerivative(dState, state, time, oneBodyQ)
     use M_Coeffs
     use M_Orbs
-    use M_Method
     use M_Method_Mb_OrbBased
     use M_Utils_Constants
 
     complex(R64), intent(out), contiguous, target :: dState(:)
     complex(R64), intent(in), contiguous, target  :: state(:)
     real(R64), intent(in)             :: time
+    logical, intent(in)               :: oneBodyQ
 
     complex(R64), contiguous, pointer :: coeffs(:)
     complex(R64), contiguous, pointer :: dCoeffs(:)
@@ -267,6 +231,7 @@ contains
     complex(R64), contiguous, pointer :: orbs(:, :)
     complex(R64), contiguous, pointer :: dOrbs(:, :)
 
+    complex(R64), allocatable :: h1(:, :)
     complex(R64), allocatable :: h2(:, :, :, :)
     complex(R64), allocatable :: rdm1(:, :)
     complex(R64), allocatable :: invRdm1(:, :)
@@ -283,17 +248,16 @@ contains
     call Coeffs_ApplyH1FillRdm1(coeffs, rdm1_=rdm1)
     call Coeffs_ApplyH2FillRdm2(coeffs, rdm2_=rdm2)
 
-    ! Only the interaction: the one-body part is propagated exactly by the
-    ! linear split-step part, which rotates the orbitals with the unprojected
-    ! h at fixed coefficients (applying h1 here as well would count it twice)
+    if (oneBodyQ) call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time, h1_=h1)
     call Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
     call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_=h2)
 
+    if (oneBodyQ) call Coeffs_ApplyH1FillRdm1(coeffs, dCoeffs_=dCoeffs, h1_=h1)
     call Coeffs_ApplyH2FillRdm2(coeffs, dCoeffs_=dCoeffs, h2_=h2)
 
     call Coeffs_ProjectOnSubspace(dCoeffs, coeffs)
     call Orbs_ProjectOnSubspace(dOrbs, orbs)
-    call Method_Mb_OrbBased_ApplySpectralCut(dOrbs)
+    if (.not. oneBodyQ) call Method_Mb_OrbBased_ApplySpectralCut(dOrbs)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
 

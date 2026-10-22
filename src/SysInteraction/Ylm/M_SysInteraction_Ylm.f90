@@ -42,16 +42,12 @@ module M_SysInteraction_Ylm
     module subroutine SysInteraction_Ylm_Fabricate
     end subroutine
 
-    !> Potential channels of one m from the source channels of that m:
-    !> potM(:, iL) = V_lm, l = |m| + iL - 1 (the channel-matrix layout of
-    !> Grid_Ylm_NodesToChannels), from srcM with radial metric weights (as
-    !> SysInteraction_FillInteractionSrc), one radial Poisson solve per l
-    !> (SysInteraction_Ylm_FillInteractionPotentialRadial); channels with a
-    !> negligible source (all |rho_lm| < 1e-14) are set to zero, by the same
-    !> per-channel routine as SysInteraction_FillInteractionPotential. Used by
-    !> the definite-m node path of Method_Mb_OrbBased. Parallel over l unless
-    !> called inside a parallel region.
-    module subroutine SysInteraction_Ylm_FillInteractionPotentialM(potM, srcM, m, time, bt1_, bt2_)
+    !> Potential channels of one m, potM(:, iL) = V_lm with l = |m| + iL - 1
+    !> (channel matrix of Grid_Ylm_NodesToChannels), from the source channels
+    !> srcM (radial metric weights included), by the per-channel solve of
+    !> SysInteraction_FillInteractionPotential (body-type-independent
+    !> interaction). Parallel over l unless called inside a parallel region.
+    module subroutine SysInteraction_Ylm_FillInteractionPotentialM(potM, srcM, m, time)
       !> Output: potential channels (nRadial x number of l).
       complex(R64), intent(out), contiguous :: potM(:, :)
       !> Input: source channels (nRadial x number of l), radial metric weights included.
@@ -60,10 +56,6 @@ module M_SysInteraction_Ylm
       integer(I32), intent(in)              :: m
       !> Physical time associated with the source/potential.
       real(R64), intent(in)                 :: time
-      !> Optional body type (species) index for the potential target.
-      integer(I32), intent(in), optional    :: bt1_
-      !> Optional body type (species) index for the source.
-      integer(I32), intent(in), optional    :: bt2_
     end subroutine
   end interface
 

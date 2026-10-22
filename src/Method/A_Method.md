@@ -153,6 +153,7 @@ Provides orbital indexing, RDM storage, and operator-application interfaces:
 | `Method_Mb_OrbBased_FillSpatialRdm1` (module procedure) | Spatial 1-RDM (spin-summed for restricted) |
 | `Method_Mb_OrbBased_FillInverseRdm1` (module procedure) | Regularized spatial inverse U n/(n²+ε) U† of the 1-RDM |
 | `Method_Mb_OrbBased_SaveRdm2Blocks` (module procedure) | Write body-type blocks `rdm2BtXX_YY.in` of a 2-RDM (read by `twoRdmInit.load`) |
+| `Method_Mb_OrbBased_SetupFieldFree` (module procedure) | Builds the exact field-free h0 blocks; called only by `Method_Mb_OrbBased_Setup` when `Method_PropagateExactPart` is bound |
 | `Method_Mb_OrbBased_ApplySingleBodyOp`         | Combined T̂ + V̂_ext                         |
 | `Method_Mb_OrbBased_TimeDerivativeOrbsLin`     | Linear (static-orbital) time derivative    |
 | `...TimeDerivativeCoeffsPlusOrbsNonLin`        | Non-linear part for MCTDHX-like schemes    |
@@ -199,7 +200,8 @@ the outer Strang splitting). Only MCTDHX and TD-2RDM (without weak orbitals)
 bind `Method_PropagateExactPart`; for TDCI, TDHX and TD-2RDM-StaticOrbs the
 flag has no effect.
 
-`S_Method_Mb_OrbBased_FieldFree.f90` builds h0 on the first call: it applies
+`S_Method_Mb_OrbBased_FieldFree.f90` builds h0 once in
+`Method_Mb_OrbBased_Setup` (`Method_Mb_OrbBased_SetupFieldFree`): it applies
 the kinetic and potential operators to radial unit vectors placed in all
 (l,m) channels at once, symmetrizes each block with the radial metric
 weights (w r² on FEDVR) and diagonalizes it per l (real symmetric, m
@@ -254,7 +256,7 @@ series for |z| < 1, recurrence otherwise) and transforms the sum back once
 (CPU only). It is consumed by the exponential integrators
 (`propagator.exponential`, src/Propagator/A_Propagator.md); real time only.
 
-Requirements (checked on the first exact step): Hermitian (non-ECS) Ylm grid, time- and
+Requirements (checked at setup): Hermitian (non-ECS) Ylm grid, time- and
 body-type-independent kinetic and potential, central potential
 (`SysPotential_Ylm_lmax = 0`), no TD-2RDM weak orbitals. Memory: one real
 nRadial² matrix per l. T_Ne3d_09 (Strang) and T_Ne3d_10 (Blanes–Moan) check

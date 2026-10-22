@@ -43,8 +43,8 @@ contains
 !>   - `"propagator.splitStep.order4"` → 4th-order Yoshida composition
 !>
 !> Optional: `"propagator.splitStep.exactPartScheme"` (strang | yoshida4 |
-!> blanesMoan6, default strang). It is validated always but used only if
-!> Method_PropagateExactPart is associated.
+!> blanesMoan6 | blanesMoan6Swap, default strang). It is validated always but
+!> used only if Method_PropagateExactPart is associated.
   module subroutine Propagator_SplitStep_Fabricate
     use M_Utils_Say
     use M_Utils_Json
@@ -52,6 +52,7 @@ contains
     use M_Propagator_SplitStep_Order4
 
     character(len=:), allocatable :: exactPartScheme
+    real(R64), allocatable :: swapCoeffs(:)
     real(R64) :: w0, w1, a1, a2, a3, b1, b2
 
     call Say_Fabricate("propagator.splitStep")
@@ -77,9 +78,9 @@ contains
       exactCoeffs = [0.5_R64 * w1, 0.5_R64 * (w0 + w1), 0.5_R64 * (w0 + w1), 0.5_R64 * w1]
       integratorCoeffs = [w1, w0, w1]
 
-    case ("blanesMoan6")
+    case ("blanesMoan6", "blanesMoan6Swap")
       ! fourth order with small error constants (Blanes & Moan 2002, PRK S6),
-      ! 7 exact and 6 integrator substeps
+      ! 7 exact and 6 integrator substeps; Swap: the roles exchanged
       a1 = 0.0792036964311957_R64
       a2 = 0.353172906049774_R64
       a3 = -0.0420650803577195_R64
@@ -87,16 +88,11 @@ contains
       b2 = -0.143851773179818_R64
       exactCoeffs = [a1, a2, a3, 1.0_R64 - 2.0_R64 * (a1 + a2 + a3), a3, a2, a1]
       integratorCoeffs = [b1, b2, 0.5_R64 - b1 - b2, 0.5_R64 - b1 - b2, b2, b1]
-
-    case ("blanesMoan6Swap")
-      ! same composition with the roles exchanged: 6 exact / 7 integrator substeps
-      a1 = 0.0792036964311957_R64
-      a2 = 0.353172906049774_R64
-      a3 = -0.0420650803577195_R64
-      b1 = 0.209515106613362_R64
-      b2 = -0.143851773179818_R64
-      exactCoeffs = [b1, b2, 0.5_R64 - b1 - b2, 0.5_R64 - b1 - b2, b2, b1]
-      integratorCoeffs = [a1, a2, a3, 1.0_R64 - 2.0_R64 * (a1 + a2 + a3), a3, a2, a1]
+      if (exactPartScheme .eq. "blanesMoan6Swap") then
+        call move_alloc(exactCoeffs, swapCoeffs)
+        call move_alloc(integratorCoeffs, exactCoeffs)
+        call move_alloc(swapCoeffs, integratorCoeffs)
+      end if
 
     case default
       error stop "propagator.splitStep.exactPartScheme must be one of: strang, yoshida4, blanesMoan6, blanesMoan6Swap"

@@ -43,6 +43,11 @@ contains
     if (Grid_Ylm_mmax < 0) error stop "grid.ylm.mmax must be >= 0"
     Grid_Ylm_mmax = min(Grid_Ylm_mmax, Grid_Ylm_lmax)
 
+    ! Gauss-Legendre node tables (SetupQuadrature)
+    Grid_Ylm_lmaxNodes = 2 * Grid_Ylm_lmax + 2
+    Grid_Ylm_mmaxNodes = min(2 * Grid_Ylm_mmax, Grid_Ylm_lmaxNodes)
+    Grid_Ylm_nNodes = 2 * Grid_Ylm_lmax + 3
+
     ! Read radial grid parameters from JSON
     Grid_Ylm_rmax = Json_Get("grid.ylm.rmax", 20.0_R64)
 
@@ -144,11 +149,8 @@ contains
     real(R64), allocatable :: x(:), w(:), sinTheta(:)
     integer(I32) :: l, m, lmaxNodes, mmaxNodes
 
-    lmaxNodes = 2 * Grid_Ylm_lmax + 2
-    mmaxNodes = min(2 * Grid_Ylm_mmax, lmaxNodes)
-    Grid_Ylm_lmaxNodes = lmaxNodes
-    Grid_Ylm_mmaxNodes = mmaxNodes
-    Grid_Ylm_nNodes = 2 * Grid_Ylm_lmax + 3
+    lmaxNodes = Grid_Ylm_lmaxNodes
+    mmaxNodes = Grid_Ylm_mmaxNodes
 
     allocate (x(Grid_Ylm_nNodes), w(Grid_Ylm_nNodes))
     call gauss_legendre(x, w)
@@ -474,29 +476,21 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine Grid_Ylm_ToNodes(fNodes, f, lmax, m, mmax_)
+  module subroutine Grid_Ylm_ToNodes(fNodes, f, m)
     complex(R64), intent(out), contiguous :: fNodes(:, :)
     complex(R64), intent(in), contiguous  :: f(:)
-    integer(I32), intent(in)              :: lmax
     integer(I32), intent(in)              :: m
-    integer(I32), intent(in), optional    :: mmax_
 
-    integer(I32) :: nRad, mmax, mAbs, l, i
+    integer(I32) :: nRad, l, i
     complex(R64), allocatable :: fM(:, :)
-
-    mmax = Grid_Ylm_mmax
-    if (present(mmax_)) mmax = mmax_
-    mAbs = abs(m)
-
-    if (mAbs > mmax) error stop "Grid_Ylm_ToNodes: |m| exceeds the layout"
 
     nRad = Grid_Ylm_nRadial
 
     ! Channels (l, m), l = |m| .. lmax, as a matrix fM(r, l)
-    allocate (fM(nRad, max(0, lmax - mAbs + 1)))
-    do l = mAbs, lmax
-      i = BaseIndex(l, m, mmax)
-      fM(:, l - mAbs + 1) = f(i:i + nRad - 1)
+    allocate (fM(nRad, Grid_Ylm_lmax - abs(m) + 1))
+    do l = abs(m), Grid_Ylm_lmax
+      i = BaseIndex(l, m, Grid_Ylm_mmax)
+      fM(:, l - abs(m) + 1) = f(i:i + nRad - 1)
     end do
 
     call Grid_Ylm_ChannelsToNodes(fNodes, fM, m)
@@ -504,41 +498,23 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine Grid_Ylm_FromNodes(f, fNodes, lmax, m, mmax_, withWeightsQ_)
+  module subroutine Grid_Ylm_FromNodes(f, fNodes, m)
     complex(R64), intent(out), contiguous :: f(:)
     complex(R64), intent(in), contiguous  :: fNodes(:, :)
-    integer(I32), intent(in)              :: lmax
     integer(I32), intent(in)              :: m
-    integer(I32), intent(in), optional    :: mmax_
-    logical, intent(in), optional         :: withWeightsQ_
 
-    integer(I32) :: nRad, mmax, mAbs, l, i
+    integer(I32) :: nRad, l, i
     complex(R64), allocatable :: fM(:, :)
-    logical :: withWeightsQ
-
-    if (.not. present(withWeightsQ_)) withWeightsQ = .false.
-    if (present(withWeightsQ_)) withWeightsQ = withWeightsQ_
-
-    mmax = Grid_Ylm_mmax
-    if (present(mmax_)) mmax = mmax_
-    mAbs = abs(m)
-
-    if (mAbs > mmax) error stop "Grid_Ylm_FromNodes: |m| exceeds the layout"
 
     nRad = Grid_Ylm_nRadial
 
-    f = (0.0_R64, 0.0_R64)
-    if (mAbs > lmax) return
-
-    allocate (fM(nRad, lmax - mAbs + 1))
+    allocate (fM(nRad, Grid_Ylm_lmax - abs(m) + 1))
     call Grid_Ylm_NodesToChannels(fM, fNodes, m)
 
-    ! Metric weights if requested (complex on c-product back-ends)
-    if (withWeightsQ) fM(:, :) = fM(:, :) * spread(Grid_Ylm_radialMetricWeights(:), 2, size(fM, 2))
-
-    do l = mAbs, lmax
-      i = BaseIndex(l, m, mmax)
-      f(i:i + nRad - 1) = fM(:, l - mAbs + 1)
+    f = (0.0_R64, 0.0_R64)
+    do l = abs(m), Grid_Ylm_lmax
+      i = BaseIndex(l, m, Grid_Ylm_mmax)
+      f(i:i + nRad - 1) = fM(:, l - abs(m) + 1)
     end do
 
   end subroutine
