@@ -220,9 +220,11 @@ Building this comparison exposed and required several changes in `src/`:
   (`method.mb.orbBased.td2rdm.nWeakOrbs`, off by default): stabilizes TD-2RDM
   with weakly occupied natural orbitals; see `src/Method/A_Method.md`.
 - **CPU performance** (results unchanged to round-off, 1.8× per step on one
-  thread, 2.1× on four): the m = 0 correlation operator
-  (now `ApplyCorrelationOpYlmNodes`) was never selected because the Ylm Coulomb
-  interaction did not declare itself body-type independent; central
+  thread, 2.1× on four): the m = 0 correlation operator (now
+  `ApplyCorrelationOpYlmNodes`) was never selected because the Ylm Coulomb
+  interaction did not declare itself body-type independent; it is now bound
+  by the declared `method.mb.orbBased.mOfOrbs`, which make_inputs.py writes;
+  central
   potentials multiply as a radial scaling instead of the angular quadrature;
   SIL reorthogonalizes with two `ZGEMV` sweeps; the FEDVR element operator
   avoids `matmul` temporaries.

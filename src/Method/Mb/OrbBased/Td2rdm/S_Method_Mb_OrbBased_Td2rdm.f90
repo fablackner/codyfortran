@@ -98,6 +98,7 @@ contains
     use M_TwoRdmInit
     use M_Method
     use M_Method_Mb
+    use M_Method_Mb_OrbBased
 
     integer(I32) :: nVals1, nVals2, nG, nOS, nE
 
@@ -109,6 +110,7 @@ contains
     nVals2 = nG * nOS
 
     call Say_Setup("method.mb.orbbased.td2rdm")
+    call Method_Mb_OrbBased_Setup
 
     allocate (Method_state(1:(nVals1 + nVals2)))
 
@@ -340,8 +342,10 @@ contains
       iEnd = Method_Mb_OrbBased_nOrbsEnd(ibt)
       nB = iEnd - iStart + 1
 
-      ! descending occupations: the last nW natural orbitals are weak
-      call RdmDiagonalize_Rdm1(natOcc, natOrbs, rdm1Spatial(iStart:iEnd, iStart:iEnd))
+      ! descending occupations: the last nW natural orbitals are weak; per
+      ! block of declared m, so that the weak orbitals keep a definite m
+      call RdmDiagonalize_Rdm1(natOcc, natOrbs, rdm1Spatial(iStart:iEnd, iStart:iEnd), &
+                               blockOf_=Orbs_blockOfOrb(iStart:iEnd))
       weights = natOcc(:) / (natOcc(:)**2 + reg)
       weights(nB - nW + 1:nB) = 0.0_R64
 

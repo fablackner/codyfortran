@@ -50,6 +50,7 @@ contains
     integer(I32) :: nVals1, nVals2, nG, nOS
 
     call Say_Setup("method.mb.orbbased.tdci")
+    call Method_Mb_OrbBased_Setup
 
     nG = Grid_nPoints
     nOS = Orbs_nOrbsInState

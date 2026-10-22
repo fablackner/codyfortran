@@ -14,12 +14,17 @@ module M_Utils_RdmDiagonalize
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmDiagonalize_Rdm1(natocc, natorbs, rdm1)
+  !> Natural occupations (descending) and natural orbitals of a 1-RDM. With
+  !> blockOf_ the 1-RDM is block diagonal in these labels (e.g. Orbs_blockOfOrb:
+  !> body type and declared m) and the natural orbitals are computed per block
+  !> (LapackLib_DiagonalizeHermitianBlocks), so they never mix blocks.
+  subroutine RdmDiagonalize_Rdm1(natocc, natorbs, rdm1, blockOf_)
     use M_Utils_LapackLib
 
     real(R64), intent(out), allocatable    :: natocc(:)
     complex(R64), intent(out), allocatable :: natorbs(:, :)
     complex(R64), intent(in), contiguous                :: rdm1(:, :)
+    integer(I32), intent(in), contiguous, optional      :: blockOf_(:)
 
     integer(I32) :: nO
 
@@ -28,7 +33,11 @@ contains
     if (.not. allocated(natocc)) allocate (natocc(nO))
     if (.not. allocated(natorbs)) allocate (natorbs(1:nO, 1:nO))
 
-    call LapackLib_DiagonalizeGeneric(natocc, natorbs, rdm1, .true.)
+    if (present(blockOf_)) then
+      call LapackLib_DiagonalizeHermitianBlocks(natocc, natorbs, rdm1, blockOf_)
+    else
+      call LapackLib_DiagonalizeGeneric(natocc, natorbs, rdm1, .true.)
+    end if
 
     natocc(:) = natocc(nO:1:-1) ! invert the vals into descending order
     natorbs(:, :) = natorbs(:, nO:1:-1) ! invert the vecs into descending order

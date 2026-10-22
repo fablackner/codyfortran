@@ -146,6 +146,15 @@ function(add_fortran_test file)
     set_tests_properties("${test_name}" PROPERTIES
         ENVIRONMENT "CODY_PROJECT_DIR=${CMAKE_SOURCE_DIR}")
 
+    # A test that must stop with a specific error declares the expected
+    # output in a line "!> ctest-pass-regex: <regex>" of its source; it then
+    # passes if and only if its output matches (the exit code is ignored)
+    file(STRINGS "${file}" pass_regex REGEX "^!> ctest-pass-regex: ")
+    if(pass_regex)
+        string(REPLACE "!> ctest-pass-regex: " "" pass_regex "${pass_regex}")
+        set_tests_properties("${test_name}" PROPERTIES PASS_REGULAR_EXPRESSION "${pass_regex}")
+    endif()
+
     # Tests in the same folder may consume files written by earlier ones
     # (e.g. orb*.in, coeffs.in), so run them in sequence; folders stay parallel
     string(MAKE_C_IDENTIFIER "${src_dir}" dir_key)

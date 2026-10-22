@@ -49,10 +49,12 @@ contains
     use M_Coeffs
     use M_CoeffsInit
     use M_Method
+    use M_Method_Mb_OrbBased
 
     integer(I32) :: nVals1, nVals2, nG, nOS, nC
 
     call Say_Setup("method.manbody.orbbased.mctdhx")
+    call Method_Mb_OrbBased_Setup
 
     nG = Grid_nPoints
     nOS = Orbs_nOrbsInState

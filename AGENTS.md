@@ -68,7 +68,7 @@ Module doc: `src/SysGauge/A_SysGauge.md`.
 **Orbs**
 Domain: Quantum State Containers.
 Purpose: Orbital coefficient container and orbital-space operations.
-Key interfaces/notes: `Orbs_orbs(nBasis, nOrbs)`, `Orbs_Orthonormalize`, `Orbs_ProjectOnSubspace`, `Orbs_SaveOrbs`; supports restricted/unrestricted modes.
+Key interfaces/notes: `Orbs_orbs(nBasis, nOrbs)`, `Orbs_Orthonormalize`, `Orbs_ProjectOnSubspace`, `Orbs_SaveOrbs`; supports restricted/unrestricted modes; with declared m: `Orbs_ProjectOnSymmetry` (once at initialization) and `Orbs_blockOfOrb` (body type and m blocks for block-wise eigen-decompositions).
 Module doc: `src/Orbs/A_Orbs.md`.
 
 **OrbsInit**
@@ -110,7 +110,7 @@ Module doc: `src/ConfigList/A_ConfigList.md`.
 **Method**
 Domain: Dynamics & Propagation.
 Purpose: Unified method time-derivative interface for propagators.
-Key interfaces/notes: `Method_TimeDerivative(dState, state, t)`; includes Sb, TDHX, TDCI, MCTDHX, and TD-2RDM variants; optional exact field-free one-body propagation on Ylm grids (`method.mb.orbBased.exactFieldFreeQ`, `Method_PropagateExactPart`, cuBLAS via `exactFieldFreeGpuQ`, spectral cut via `exactFieldFreeCut`, phi functions `Method_ApplyExactPartPhi` for exponential integrators).
+Key interfaces/notes: `Method_TimeDerivative(dState, state, t)`; includes Sb, TDHX, TDCI, MCTDHX, and TD-2RDM variants; optional exact field-free one-body propagation on Ylm grids (`method.mb.orbBased.exactFieldFreeQ`, `Method_PropagateExactPart`, cuBLAS via `exactFieldFreeGpuQ`, spectral cut via `exactFieldFreeCut`, phi functions `Method_ApplyExactPartPhi` for exponential integrators); optional declared orbital m (`method.mb.orbBased.mOfOrbs`, Ylm grids) binds the definite-m node path of the correlation operator and h2 at fabricate.
 Module doc: `src/Method/A_Method.md`.
 
 **Propagator**
@@ -164,7 +164,7 @@ Module doc: `src/Absorber/A_Absorber.md`.
 **Utils**
 Domain: Numerical Infrastructure.
 Purpose: Stateless numerical/algebra utility modules.
-Key interfaces/notes: Includes types, BLAS/LAPACK/ARPACK/FFT/GSL wrappers, optional cuBLAS GPU layer (`M_Utils_CublasLib`, CMake `CODY_USE_CUDA`), RDM algebra utilities, derivatives/convolutions, JSON/data I/O, and logging.
+Key interfaces/notes: Includes types, BLAS/LAPACK/ARPACK/FFT/GSL wrappers, optional cuBLAS GPU layer (`M_Utils_CublasLib`, CMake `CODY_USE_CUDA`), block-wise Hermitian eigen-decomposition (`LapackLib_DiagonalizeHermitianBlocks`), RDM algebra utilities, derivatives/convolutions, JSON/data I/O, and logging.
 Module doc: `src/Utils/A_Utils.md`.
 
 ---

@@ -1,0 +1,31 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "mmax": 1,
+            "rmin": 0.0,
+            "rmax": 10.0,
+            "fedvr": {
+                "nElements": 2,
+                "nLocals": 8
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 5, 5 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 5, 5 ],
+                "mOfOrbs": [ 0, 0, -1, 0, 1, 0, 0, -1, 0, 1 ],
+                "mctdhx": { }
+            }
+        }
+    },
+    "groundSolver": {
+        "scf": {
+            "stdImpl": { }
+        }
+    }
+}

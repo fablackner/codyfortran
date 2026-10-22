@@ -204,10 +204,12 @@ the kinetic and potential operators to radial unit vectors placed in all
 (l,m) channels at once, symmetrizes each block with the radial metric
 weights (w r² on FEDVR) and diagonalizes it per l (real symmetric, m
 independent). Propagation is then two real GEMMs per l on the (orbital, m)
-columns that do not vanish in that block (orbitals of definite m fill one of
-the 2 min(l, mmax) + 1 columns; the others stay exactly zero and are skipped,
-also by the phi functions and the spectral cut), with phases exp(−i E Δt) (or
-exp(−E Δτ) in imaginary time).
+columns of that block, with phases exp(−i E Δt) (or exp(−E Δτ) in imaginary
+time). With declared m (`method.mb.orbBased.mOfOrbs`, see "Declared m of the
+orbitals" below) only the column of the declared m of every orbital is
+transformed (one of the 2 min(l, mmax) + 1 columns; built once with the
+blocks), also by the phi functions and the spectral cut; without it all
+columns are.
 
 Why: on FEDVR grids h0 is very stiff (centrifugal term l(l+1)/2r² at the
 first radial point, ~10⁵–10⁶ a.u. at lmax = 32), so SIL needs hundreds of
@@ -304,44 +306,91 @@ exact energy conservation and natural occupations against the unrestricted
 reference) and `...WeakOrbsSplit` (unrestricted, split step against that
 reference).
 
-### Definite-m Ylm Fast Path
+### Declared m of the Orbitals and the Definite-m Ylm Fast Path
 
-For Hermitian Ylm grids with a body-type-independent Ylm interaction,
-`Method_Mb_OrbBased_ApplyCorrelationOp` is bound to
-`ApplyCorrelationOpYlmNodes`. At every call it determines the m of each
-orbital (the m channels holding all but a 1e-12 fraction of its squared norm;
-smaller admixtures are round-off, e.g. ~1e-16 left by the eigen-decompositions
-of overlap matrices with degenerate m blocks in the imaginary-time relaxation,
-and are dropped); if every orbital has a definite m (m = 0 orbitals on a `grid.ylm.mmax = 0`
-grid, or the orbitals of an atom in a linearly polarized field, e.g. Ne 2p with
-m = −1, 0, 1) orbitals, pair densities and pair potentials are evaluated on the
-Gauss–Legendre nodes in cos θ (`Grid_Ylm_ToNodes`, `Grid_Ylm_FromNodes` and
-their channel-matrix forms), otherwise
-the generic operator is used. The pair (l2, k2) carries M = m_k2 − m_l2; only
-the terms m_k1 + M = m_j1 in the correlation sum and m_j1 + M = m_i1 in h2 are
-kept. The dropped h2 terms vanish by the φ integral, the dropped correlation
-terms only for an M-conserving many-body state (their 2-RDM weights vanish);
-if those weights exceed the same 1e-12 fraction, the generic operator is used.
-Pairs with |M| above the |m| cap of the potentials are dropped, as in the
-generic operator. Every product is pointwise, and the node count makes all
-angular integrals exact, so results equal the generic operator to round-off
-(the Ne3d MCTDHX tests with 2p orbitals: final dipoles agree to 1e-14) while
-the cost per pair drops from n spatial products to O(1) transforms.
+`"mOfOrbs": [...]` in `method.mb.orbBased` (optional, Ylm grids only) declares
+the m of every spin orbital, in the flat layout of `nOrbs` (all orbitals of
+body type 1, then body type 2; restricted: equal halves), e.g. Ne 1s 2s 2p 3s
+3p with `nOrbs = [9, 9]`: `[0,0,-1,0,1,0,-1,0,1, 0,0,-1,0,1,0,-1,0,1]`. It
+states a symmetry of the problem (orbitals of an atom in a linearly polarized
+field, or m = 0 orbitals on a `grid.ylm.mmax = 0` grid): every operator
+conserves m, so each orbital stays in the Ylm channels of its m. It is
+validated in `Method_Mb_OrbBased_Fabricate` (|m| ≤ `grid.ylm.mmax`, one entry
+per spin orbital; `Orbs_Fabricate`: equal spin halves if restricted) and
+stored in `Method_Mb_OrbBased_mOfOrb` (`Method_Mb_OrbBased_definiteMQ`). It is
+independent of `orbsInit.ylm.hydrogenLike.m`, which only sets initial
+orbitals. Without it everything runs on the generic path (orbitals of
+mixed m, e.g. a field that is not z-polarized); on a Ylm grid the fabricate
+step then prints "mOfOrbs not declared: generic correlation operator and h2".
 
-The pair potentials are computed in parallel over the unordered pairs on the
-channel matrix of their single M (`Grid_Ylm_NodesToChannels`, radial metric
-weights, one radial Poisson solve per l via
-`SysInteraction_Ylm_FillInteractionPotentialRadial`,
-`Grid_Ylm_ChannelsToNodes`) and stored on the nodes; the swapped pair uses the
-conjugate. The pointwise sums are grouped by the target m of the selection
-rule (`FillTargetGroups`): for every group the products X = V_iP · φ_k of its
-columns (iP, k) are formed blockwise over cache-sized blocks of nodes and enter
-two ZGEMMs, dφ_j += X · weights and h2 = (φ_i w)^H · X, which touch only the
-2-RDM weights allowed by the rule (Ne with 1s 2s 2p 3s 3p: 1921 of 6561).
+With the declaration:
+- **Initialization**: the orbitals are projected on their m once, at the end
+  of `OrbsInit_Initialize` (`Orbs_ProjectOnSymmetry`, `Grid_Ylm_ProjectOnM`);
+  this removes round-off admixtures of loaded orbitals and stops with an
+  error if more than 1e-8 of an orbital's norm would be removed (orbitals
+  that do not have the declared m, e.g. mOfOrbs in another order than the
+  files). The only other call is the end of `EmbedOrbitals` of the Be/Ne
+  programs, which replaces this initialization when orbitals are embedded
+  from a grid with smaller lmax (`program.lmaxIn`).
+- **Exact zeros**: inner products of orbitals of different m are exactly 0
+  and every operator is Δm = 0, so the other channels stay exactly zero. The
+  only operations that could seed admixtures are eigen-decompositions in
+  orbital space with degenerate blocks of different m; they act per block of
+  `Orbs_blockOfOrb` (body type and m; `LapackLib_DiagonalizeHermitianBlocks`):
+  the natural orbitals of the inverse 1-RDM
+  (`Method_Mb_OrbBased_FillInverseRdm1`), the Loewdin steps of the Be/Ne
+  programs and the alignment of the Ylm-optimized ground solvers
+  (`Orbs_AlignOnReference(..., blockOf_)`; the standard ground solvers, which
+  diagonalize on the full grid, are rejected with mOfOrbs), and the weak
+  natural orbitals of TD-2RDM. T_Ne3d_11 (unrestricted) and T_Ne3d_13
+  (restricted) check the exact zeros after propagation. Without the
+  declaration the blocks are the body types: restricted orbitals form one
+  block and the decompositions are the plain ones bitwise; for unrestricted
+  orbitals the inverse 1-RDM is decomposed per spin instead of as a whole,
+  which changes results at round-off only.
+- **Binding at fabricate**: for Hermitian Ylm grids with a
+  body-type-independent Ylm interaction (`YlmNodesFastPathQ`),
+  `Method_Mb_OrbBased_ApplyCorrelationOp` is bound to
+  `ApplyCorrelationOpYlmNodes` and `Method_Mb_OrbBased_FillH2` to
+  `FillH2YlmNodes` (also used by `Method_GetEnergy`); the exact field-free
+  part transforms only the declared columns (above).
+
+The node path evaluates orbitals (in the channels of their declared m), pair
+densities and pair potentials on the Gauss–Legendre nodes in cos θ
+(`Grid_Ylm_ToNodes`, `Grid_Ylm_FromNodes` and their channel-matrix forms).
+The pair (l2, k2) carries M = m_k2 − m_l2; only the terms m_k1 + M = m_j1 in
+the correlation sum and m_j1 + M = m_i1 in h2 are kept. The dropped h2 terms
+vanish by the φ integral, the dropped correlation terms for an M-conserving
+many-body state (their 2-RDM weights vanish). Pairs with |M| above the |m|
+cap of the potentials are dropped, as in the generic operator. Every product
+is pointwise, and the node count makes all angular integrals exact, so
+results equal the generic operator to round-off (T_Ne3d_14 runs the
+restricted T_Ne3d_13 without mOfOrbs: dipoles agree to round-off) while the cost per pair drops from n
+spatial products to O(1) transforms.
+
+The pair list (ordered pairs of equal body type within the |m| cap) and the
+target groups (`SetupYlmNodes`) are built once from the declaration in
+`Method_Mb_OrbBased_Setup`, which every orbital-based `Method_Setup` calls
+first; every call only refills the 2-RDM weights of the groups
+(`FillTargetGroupWeights`). The pair potentials are computed in parallel over
+the unordered pairs on the channel matrix of their single M
+(`FillPairPotentialsYlmNodes`: `Grid_Ylm_NodesToChannels`, radial metric
+weights, `SysInteraction_Ylm_FillInteractionPotentialM` (one radial Poisson
+solve per l, the same per-channel solve and source threshold as the generic
+`SysInteraction_FillInteractionPotential`), `Grid_Ylm_ChannelsToNodes`) and
+stored on the nodes; the swapped pair uses the conjugate. The pointwise sums
+(`AccumulateTargetSumsYlmNodes`) are grouped by the target m of the selection
+rule: for every group the products X = V_iP · φ_k of its columns (iP, k) are
+formed blockwise over cache-sized blocks of nodes and enter two ZGEMMs,
+dφ_j += X · weights and h2 = (φ_i w)^H · X, which touch only the 2-RDM
+weights allowed by the rule (Ne with 1s 2s 2p 3s 3p: 1921 of 6561);
+`FillH2YlmNodes` forms only the h2 columns.
 
 One MCTDHX non-linear derivative of Ne with 9 orbitals (1s 2s 2p 3s 3p,
 lmax 40, mmax 1, 761 radial points, four threads on 2 cores): 0.38 s (0.28 s
-correlation operator), against 3.7 s with the generic operator.
+correlation operator), against 3.7 s with the generic operator. One energy
+evaluation (`Method_GetEnergy`, h2 by `FillH2YlmNodes`): 0.25 s instead of
+2.2 s.
 
 ---
 

@@ -363,6 +363,13 @@ Fock operator depends on the CI vector through ρ¹.
 3. **MCSCF orbital step is Fock-canonical**: The orbital update takes the lowest
    eigenvectors of F̂[ρ¹]; this is a robust heuristic whose fixed point can
    deviate slightly from the fully variational MCSCF orbitals
+4. **Declared m** (`method.mb.orbBased.mOfOrbs`, src/Method/A_Method.md): only
+   `scf.ylmOpt` and `mcscf.ylmOpt` are accepted (checked in
+   `GroundSolver_Fabricate`). They place every radial eigenvector in its
+   (l, m) channel and align with the old orbitals per m block
+   (`Orbs_AlignOnReference(..., blockOf_=Orbs_blockOfOrb(1:nUp))`), so the
+   channels of other m stay exactly zero; the `stdImpl` solvers diagonalize on
+   the full grid and mix degenerate orbitals of different m.
 
 ## Mixing Strategies
 

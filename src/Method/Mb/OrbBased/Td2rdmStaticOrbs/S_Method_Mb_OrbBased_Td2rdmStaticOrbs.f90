@@ -58,6 +58,7 @@ contains
     nVals2 = nG * nOS
 
     call Say_Setup("method.mb.orbbased.td2rdmStaticOrbs")
+    call Method_Mb_OrbBased_Setup
 
     allocate (Method_state(1:nVals1))
     allocate (staticComponents(1:nVals2))

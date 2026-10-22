@@ -108,6 +108,9 @@ Produces δ-orbitals: `φ_i(j) = δ_{ij}` with index→site mapping in row-major
 }
 ```
 Produces `R_nl(r) = ρ^l · L_{n-l-1}^{2l+1}(ρ) · exp(-ρ/2)` where `ρ = 2Zr/(na₀)`.
+The `m` list only sets the initial orbitals; it is independent of the
+declared m of the method (`method.mb.orbBased.mOfOrbs`, optional), which the
+initialization then checks (see below).
 
 ### Load from File
 ```json
@@ -117,7 +120,9 @@ Produces `R_nl(r) = ρ^l · L_{n-l-1}^{2l+1}(ρ) · exp(-ρ/2)` where `ρ = 2Zr/
   }
 }
 ```
-Reads binary files `orb{bt}_{ind}.in` via DataStorage routines.
+Reads binary files `orb{bt}_{ind}.in` via DataStorage routines. With declared
+m, round-off admixtures of other m in the files are removed by the final
+projection of `OrbsInit_Initialize` (below).
 
 ### GridPoint (δ-basis)
 ```json
@@ -138,12 +143,21 @@ call OrbsInit_Fabricate
 ! 2. Setup (allocates buffers if needed — currently no-op for most backends)
 call OrbsInit_Setup
 
-! 3. Initialize orbitals
+! 3. Initialize orbitals (ends with Orbs_ProjectOnSymmetry(orbs))
 call OrbsInit_Initialize(orbs)
 
 ! Alternative: initialize single orbital
 call OrbsInit_InitializeOrb(orb(:), orbital_index, body_type)
 ```
+
+`OrbsInit_Initialize` ends with `Orbs_ProjectOnSymmetry(orbs)`: with declared
+m (`method.mb.orbBased.mOfOrbs`) the channels of other m are zeroed, and the
+program stops with an error if more than 1e-8 of an orbital's norm would be
+removed (orbitals that do not have the declared m); without declaration it is
+a NoOp. Apart from `EmbedOrbitals` of the Be/Ne programs, which replaces
+this initialization, it is the only projection on the declared m
+(src/Method/A_Method.md).
+`OrbsInit_InitializeOrb` alone does not project.
 
 ## Data Flow
 
@@ -246,6 +260,9 @@ Tests using OrbsInit are found in:
 - `test/T_He1d_*.json` — 1D helium with Linear/Harmonic
 - `test/T_FermiHubbard_*.json` — Hubbard model with Lattice/OnSite
 - `test/T_H3d_*.json` — 3D hydrogen with Ylm/HydrogenLike
+- `test/componentTests/OrbsInit/Load/` — loading with declared m: round-off
+  admixtures are removed, orbitals of another m stop with an error
+  (`ctest-pass-regex` test)
 
 Run tests:
 ```bash

@@ -620,6 +620,15 @@ contains
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  pure module subroutine Grid_Ylm_ProjectOnM(f, m)
+    complex(R64), intent(inout), contiguous :: f(:)
+    integer(I32), intent(in)                :: m
+
+    where (Grid_Ylm_mCoord .ne. m) f = (0.0_R64, 0.0_R64)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> First flattened index of channel (l,m); channels are l-major with m
   !> running over -min(l,mmax)..min(l,mmax), each holding nRadial points.
   pure function BaseIndex(l, m, mmax) result(res)

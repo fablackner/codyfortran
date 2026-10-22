@@ -94,7 +94,9 @@ def method(p, kind):
     opts = {}
     if kind == "td2rdm" and p["nWeakOrbs"] > 0:
         opts["nWeakOrbs"] = p["nWeakOrbs"]
-    orb_based = {"nOrbs": [n, n], kind: opts}
+    # declared m of every spin orbital (all 0): binds the definite-m node
+    # quadrature of the correlation operator (src/Method/A_Method.md)
+    orb_based = {"nOrbs": [n, n], "mOfOrbs": [0] * (2 * n), kind: opts}
     if p["exactFieldFree"]:
         orb_based["exactFieldFreeQ"] = True
         if p["gpu"]:

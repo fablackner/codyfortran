@@ -75,12 +75,10 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> @brief Compute interaction potential from source via channel-by-channel Poisson solve.
   !>
-  !> For each (l,m) channel:
-  !>   1. Extract radial component ρₗₘ(r) from source
-  !>   2. Solve radial Poisson equation → Vₗₘ(r)
-  !>   3. Store in full Ylm expansion
-  !>
-  !> Channels with negligible source (|ρₗₘ| < 10⁻¹⁴) are skipped for efficiency.
+  !> For each (l,m) channel, in parallel over the channels: extracts the
+  !> radial source component, solves the radial Poisson equation
+  !> (FillInteractionPotentialLm, which skips channels with negligible source
+  !> |ρₗₘ| < 10⁻¹⁴) and stores the potential channel.
   !>
   !> @param[out] interactionPotential  Full Ylm-expanded potential V(r,Ω)
   !> @param[in]  src                   Source density in Ylm basis (higher lmax)
@@ -97,19 +95,15 @@ contains
     integer(I32), intent(in), optional :: bt1_
     integer(I32), intent(in), optional :: bt2_
 
-    integer(I32) :: l, m, potSize, nRad
-    integer(I32) :: lmaxPot, mmaxPot
-    integer(I32) :: iCh, nCh
+    integer(I32) :: l, m, iCh, nCh, nRad, lmaxPot, mmaxPot
     integer(I32), allocatable :: lOfCh(:), mOfCh(:)
     complex(R64), allocatable :: srcLm(:), potLm(:)
 
     nRad = Grid_Ylm_nRadial
     lmaxPot = SysInteraction_Ylm_lmax
     mmaxPot = SysInteraction_Ylm_mmax
-    potSize = SysInteraction_Ylm_nPoints
 
-    if (.not. allocated(interactionPotential)) allocate (interactionPotential(potSize))
-    interactionPotential = 0.0_R64
+    allocate (interactionPotential(SysInteraction_Ylm_nPoints))
 
     ! Flatten the (l,m) channels so the independent radial Poisson solves can
     ! run in parallel; each channel writes a disjoint slice of the potential
@@ -124,22 +118,62 @@ contains
       end do
     end do
 
-    !$omp parallel default(shared) private(iCh, l, m, srcLm, potLm)
+    !$omp parallel default(shared) private(iCh, srcLm, potLm)
     allocate (srcLm(nRad), potLm(nRad))
     !$omp do schedule(dynamic)
     do iCh = 1, nCh
-      l = lOfCh(iCh)
-      m = mOfCh(iCh)
-      call Grid_Ylm_GetLmComponent(srcLm, l, m, src, mmax_=mmaxPot)
-      if (all(abs(srcLm) < 1.0e-14_R64)) cycle
-      call SysInteraction_Ylm_FillInteractionPotentialRadial(potLm, srcLm, l, m, time, bt1_, bt2_)
-      call Grid_Ylm_SetLmComponent(interactionPotential, l, m, potLm, mmax_=mmaxPot)
+      call Grid_Ylm_GetLmComponent(srcLm, lOfCh(iCh), mOfCh(iCh), src, mmax_=mmaxPot)
+      call FillInteractionPotentialLm(potLm, srcLm, lOfCh(iCh), mOfCh(iCh), time, bt1_=bt1_, bt2_=bt2_)
+      call Grid_Ylm_SetLmComponent(interactionPotential, lOfCh(iCh), mOfCh(iCh), potLm, mmax_=mmaxPot)
     end do
     !$omp end do
     deallocate (srcLm, potLm)
     !$omp end parallel
 
-    deallocate (lOfCh, mOfCh)
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine SysInteraction_Ylm_FillInteractionPotentialM(potM, srcM, m, time, bt1_, bt2_)
+    !$ use omp_lib, only: omp_in_parallel
+
+    complex(R64), intent(out), contiguous :: potM(:, :)
+    complex(R64), intent(in), contiguous  :: srcM(:, :)
+    integer(I32), intent(in)              :: m
+    real(R64), intent(in)                 :: time
+    integer(I32), intent(in), optional    :: bt1_
+    integer(I32), intent(in), optional    :: bt2_
+
+    integer(I32) :: iL
+
+    !$omp parallel do default(shared) private(iL) schedule(dynamic) if (.not. omp_in_parallel())
+    do iL = 1, size(srcM, 2)
+      call FillInteractionPotentialLm(potM(:, iL), srcM(:, iL), abs(m) + iL - 1, m, time, bt1_=bt1_, bt2_=bt2_)
+    end do
+    !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> One potential channel V_lm from its source channel: the radial Poisson
+  !> solve (SysInteraction_Ylm_FillInteractionPotentialRadial), or zero for a
+  !> negligible source (all |rho_lm| < 1e-14). The only place of this
+  !> threshold, shared by FillInteractionPotential and
+  !> SysInteraction_Ylm_FillInteractionPotentialM.
+  subroutine FillInteractionPotentialLm(potLm, srcLm, l, m, time, bt1_, bt2_)
+    complex(R64), intent(out), contiguous :: potLm(:)
+    complex(R64), intent(in), contiguous  :: srcLm(:)
+    integer(I32), intent(in)              :: l
+    integer(I32), intent(in)              :: m
+    real(R64), intent(in)                 :: time
+    integer(I32), intent(in), optional    :: bt1_
+    integer(I32), intent(in), optional    :: bt2_
+
+    if (all(abs(srcLm) < 1.0e-14_R64)) then
+      potLm(:) = 0.0_R64
+    else
+      call SysInteraction_Ylm_FillInteractionPotentialRadial(potLm, srcLm, l, m, time, bt1_=bt1_, bt2_=bt2_)
+    end if
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

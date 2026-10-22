@@ -24,6 +24,12 @@ module M_Method_Mb_OrbBased
     module subroutine Method_Mb_OrbBased_Fabricate
     end subroutine
 
+    !> Setup shared by the orbital-based methods, called first by their
+    !> Method_Setup (after Grid_Setup and Orbs_Fabricate): builds the skeleton
+    !> of the definite-m node path (pair list, target groups) if it is bound.
+    module subroutine Method_Mb_OrbBased_Setup
+    end subroutine
+
     !> Fills the spatial 1-RDM in the orbitals of the state: rdm1 itself for
     !> unrestricted or single-species (nOrbsSum = nOrbsInState), the sum of
     !> the two spin blocks for restricted (nOrbsSum = 2 nOrbsInState).
@@ -38,7 +44,9 @@ module M_Method_Mb_OrbBased
     !> M = U n/(n^2 + eps) U^dagger (natural orbitals U, occupations n,
     !> eps = Method_Mb_OrbBased_regularizationParameter), spin-summed in the
     !> restricted case; the weights contracted with the 2-RDM in
-    !> Method_Mb_OrbBased_ApplyCorrelationOp.
+    !> Method_Mb_OrbBased_ApplyCorrelationOp. The natural orbitals are
+    !> computed within the blocks Orbs_blockOfOrb, so M is exactly block
+    !> diagonal.
     module subroutine Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
       !> Output: inverse spatial 1-RDM (nOrbsInState x nOrbsInState).
       complex(R64), intent(out), allocatable :: invRdm1(:, :)
@@ -96,6 +104,20 @@ module M_Method_Mb_OrbBased
   !> potentials and interactions (e.g., spin-dependent terms).
   !> Method_Mb_OrbBased_bodyTypeOfOrb(i) gives the body type of basis state i.
   integer(I32), allocatable :: Method_Mb_OrbBased_bodyTypeOfOrb(:)
+
+  !> Declared m of every spin orbital (nOrbsSum, layout of nOrbs), from
+  !> method.mb.orbBased.mOfOrbs; allocated only if declared. Every orbital
+  !> lives in the Ylm channels of its m (orbitals of an atom in a linearly
+  !> polarized field): the orbitals are projected on it once at
+  !> initialization (Orbs_ProjectOnSymmetry), orbital-space
+  !> eigen-decompositions act within blocks of equal m (Orbs_blockOfOrb), and
+  !> the definite-m node quadrature of the correlation operator and h2 as well
+  !> as the m-selective exact field-free part are bound by
+  !> Method_Mb_OrbBased_Fabricate.
+  integer(I32), allocatable :: Method_Mb_OrbBased_mOfOrb(:)
+
+  !> True if method.mb.orbBased.mOfOrbs is declared.
+  logical :: Method_Mb_OrbBased_definiteMQ = .false.
 
   !> Number of one-body orbitals per body type.
   !> Method_Mb_OrbBased_nOrbs(i) gives the number of basis states for body type i.

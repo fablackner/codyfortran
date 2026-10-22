@@ -64,7 +64,7 @@ complex(R64), intent(inout), contiguous :: A2(:,:,:,:)
 | `M_Utils_RdmDefective`          | Extract negative eigenspace (defective part) of matrices  |
 | `M_Utils_RdmPacking`            | Pack/unpack tensors to/from 1D state vectors              |
 | `M_Utils_RdmProjection`         | Project corrections onto energy-conserving subspaces      |
-| `M_Utils_RdmDiagonalize`        | Diagonalize RDMs to obtain natural orbitals/occupations   |
+| `M_Utils_RdmDiagonalize`        | Diagonalize RDMs to obtain natural orbitals/occupations; `RdmDiagonalize_Rdm1(..., blockOf_)` diagonalizes per block (e.g. `Orbs_blockOfOrb`) |
 | `M_Utils_RdmObservables`        | Compute expectation values from RDMs                      |
 | `M_Utils_RdmNatOrbTransform`    | Transform RDMs to natural orbital basis                   |
 | `M_Utils_RdmCollisionOp`        | Compute collision operator Tr₃[Ŵ, D³]                     |
@@ -85,6 +85,21 @@ complex(R64), intent(inout), contiguous :: A2(:,:,:,:)
 | `M_Utils_PrinterObservableLinear` | `PrinterObservableLinear_DumpDipole`, `_DumpPotentialFullExpansion` | Linear grids |
 | `M_Utils_PrinterObservableLattice` | `PrinterObservableLattice_DumpDensityCenter`, `_DumpDensityOnSite` | Lattice grids |
 | `M_Utils_PrinterObservableYlm` | `PrinterObservableYlm_DumpDipole` (optional `dipole_` out), `PrinterObservableYlm_DumpDipoleAcceleration` (optional `acceleration_` out) | Ylm grids; z = r√(4π/3)Y₁₀ applied as spatial product; acceleration form −Z⟨cosθ/r²⟩ |
+
+---
+
+## Block-Diagonal Eigenproblems: `M_Utils_LapackLib`
+
+`LapackLib_DiagonalizeHermitianBlocks(evals, evecs, a, blockOf)` diagonalizes
+a Hermitian matrix that is block diagonal in the labels `blockOf` block by
+block (ZHEEV): the eigenvectors are exactly zero outside their block also
+where eigenvalues of different blocks are degenerate (a diagonalization of
+the whole matrix mixes such blocks at round-off). Eigenvalues ascending over
+all blocks; with a single block the result equals
+`LapackLib_DiagonalizeGeneric` bitwise. Used for orbital-space matrices with
+the blocks `Orbs_blockOfOrb` (body type and declared m): the inverse 1-RDM of
+the correlation operator and the Loewdin steps of the Be/Ne programs.
+Test: `test/componentTests/Utils/T_Utils_LapackLib.f90`.
 
 ---
 

@@ -44,11 +44,14 @@ pulse (≈ 2 days). Four non-linear derivatives per RK4 step take 0.38 s each
 `src/Method/A_Method.md`; 3.7 s with the generic Gaunt products), four exact
 field-free propagations 0.09 s each.
 
-The orbitals keep their m exactly (z-polarized field). Round-off admixtures
-of other m (seeded by the Löwdin steps of the relaxation, ~1e-16 of the norm
-in the 3p orbitals) are removed by `ProjectOrbitalsOnDefiniteM`
-(`app/be/common/BeCommon.inc`) after loading and after every Löwdin step;
-otherwise the orbital projector spreads them into all channels and the exact
-part cannot skip the empty m channels (≈ 0.5 s more per step). The correlation
-operator tolerates admixtures up to 1e-12 of the squared norm; above that it
-falls back to the generic operator (≈ 11 s per step).
+The orbitals keep their m exactly (z-polarized field). make_inputs.py declares
+it, `method.mb.orbBased.mOfOrbs` (both spins of 1s 2s 2p(−1, 0, 1) 3s 3p(−1,
+0, 1)), which binds the node quadrature of the correlation operator and of h2
+(one energy evaluation 0.25 s instead of 2.2 s) and lets the exact part
+transform only the channels of the declared m. The orbitals are projected on
+it once when they are loaded (stage A/B files carry ~1e-16 admixtures of
+other m from the Löwdin steps of earlier runs); the Löwdin steps and the
+inverse 1-RDM are decomposed per m block, so no admixture is created
+afterwards. `orbsInit.ylm.hydrogenLike.m` stays a separate key: without
+mOfOrbs (e.g. a field that is not z-polarized) the generic operator is used
+(≈ 16 s per step).

@@ -54,6 +54,7 @@
             "bodyStatistics": [ "f", "f" ],
             "orbBased": {
                 "nOrbs": [ 5, 5 ],
+                "mOfOrbs": [ 0, 0, -1, 0, 1, 0, 0, -1, 0, 1 ],
                 "exactFieldFreeQ": true,
                 "mctdhx": { }
             }

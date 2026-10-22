@@ -76,7 +76,11 @@ def hamiltonian(p, lmax):
 def method(p):
     n = len(p["orbitals"])
     nElectrons = int(p["charge"])
-    orb_based = {"nOrbs": [n, n], "mctdhx": {}, "exactFieldFreeQ": True}
+    # declared m of every spin orbital (both spins): binds the definite-m node
+    # quadrature and the m-selective exact part, and the orbitals are
+    # projected on it once when they are initialized (src/Method/A_Method.md)
+    m_of_orbs = [o[2] for o in p["orbitals"]] * 2
+    orb_based = {"nOrbs": [n, n], "mOfOrbs": m_of_orbs, "mctdhx": {}, "exactFieldFreeQ": True}
     if p["spectralCut"] > 0.0:
         orb_based["exactFieldFreeCut"] = p["spectralCut"]
     return {"mb": {"nBodyTypes": 2, "nBodies": [nElectrons // 2, nElectrons // 2],

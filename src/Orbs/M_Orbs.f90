@@ -55,9 +55,13 @@ module M_Orbs
     !> per-vector phase and, inside degenerate spaces, an arbitrary unitary
     !> rotation. This routine removes that gauge freedom by solving a unitary
     !> Procrustes problem on the overlap matrix, then rotating `orbs` in place.
-    module subroutine Orbs_AlignOnReference(orbs, refOrbs)
+    !> With `blockOf_` (block labels of the columns, e.g. a slice of
+    !> `Orbs_blockOfOrb`) the problem is solved per block, so orbitals of
+    !> different blocks are never mixed.
+    module subroutine Orbs_AlignOnReference(orbs, refOrbs, blockOf_)
       complex(R64), intent(inout), contiguous :: orbs(:, :)
       complex(R64), intent(in), contiguous :: refOrbs(:, :)
+      integer(I32), intent(in), contiguous, optional :: blockOf_(:)
     end subroutine
 
     !> Mix occupied orbitals using density matrix formulation
@@ -98,6 +102,14 @@ module M_Orbs
   !> set of orbitals is propagated for all body types. Otherwise the backend
   !> may differentiate orbitals per body type.
   logical                           :: Orbs_restrictedQ
+
+  !> Symmetry block of every stored orbital (Orbs_nOrbsInState): orbitals of
+  !> equal body type (unrestricted) and equal declared m
+  !> (Method_Mb_OrbBased_mOfOrb) share a block; without declared m the blocks
+  !> are the body types. Orbital-space eigen-decompositions (natural orbitals
+  !> of the inverse 1-RDM, Loewdin orthonormalization) act within blocks, so
+  !> they never mix orbitals of different m, also at round-off.
+  integer(I32), allocatable         :: Orbs_blockOfOrb(:)
 
   !=============================================================================
   ! module procedures pointers
@@ -168,6 +180,21 @@ module M_Orbs
       import :: R64
       !> Input/output orbital matrix `orbs(nBasis, nOrbs)`.
       !> On exit, columns are orthonormalized in place.
+      complex(R64), intent(inout), contiguous :: orbs(:, :)
+    end subroutine
+  end interface
+
+  !> Project orbitals on their declared symmetry: removes the Ylm channels of
+  !> other than the declared m (Method_Mb_OrbBased_mOfOrb); NoOp without
+  !> declared m. Called once where orbitals are initialized
+  !> (OrbsInit_Initialize); stops with an error if more than 1e-8 of the norm
+  !> of an orbital would be removed (orbitals that do not have the declared m).
+  procedure(I_Orbs_ProjectOnSymmetry), pointer :: Orbs_ProjectOnSymmetry
+  abstract interface
+    !> In-place projection of the orbitals (nBasis x Orbs_nOrbsInState).
+    subroutine I_Orbs_ProjectOnSymmetry(orbs)
+      import :: R64
+      !> Input/output orbital matrix.
       complex(R64), intent(inout), contiguous :: orbs(:, :)
     end subroutine
   end interface

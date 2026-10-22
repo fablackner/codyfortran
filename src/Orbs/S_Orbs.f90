@@ -50,6 +50,7 @@ contains
 !> - Orbs_ProjectOnSubspace => ProjectOnSubspace
 !> - Orbs_Orthonormalize    => Orthonormalize
 !> - Orbs_SaveOrbs          => SaveOrbs
+!> - Orbs_ProjectOnSymmetry => ProjectOnSymmetry (declared m), else NoOp
 !>
 !> Post-conditions
 !> ---------------
@@ -57,11 +58,14 @@ contains
 !> - `Orbs_nOrbsInState` is computed:
 !>     * Restricted:   nOrbsSum / 2 (shared spatial orbitals)
 !>     * Unrestricted: nOrbsSum     (independent orbitals per body type)
+!> - `Orbs_blockOfOrb` labels the (body type, declared m) blocks
   module subroutine Orbs_Fabricate
     use M_Utils_Say
     use M_Utils_Json
     use M_Method_Mb
     use M_Method_Mb_OrbBased
+
+    integer(I32) :: i, k, nOS
 
     call Say_Fabricate("orbs")
 
@@ -89,6 +93,88 @@ contains
 
     if (Orbs_restrictedQ) Orbs_nOrbsInState = Method_Mb_OrbBased_nOrbsSum / 2
     if (.not. Orbs_restrictedQ) Orbs_nOrbsInState = Method_Mb_OrbBased_nOrbsSum
+    nOS = Orbs_nOrbsInState
+
+    !------------------------------------
+    ! declared symmetry
+    !------------------------------------
+
+    if (Method_Mb_OrbBased_definiteMQ) then
+      ! Restricted: both spins share the stored orbitals
+      if (Orbs_restrictedQ) then
+        if (any(Method_Mb_OrbBased_mOfOrb(1:nOS) .ne. Method_Mb_OrbBased_mOfOrb(nOS + 1:))) &
+          error stop "method.mb.orbBased.mOfOrbs: orbs.restrictedQ requires equal m for both spins"
+      end if
+      Orbs_ProjectOnSymmetry => ProjectOnSymmetry
+    else
+      Orbs_ProjectOnSymmetry => NoOpProcedures_ApplyAbsorber
+    end if
+
+    ! Blocks of equal (body type, declared m), numbered by first appearance
+    allocate (Orbs_blockOfOrb(nOS))
+    do i = 1, nOS
+      Orbs_blockOfOrb(i) = maxval([0, Orbs_blockOfOrb(1:i - 1)]) + 1
+      do k = 1, i - 1
+        if (SameBlockQ(k, i)) then
+          Orbs_blockOfOrb(i) = Orbs_blockOfOrb(k)
+          exit
+        end if
+      end do
+    end do
+
+  contains
+
+    !> Equal body type and, if declared, equal m of the stored orbitals k, i.
+    function SameBlockQ(k, i) result(res)
+      integer(I32), intent(in) :: k
+      integer(I32), intent(in) :: i
+      logical :: res
+
+      res = Method_Mb_OrbBased_bodyTypeOfOrb(k) .eq. Method_Mb_OrbBased_bodyTypeOfOrb(i)
+      if (Method_Mb_OrbBased_definiteMQ) &
+        res = res .and. Method_Mb_OrbBased_mOfOrb(k) .eq. Method_Mb_OrbBased_mOfOrb(i)
+
+    end function
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Project the orbitals on the channels of their declared m.
+!>
+!> The removed part ||phi - P_m phi||^2 must not exceed 1e-8 of ||phi||^2:
+!> loaded or computed orbitals carry round-off admixtures of other m (e.g.
+!> up to ~1e-16 of the norm from earlier eigen-decompositions that mixed
+!> degenerate m blocks), which are removed here once; a larger part means
+!> that the orbitals do not have the declared m (e.g. mOfOrbs in another
+!> order than the orbitals). The overlaps of the orbitals change by at most
+!> the removed parts. Norms in the positive metric of the grid weights, also
+!> on c-product (ECS) grids.
+  subroutine ProjectOnSymmetry(orbs)
+    use M_Grid_Ylm
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(inout), contiguous :: orbs(:, :)
+
+    real(R64), parameter :: tolerance = 1.0e-8_R64
+
+    complex(R64), allocatable :: orbM(:)
+    real(R64) :: norm, normRemoved
+    integer(I32) :: i
+
+    do i = 1, size(orbs, 2)
+      orbM = orbs(:, i)
+      call Grid_Ylm_ProjectOnM(orbM, Method_Mb_OrbBased_mOfOrb(i))
+
+      norm = sum(Grid_Ylm_weights(:) * abs(orbs(:, i))**2)
+      normRemoved = sum(Grid_Ylm_weights(:) * abs(orbs(:, i) - orbM(:))**2)
+      if (normRemoved > tolerance * norm) then
+        write (*, '(A,I0,A,I0,A,ES10.3)') " orbital ", i, ": fraction of the norm outside m = ", &
+          Method_Mb_OrbBased_mOfOrb(i), ": ", normRemoved / norm
+        error stop "Orbs_ProjectOnSymmetry: orbital does not have the m declared in method.mb.orbBased.mOfOrbs"
+      end if
+
+      orbs(:, i) = orbM
+    end do
 
   end subroutine
 
@@ -99,28 +185,41 @@ contains
 !> M = U * S * V^H, then the unitary W = U * V^H is applied:
 !>   orbs <- orbs * W
 !> This gives the orthonormal basis in span(orbs) closest to refOrbs.
-  module subroutine Orbs_AlignOnReference(orbs, refOrbs)
+!> With blockOf_ this is done per block of equal labels.
+  module subroutine Orbs_AlignOnReference(orbs, refOrbs, blockOf_)
     use M_Grid
     use M_Utils_LapackLib
 
     complex(R64), intent(inout), contiguous :: orbs(:, :)
     complex(R64), intent(in), contiguous :: refOrbs(:, :)
+    integer(I32), intent(in), contiguous, optional :: blockOf_(:)
 
     complex(R64), allocatable :: overlap(:, :), u(:, :), vt(:, :)
     real(R64), allocatable :: singularVals(:)
-    integer(I32) :: nOrbs, iOrb, jOrb
+    integer(I32), allocatable :: blockOf(:), idx(:)
+    integer(I32) :: nOrbs, iOrb, jOrb, i, j
 
     nOrbs = size(orbs, 2)
 
-    allocate (overlap(nOrbs, nOrbs))
-    do jOrb = 1, nOrbs
-      do iOrb = 1, nOrbs
-        overlap(iOrb, jOrb) = Grid_InnerProduct(orbs(:, iOrb), refOrbs(:, jOrb))
-      end do
-    end do
+    allocate (blockOf(nOrbs))
+    blockOf(:) = 1
+    if (present(blockOf_)) blockOf(:) = blockOf_(:)
 
-    call LapackLib_Svd(u, singularVals, vt, overlap)
-    orbs = matmul(orbs, matmul(u, vt))
+    do i = 1, nOrbs
+      if (any(blockOf(1:i - 1) .eq. blockOf(i))) cycle
+      idx = pack([(j, j=1, nOrbs)], blockOf .eq. blockOf(i))
+
+      allocate (overlap(size(idx), size(idx)))
+      do jOrb = 1, size(idx)
+        do iOrb = 1, size(idx)
+          overlap(iOrb, jOrb) = Grid_InnerProduct(orbs(:, idx(iOrb)), refOrbs(:, idx(jOrb)))
+        end do
+      end do
+
+      call LapackLib_Svd(u, singularVals, vt, overlap)
+      orbs(:, idx) = matmul(orbs(:, idx), matmul(u, vt))
+      deallocate (overlap)
+    end do
 
   end subroutine
 

@@ -104,9 +104,6 @@ program P_LaserMctdhf
   ! The one-body operator is self-adjoint only in the FEDVR-weighted metric
   integratorList(1) % e % metricWeights = MetricWeights(Coeffs_nCoeffs)
 
-  ! Orbitals of definite m stay exactly in their m channels
-  call ProjectOrbitalsOnDefiniteM(Orbs_orbs)
-
   !==========================================
   call Say_Section("propagate through laser pulse")
   !==========================================

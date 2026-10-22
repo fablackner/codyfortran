@@ -9,17 +9,20 @@
 !                         many-body state is unchanged
 ! - LowdinKeepingState:   symmetric orthonormalization of the orbitals with the
 !                         compensating CI transformation
-! - ProjectOrbitalsOnDefiniteM:
-!                         remove round-off admixtures of other m from orbitals
-!                         of definite m
 ! - MetricWeights:        FEDVR metric of a packed state (SIL integrator)
+!
+! The in-space matrices are block diagonal in Orbs_blockOfOrb (body type and
+! declared m, method.mb.orbBased.mOfOrbs) and are decomposed per block, so
+! orbitals of different m are never mixed.
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Fill the orbitals from orbXX_YY.in files written on a Ylm grid with the same
 !> radial grid and mmax but a smaller lmax (lmaxIn). The channel layout is
 !> l-major, so the stored orbital is a prefix of the current one and the
-!> missing high-l channels are zero.
+!> missing high-l channels are zero. Like OrbsInit_Initialize, it ends with
+!> the projection on the declared symmetry (Orbs_ProjectOnSymmetry), which
+!> removes round-off admixtures of other m from the loaded orbitals.
 subroutine EmbedOrbitals(orbs, lmaxIn)
   use M_Utils_DataStorage
   use M_Grid_Ylm
@@ -54,11 +57,13 @@ subroutine EmbedOrbitals(orbs, lmaxIn)
     end do
   end do
 
+  call Orbs_ProjectOnSymmetry(orbs)
+
 end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Replace the orbitals by phi A for a Hermitian positive-definite in-space
-!> matrix A (one block per stored orbital set) and transform the CI vector so
+!> matrix A (block diagonal in Orbs_blockOfOrb) and transform the CI vector so
 !> that Psi = sum_I c_I Phi_I[phi] is unchanged.
 !>
 !> With phi = (phi A) A^-1 the determinants transform with the one-body
@@ -88,7 +93,7 @@ subroutine TransformOrbitalsKeepingState(coeffs, orbs, a)
   orbs(:, 1:nOS) = matmul(orbs(:, 1:nOS), a)
 
   ! K = -log(A) in the spin-orbital basis (restricted: same block for both spins)
-  call LapackLib_DiagonalizeGeneric(evals, evecs, a, .true.)
+  call LapackLib_DiagonalizeHermitianBlocks(evals, evecs, a, Orbs_blockOfOrb)
   if (minval(evals) <= 0.0_R64) error stop "TransformOrbitalsKeepingState: A is not positive definite"
   logA = matmul(evecs, spread(log(evals), 2, size(evals)) * conjg(transpose(evecs)))
 
@@ -112,13 +117,12 @@ end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Loewdin orthonormalization phi <- phi S^(-1/2) of the stored orbitals
-!> (S = overlap matrix, cross body-type blocks are zero), keeping the many-body
-!> state unchanged through the compensating CI transformation.
+!> (S = overlap matrix, zero between the blocks Orbs_blockOfOrb), keeping the
+!> many-body state unchanged through the compensating CI transformation.
 subroutine LowdinKeepingState(coeffs, orbs)
   use M_Utils_LapackLib
   use M_Grid
   use M_Orbs
-  use M_Method_Mb_OrbBased
 
   complex(R64), intent(inout), contiguous :: coeffs(:)
   complex(R64), intent(inout), contiguous :: orbs(:, :)
@@ -133,12 +137,12 @@ subroutine LowdinKeepingState(coeffs, orbs)
   do j = 1, nOS
     do i = 1, nOS
       s(i, j) = 0.0_R64
-      if (Method_Mb_OrbBased_bodyTypeOfOrb(i) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(j)) cycle
+      if (Orbs_blockOfOrb(i) .ne. Orbs_blockOfOrb(j)) cycle
       s(i, j) = Grid_InnerProduct(orbs(:, i), orbs(:, j))
     end do
   end do
 
-  call LapackLib_DiagonalizeGeneric(evals, evecs, s, .true.)
+  call LapackLib_DiagonalizeHermitianBlocks(evals, evecs, s, Orbs_blockOfOrb)
 
   allocate (sInvSqrt(nOS, nOS))
   sInvSqrt = 0.0_R64
@@ -148,36 +152,6 @@ subroutine LowdinKeepingState(coeffs, orbs)
   sInvSqrt = matmul(evecs, matmul(sInvSqrt, conjg(transpose(evecs))))
 
   call TransformOrbitalsKeepingState(coeffs, orbs, sInvSqrt)
-
-end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Zero the channels of other m in every orbital whose dominant m holds all but
-!> a round-off fraction (1e-12, the tolerance of the definite-m correlation
-!> operator) of its squared norm; orbitals that mix m are left unchanged. In a
-!> linearly polarized field every operator conserves the m of such orbitals,
-!> but round-off admixtures (seeded by the Loewdin step, amplified by
-!> imaginary time) are spread to all orbitals by the orbital projector and
-!> keep the exact field-free part from skipping the empty channels.
-subroutine ProjectOrbitalsOnDefiniteM(orbs)
-  use M_Grid_Ylm
-
-  complex(R64), intent(inout), contiguous :: orbs(:, :)
-
-  real(R64), parameter :: roundOff = 1e-12_R64
-
-  real(R64) :: normM(-Grid_Ylm_mmax:Grid_Ylm_mmax)
-  integer(I32) :: iOrb, i, m
-
-  do iOrb = 1, size(orbs, 2)
-    normM(:) = 0.0_R64
-    do i = 1, size(orbs, 1)
-      normM(Grid_Ylm_mCoord(i)) = normM(Grid_Ylm_mCoord(i)) + Grid_Ylm_weights(i) * abs(orbs(i, iOrb))**2
-    end do
-    m = maxloc(normM, 1) - Grid_Ylm_mmax - 1
-    if (sum(normM) - normM(m) > roundOff * sum(normM)) cycle
-    where (Grid_Ylm_mCoord .ne. m) orbs(:, iOrb) = (0.0_R64, 0.0_R64)
-  end do
 
 end subroutine
 

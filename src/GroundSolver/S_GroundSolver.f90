@@ -25,8 +25,18 @@ contains
     use M_Utils_Say
     use M_GroundSolver_Scf
     use M_GroundSolver_Mcscf
+    use M_Method_Mb_OrbBased
 
     call Say_Fabricate("groundSolver")
+
+    ! Declared m (method.mb.orbBased.mOfOrbs): only the Ylm-optimized solvers
+    ! keep the orbitals in their m channels (radial Fock operators per l,
+    ! alignment per m block); the standard ones diagonalize on the full grid
+    ! and mix degenerate orbitals of different m
+    if (Method_Mb_OrbBased_definiteMQ) then
+      if (.not. (Json_GetExistence("groundSolver.scf.ylmOpt") .or. Json_GetExistence("groundSolver.mcscf.ylmOpt"))) &
+        error stop "method.mb.orbBased.mOfOrbs requires groundSolver.scf.ylmOpt or groundSolver.mcscf.ylmOpt"
+    end if
 
     !------------------------------------
     ! branch

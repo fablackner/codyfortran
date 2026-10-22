@@ -429,7 +429,8 @@ contains
     ! old ones (removes the arbitrary phase of the radial eigenvectors),
     ! then mix and copy spin-up → spin-down (restricted)
     call Grid_Orthonormalize(orbsRaw)
-    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nUp))
+    ! (per block of equal declared m: never mixes orbitals of different m)
+    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nUp), blockOf_=Orbs_blockOfOrb(1:nUp))
 
     if (mixTarget .eq. "orbitals") then
       orbsRawFlat(1:nG * nUp) => orbsRaw

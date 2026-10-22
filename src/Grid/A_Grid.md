@@ -214,8 +214,9 @@ node weights) only when its m add up to zero. Such products are polynomials in
 cos θ (the sin^|m| θ factors pair up), so the quadrature is exact for total
 degree ≤ 4 lmax + 5, as for m = 0. The tables are built in `Grid_Ylm` Setup
 (`SetupQuadrature`, normalized associated Legendre recurrences) and are used by
-`SpatialProductM0` and by Method's `ApplyCorrelationOpYlmNodes`
-(`S_Method_Mb_OrbBased.f90`, orbitals of definite m); see also the Ylm spatial
+`SpatialProductM0` and by Method's `ApplyCorrelationOpYlmNodes` and
+`FillH2YlmNodes` (`S_Method_Mb_OrbBased.f90`, orbitals of declared m,
+`method.mb.orbBased.mOfOrbs`); see also the Ylm spatial
 product bullet under Performance Notes.
 
 | Name | Kind | Contract |
@@ -224,6 +225,7 @@ product bullet under Performance Notes.
 | `Grid_Ylm_FromNodes(f, fNodes, lmax, m, mmax_, withWeightsQ_)` | subroutine | Projection onto Y_lm, \|m\| ≤ l ≤ lmax, into the layout (lmax, `mmax_`), all other channels zero; exact for angular degree ≤ 2 nNodes − 1 − lmax; `withWeightsQ_` multiplies the output by `Grid_Ylm_radialMetricWeights` (default `.false.`) |
 | `Grid_Ylm_ChannelsToNodes(fNodes, fM, m)` | subroutine | as `Grid_Ylm_ToNodes` on the channel matrix fM(r, l − \|m\| + 1), \|m\| ≤ l ≤ \|m\| + size(fM, 2) − 1 (one real GEMM on the complex arrays viewed as real) |
 | `Grid_Ylm_NodesToChannels(fM, fNodes, m)` | subroutine | as `Grid_Ylm_FromNodes` into the channel matrix fM, without metric weights |
+| `Grid_Ylm_ProjectOnM(f, m)` | pure subroutine | zeroes all channels of f (orbital layout) with an m other than m (used by `Orbs_ProjectOnSymmetry`) |
 | `Grid_Ylm_nNodes` | integer | 2 lmax + 3 Gauss–Legendre nodes in cos θ |
 | `Grid_Ylm_lmaxNodes` | integer | 2 lmax + 2, largest tabulated l |
 | `Grid_Ylm_mmaxNodes` | integer | min(2 mmax, 2 lmax + 2), largest tabulated \|m\| (pair densities and potentials of orbitals with \|m\| ≤ mmax) |

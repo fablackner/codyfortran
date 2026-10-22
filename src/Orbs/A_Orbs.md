@@ -21,10 +21,13 @@ the spatial basis provided by the Grid module.
 │  • Orbs_orbs            — orbital coefficient matrix (pointer)  │
 │  • Orbs_nOrbsInState    — number of active orbitals             │
 │  • Orbs_restrictedQ     — spin-restricted flag                  │
+│  • Orbs_blockOfOrb      — (body type, declared m) block labels  │
 │  • Orbs_Setup           — procedure pointer → backend           │
 │  • Orbs_Orthonormalize  — procedure pointer → backend           │
 │  • Orbs_ProjectOnSubspace — procedure pointer → backend         │
 │  • Orbs_SaveOrbs        — procedure pointer → backend           │
+│  • Orbs_ProjectOnSymmetry — projection on the declared m        │
+│  • Orbs_AlignOnReference — Procrustes alignment (per block)     │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               │ submodule implements
@@ -36,6 +39,7 @@ the spatial basis provided by the Grid module.
 │  • Orthonormalize — per-body-type Gram-Schmidt via Grid         │
 │  • ProjectOnSubspace — gauge enforcement via Grid               │
 │  • SaveOrbs — binary file I/O per orbital                       │
+│  • ProjectOnSymmetry — zero the channels of other m (Ylm)       │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               │ delegates to
@@ -155,6 +159,30 @@ orbital space.
 **Physical meaning**: Enforces the MCTDH gauge condition `<φ_j|dφ_i/dt> = 0`,
 which eliminates redundant parametrization in the variational equations.
 
+### Declared Symmetry
+
+With `method.mb.orbBased.mOfOrbs` (declared m of every spin orbital, Ylm
+grids; `src/Method/A_Method.md`) `Orbs_Fabricate` checks equal m for both
+spins if restricted and binds `Orbs_ProjectOnSymmetry`; without it the
+pointer is a NoOp.
+
+- `Orbs_ProjectOnSymmetry(orbs)` zeroes the channels of other than the
+  declared m (`Grid_Ylm_ProjectOnM`). It is called once where orbitals are
+  initialized: at the end of `OrbsInit_Initialize`, and, as the only other
+  call, at the end of `EmbedOrbitals` of the Be/Ne programs, which replaces
+  that initialization when orbitals are embedded from a smaller lmax. It
+  stops with an error if more than 1e-8 of an orbital's squared norm would be
+  removed (norms in the positive metric `Grid_Ylm_weights`, also on ECS
+  grids); the overlaps change by at most the removed parts.
+- `Orbs_blockOfOrb(i)` labels the blocks of stored orbitals with equal body
+  type (unrestricted) and equal declared m; without declaration the blocks
+  are the body types. Orbital-space eigen-decompositions use it
+  (`LapackLib_DiagonalizeHermitianBlocks`), so degenerate orbitals of
+  different m are never mixed, also not at round-off.
+- `Orbs_AlignOnReference(orbs, refOrbs, blockOf_)` solves the Procrustes
+  problem per block of `blockOf_` (the Ylm-optimized ground solvers pass
+  `Orbs_blockOfOrb(1:nUp)`).
+
 ### File I/O
 
 **Format**: One binary file per orbital, named `orbBB_II.in`
@@ -178,6 +206,8 @@ which eliminates redundant parametrization in the variational equations.
 | Key               | Type    | Default | Description                          |
 |-------------------|---------|---------|--------------------------------------|
 | `orbs.restrictedQ`| logical | false   | Use spin-restricted representation   |
+
+The declared m of the orbitals is a method key, `method.mb.orbBased.mOfOrbs`.
 
 ---
 
@@ -235,6 +265,9 @@ cd build && ctest -R T_.*Orb
 
 Relevant test files demonstrate:
 - Orbital initialization (Harmonic, Hydrogen-like, Lattice)
+- Projection on the declared m at loading and the error for orbitals of
+  another m (`test/componentTests/OrbsInit/Load`); exact zeros of the other
+  m channels after propagation (`T_Ne3d_13`)
 - MCTDH propagation with orbital dynamics
 - Restricted vs unrestricted configurations
 

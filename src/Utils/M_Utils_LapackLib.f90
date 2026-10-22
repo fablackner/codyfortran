@@ -714,6 +714,64 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Eigen-decomposition of a Hermitian matrix that is block diagonal in the
+  !> labels blockOf (a(i,j) = 0 for blockOf(i) /= blockOf(j)): every block is
+  !> diagonalized separately (ZHEEV), so the eigenvectors are exactly block
+  !> diagonal also where eigenvalues of different blocks are degenerate (a
+  !> diagonalization of the whole matrix mixes such blocks at round-off).
+  !> Eigenvalues ascending over all blocks (stable for equal values); with a
+  !> single block the result equals LapackLib_DiagonalizeGeneric.
+  subroutine LapackLib_DiagonalizeHermitianBlocks(evals, evecs, a, blockOf)
+    !> Output eigenvalues (ascending), size N.
+    real(R64), intent(out), allocatable    :: evals(:)
+    !> Output eigenvectors (columns), N x N, zero outside the block of each.
+    complex(R64), intent(out), allocatable :: evecs(:, :)
+    !> Input Hermitian matrix (only the entries within blocks are read).
+    complex(R64), intent(in), contiguous   :: a(:, :)
+    !> Block label of every row/column.
+    integer(I32), intent(in), contiguous   :: blockOf(:)
+
+    real(R64), allocatable    :: blockEvals(:), evalsBlocks(:)
+    complex(R64), allocatable :: blockEvecs(:, :), evecsBlocks(:, :)
+    integer(I32), allocatable :: idx(:), order(:)
+    integer(I32) :: n, i, j, k, nFound
+
+    n = size(a, 1)
+    if (size(blockOf) .ne. n) error stop "LapackLib_DiagonalizeHermitianBlocks: blockOf has the wrong size"
+
+    allocate (evalsBlocks(n), evecsBlocks(n, n))
+    evecsBlocks(:, :) = (0.0_R64, 0.0_R64)
+
+    ! Blocks in the order of their first index
+    nFound = 0
+    do i = 1, n
+      if (any(blockOf(1:i - 1) .eq. blockOf(i))) cycle
+      idx = pack([(j, j=1, n)], blockOf .eq. blockOf(i))
+      call WrapZHEEV(blockEvals, blockEvecs, a(idx, idx), .true.)
+      evalsBlocks(nFound + 1:nFound + size(idx)) = blockEvals(:)
+      evecsBlocks(idx, nFound + 1:nFound + size(idx)) = blockEvecs(:, :)
+      nFound = nFound + size(idx)
+    end do
+
+    ! Stable insertion sort of the eigenvalues
+    order = [(i, i=1, n)]
+    do i = 2, n
+      k = order(i)
+      j = i - 1
+      do while (j >= 1)
+        if (evalsBlocks(order(j)) <= evalsBlocks(k)) exit
+        order(j + 1) = order(j)
+        j = j - 1
+      end do
+      order(j + 1) = k
+    end do
+
+    evals = evalsBlocks(order)
+    evecs = evecsBlocks(:, order)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine WrapZGESVD(u, s, vt, A)
     !> Output left singular vectors, size (M, min(M,N)).
     complex(R64), intent(out), allocatable :: u(:, :)

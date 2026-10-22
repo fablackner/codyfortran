@@ -87,6 +87,13 @@ module M_Grid_Ylm
       integer(I32), intent(in) :: mmax
       integer(I32) :: res
     end function
+
+    !> Zeroes all channels of f (orbital layout) with an m other than the
+    !> given m (projection onto the channels of one m).
+    pure module subroutine Grid_Ylm_ProjectOnM(f, m)
+      complex(R64), intent(inout), contiguous :: f(:)
+      integer(I32), intent(in)                :: m
+    end subroutine
   end interface
 
   !=============================================================================

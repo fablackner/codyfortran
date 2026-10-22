@@ -89,6 +89,12 @@ contains
 !>   orbs(:, nOrbs(1)+1:nOrbs(1)+nOrbs(2)) → body type 2
 !>   etc.
 !>
+!> Finally the orbitals are projected on their declared symmetry
+!> (Orbs_ProjectOnSymmetry: the m of method.mb.orbBased.mOfOrbs, NoOp
+!> without it), which removes round-off admixtures of other m from loaded
+!> orbitals and stops if an orbital does not have its declared m. This is
+!> the only projection on the declared m.
+!>
 !> @param[out] orbs  2D array (nGrid × nTotalOrbs) to be filled with orbital data.
 !>                   Each column is a normalized orbital sampled on the grid.
   subroutine Initialize(orbs)
@@ -118,6 +124,8 @@ contains
 
       end do
     end do
+
+    call Orbs_ProjectOnSymmetry(orbs)
 
     ! NOTE: Orthonormalization is typically handled by Orbs module after init
     !call Orbs_Orthonormalize(orbs)

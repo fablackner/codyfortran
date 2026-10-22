@@ -7,6 +7,15 @@
 !> linear and nonlinear orbital derivatives are projected onto them, so the
 !> orbitals stay in the kept space.
 !>
+!> The m of the orbitals is declared (method.mb.orbBased.mOfOrbs: 1s 2s
+!> 2p(-1) 2p(0) 2p(1) for both spins, unrestricted), which binds the
+!> definite-m node quadrature of the correlation operator and h2 and the
+!> m-selective exact field-free part. Every operator of the z-polarized field
+!> conserves m, the only projection on it is done once at initialization, and
+!> the eigen-decompositions in orbital space (alignment of the ground solver,
+!> inverse 1-RDM) act per m block, so the channels of other m must stay
+!> exactly zero.
+!>
 !> Checks:
 !> - the MCSCF ground-state energy matches T_Ne3d_06/07/08 (gauge off at t = 0)
 !> - the weighted-metric norm is conserved (the ground state has negligible
@@ -14,6 +23,7 @@
 !> - the propagated orbitals have no weight above the cut
 !> - the dipole moment agrees with T_Ne3d_09 within the (small) effect of the
 !>   cut on this grid
+!> - the channels of other m are exactly zero after every output step
 program T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut
   use M_Utils_Types
   use M_Utils_Say
@@ -52,6 +62,7 @@ program T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut
   real(R64)    :: startNorm, finalNorm
   real(R64)    :: dipole, energy, cutResidual
   integer(I32) :: iStep, nTimeSteps, nTimeStepsPropagation, innerStep, iOrb
+  integer(I32) :: nOtherM
   real(R64), allocatable :: metricWeights(:)
   complex(R64), allocatable :: rdm1(:, :)
   complex(R64), allocatable :: projectedOrbs(:, :)
@@ -165,6 +176,7 @@ program T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut
   time = startTime
   iStep = 0
   timeStep = outputStep / nTimeStepsPropagation
+  nOtherM = OtherMEntries(Orbs_orbs)
 
   do while (time < endTime - 0.5_R64 * timeStep)
     iStep = iStep + 1
@@ -177,6 +189,7 @@ program T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut
     energy = Method_GetEnergy(time)
     call Method_Mb_OrbBased_FillRdm1(rdm1, Method_state)
     call PrinterObservableYlm_DumpDipole(rdm1, Orbs_orbs, "dipoleVelocity.dat", .false., time, dipole_=dipole)
+    nOtherM = nOtherM + OtherMEntries(Orbs_orbs)
 
     write (*, '(A,ES10.3E1,A,E20.10,A,E20.10)') ' time = ', time, '    energy = ', energy, '    <z> = ', dipole
   end do
@@ -198,6 +211,7 @@ program T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut
   print *, "final norm:   ", finalNorm
   print *, "final dipole: ", dipole
   print *, "cut residual: ", cutResidual
+  print *, "nonzero entries in channels of other m: ", nOtherM
 
   ! Unitary propagation must conserve the weighted-metric norm of the state
   ! (up to the RK4 integration error of the nonlinear part).
@@ -216,11 +230,33 @@ program T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut
   call check(error, dipole, 1.3143644064e-3_R64, thr=1e-11_R64)
   if (allocated(error)) error stop "T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut failure: dipole off reference"
 
+  call check(error, Method_Mb_OrbBased_definiteMQ)
+  if (allocated(error)) error stop "T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut failure: mOfOrbs not declared"
+
+  ! Exact zeros, not round-off
+  call check(error, nOtherM, 0)
+  if (allocated(error)) error stop "T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut failure: orbitals left their m"
+
   !==========================================
   call Say_Goodbye
   !==========================================
 
 contains
+
+  !> Number of nonzero entries of the orbitals in the channels of other than
+  !> their declared m.
+  function OtherMEntries(orbs) result(res)
+    complex(R64), intent(in), contiguous :: orbs(:, :)
+    integer(I32) :: res
+
+    integer(I32) :: i
+
+    res = 0
+    do i = 1, size(orbs, 2)
+      res = res + count(Grid_Ylm_mCoord .ne. Method_Mb_OrbBased_mOfOrb(i) .and. orbs(:, i) .ne. (0.0_R64, 0.0_R64))
+    end do
+
+  end function
 
   subroutine ApplyMatOnVecL0(dOrbLm, orbLm, time)
     use M_GroundSolver_Mcscf_YlmOpt

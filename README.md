@@ -144,6 +144,12 @@ ctest -R T_
 >
 > Tests in the same folder always run in order, because later tests read files written by earlier ones.
 
+A test that must stop with a specific error (for example an input check at fabricate) declares the expected output in a comment line of its source,
+```fortran
+!> ctest-pass-regex: <regular expression>
+```
+CMake then registers it with `PASS_REGULAR_EXPRESSION`: it passes if and only if its output matches, and its exit code is ignored. See `test/componentTests/OrbsInit/Load/T_OrbsInit_Load_WrongSymmetry.f90`.
+
 CodyFortran's console output uses ANSI color escape codes and a few non-ASCII characters. If you prefer plain ASCII (for example when redirecting output to a file) or you don't like the styled output, disable the fancy printing by setting
 ```bash
 export CODY_PRETTY_PRINT="OFF"
