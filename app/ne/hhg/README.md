@@ -38,11 +38,17 @@ is biased by O(dτ²): ~6 mHa in the HF energy at dτ = 0.005, hence dτ = 0.001
 
 ## Cost
 
-Pentium G4560 (2 cores, 4 threads): 4.0 s per time step, 88 000 steps for the
-pulse (≈ 4 days). The non-linear derivative (4 per RK4 step) is 0.73 s of it;
-it uses the definite-m node quadrature of the correlation operator
-(`src/Method/A_Method.md`), 3.7 s per derivative with the generic Gaunt
-products. The relaxed state carries a ~1e-16 (squared norm) round-off
-admixture of other m in the 3p orbitals; the fast path tolerates up to 1e-12,
-with a stricter test every step falls back to the generic operator (≈ 11 s per
-step).
+Pentium G4560 (2 cores, 4 threads): 2.1 s per time step, 88 000 steps for the
+pulse (≈ 2 days). Four non-linear derivatives per RK4 step take 0.38 s each
+(0.28 s in the definite-m node quadrature of the correlation operator,
+`src/Method/A_Method.md`; 3.7 s with the generic Gaunt products), four exact
+field-free propagations 0.09 s each.
+
+The orbitals keep their m exactly (z-polarized field). Round-off admixtures
+of other m (seeded by the Löwdin steps of the relaxation, ~1e-16 of the norm
+in the 3p orbitals) are removed by `ProjectOrbitalsOnDefiniteM`
+(`app/be/common/BeCommon.inc`) after loading and after every Löwdin step;
+otherwise the orbital projector spreads them into all channels and the exact
+part cannot skip the empty m channels (≈ 0.5 s more per step). The correlation
+operator tolerates admixtures up to 1e-12 of the squared norm; above that it
+falls back to the generic operator (≈ 11 s per step).

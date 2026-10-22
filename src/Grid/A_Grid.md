@@ -222,6 +222,8 @@ product bullet under Performance Notes.
 |------|------|----------|
 | `Grid_Ylm_ToNodes(fNodes, f, lmax, m, mmax_)` | subroutine | fNodes(r, q) = Σ_l f_lm(r) Θ_lm(x_q), \|m\| ≤ l ≤ lmax, for f in the layout (lmax, `mmax_`, default `Grid_Ylm_mmax`); other m are ignored; requires lmax ≤ `Grid_Ylm_lmaxNodes`, \|m\| ≤ min(`Grid_Ylm_mmaxNodes`, mmax_) |
 | `Grid_Ylm_FromNodes(f, fNodes, lmax, m, mmax_, withWeightsQ_)` | subroutine | Projection onto Y_lm, \|m\| ≤ l ≤ lmax, into the layout (lmax, `mmax_`), all other channels zero; exact for angular degree ≤ 2 nNodes − 1 − lmax; `withWeightsQ_` multiplies the output by `Grid_Ylm_radialMetricWeights` (default `.false.`) |
+| `Grid_Ylm_ChannelsToNodes(fNodes, fM, m)` | subroutine | as `Grid_Ylm_ToNodes` on the channel matrix fM(r, l − \|m\| + 1), \|m\| ≤ l ≤ \|m\| + size(fM, 2) − 1 (one real GEMM on the complex arrays viewed as real) |
+| `Grid_Ylm_NodesToChannels(fM, fNodes, m)` | subroutine | as `Grid_Ylm_FromNodes` into the channel matrix fM, without metric weights |
 | `Grid_Ylm_nNodes` | integer | 2 lmax + 3 Gauss–Legendre nodes in cos θ |
 | `Grid_Ylm_lmaxNodes` | integer | 2 lmax + 2, largest tabulated l |
 | `Grid_Ylm_mmaxNodes` | integer | min(2 mmax, 2 lmax + 2), largest tabulated \|m\| (pair densities and potentials of orbitals with \|m\| ≤ mmax) |

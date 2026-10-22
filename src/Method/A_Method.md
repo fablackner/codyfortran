@@ -203,8 +203,11 @@ flag has no effect.
 the kinetic and potential operators to radial unit vectors placed in all
 (l,m) channels at once, symmetrizes each block with the radial metric
 weights (w r² on FEDVR) and diagonalizes it per l (real symmetric, m
-independent). Propagation is then two real GEMMs per l on all orbitals and m,
-with phases exp(−i E Δt) (or exp(−E Δτ) in imaginary time).
+independent). Propagation is then two real GEMMs per l on the (orbital, m)
+columns that do not vanish in that block (orbitals of definite m fill one of
+the 2 min(l, mmax) + 1 columns; the others stay exactly zero and are skipped,
+also by the phi functions and the spectral cut), with phases exp(−i E Δt) (or
+exp(−E Δτ) in imaginary time).
 
 Why: on FEDVR grids h0 is very stiff (centrifugal term l(l+1)/2r² at the
 first radial point, ~10⁵–10⁶ a.u. at lmax = 32), so SIL needs hundreds of
@@ -312,26 +315,33 @@ of overlap matrices with degenerate m blocks in the imaginary-time relaxation,
 and are dropped); if every orbital has a definite m (m = 0 orbitals on a `grid.ylm.mmax = 0`
 grid, or the orbitals of an atom in a linearly polarized field, e.g. Ne 2p with
 m = −1, 0, 1) orbitals, pair densities and pair potentials are evaluated on the
-Gauss–Legendre nodes in cos θ (`Grid_Ylm_ToNodes`; pair sources come back with
-radial weights via `Grid_Ylm_FromNodes(..., withWeightsQ_=.true.)`), otherwise
+Gauss–Legendre nodes in cos θ (`Grid_Ylm_ToNodes`, `Grid_Ylm_FromNodes` and
+their channel-matrix forms), otherwise
 the generic operator is used. The pair (l2, k2) carries M = m_k2 − m_l2; only
 the terms m_k1 + M = m_j1 in the correlation sum and m_j1 + M = m_i1 in h2 are
 kept. The dropped h2 terms vanish by the φ integral, the dropped correlation
 terms only for an M-conserving many-body state (their 2-RDM weights vanish);
 if those weights exceed the same 1e-12 fraction, the generic operator is used.
 Pairs with |M| above the |m| cap of the potentials are dropped, as in the
-generic operator. The 2-RDM-weighted
-orbital combinations are formed before multiplying with the potential, and
-every product is pointwise. The node count makes all angular integrals exact,
-so results equal the generic operator to round-off (the Ne3d MCTDHX tests with
-2p orbitals: final dipoles agree to 2e-15) while the cost per pair drops from
-n spatial products to O(1) transforms. The potentials of all ordered pairs are
-stored on the nodes (computed in parallel over the unordered pairs); the
-pointwise sums then run over cache-sized blocks of nodes with two ZGEMMs per
-block (the 2-RDM-weighted combinations χ for all (pair, j1) and the h2
-quadratures), leaving only V·χ elementwise. One MCTDHX non-linear derivative
-of Ne with 9 orbitals (1s 2s 2p 3s 3p, lmax 40, mmax 1): 3.4 s instead of 27 s
-with 1041 radial points on one thread; 0.73 s with 761 points on four threads (3.7 s generic).
+generic operator. Every product is pointwise, and the node count makes all
+angular integrals exact, so results equal the generic operator to round-off
+(the Ne3d MCTDHX tests with 2p orbitals: final dipoles agree to 1e-14) while
+the cost per pair drops from n spatial products to O(1) transforms.
+
+The pair potentials are computed in parallel over the unordered pairs on the
+channel matrix of their single M (`Grid_Ylm_NodesToChannels`, radial metric
+weights, one radial Poisson solve per l via
+`SysInteraction_Ylm_FillInteractionPotentialRadial`,
+`Grid_Ylm_ChannelsToNodes`) and stored on the nodes; the swapped pair uses the
+conjugate. The pointwise sums are grouped by the target m of the selection
+rule (`FillTargetGroups`): for every group the products X = V_iP · φ_k of its
+columns (iP, k) are formed blockwise over cache-sized blocks of nodes and enter
+two ZGEMMs, dφ_j += X · weights and h2 = (φ_i w)^H · X, which touch only the
+2-RDM weights allowed by the rule (Ne with 1s 2s 2p 3s 3p: 1921 of 6561).
+
+One MCTDHX non-linear derivative of Ne with 9 orbitals (1s 2s 2p 3s 3p,
+lmax 40, mmax 1, 761 radial points, four threads on 2 cores): 0.38 s (0.28 s
+correlation operator), against 3.7 s with the generic operator.
 
 ---
 

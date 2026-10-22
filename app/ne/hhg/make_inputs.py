@@ -45,6 +45,8 @@ PRODUCTION = {
     # time stepping: dt = outputStep / nTimeSteps = 0.0025
     "outputStep": 0.2,
     "nTimeSteps": 80,
+    # checkpoint (orbitals, CI vector) every 800 steps
+    "saveStep": 2.0,
     "postPulseTime": 0.0,
     # imaginary-time relaxation (the Strang fixed point is biased by O(dtau^2):
     # ~6 mHa in the HF energy at dtau = 0.005 for Ne)
@@ -149,7 +151,8 @@ def laser(p, pulse):
     duration = 2.0 * math.pi * pulse["nCycles"] / OMEGA
     end = math.ceil((duration + p["postPulseTime"]) / p["outputStep"]) * p["outputStep"]
     d["program"] = {"startTime": 0.0, "endTime": round(end, 6),
-                    "outputStep": p["outputStep"], "nTimeSteps": p["nTimeSteps"]}
+                    "outputStep": p["outputStep"], "nTimeSteps": p["nTimeSteps"],
+                    "saveStep": p["saveStep"]}
     return d
 
 

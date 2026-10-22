@@ -26,6 +26,18 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   !> round-off for the definite-m node path (orbitals and 2-RDM weights).
   real(R64), parameter :: mRoundOff = 1e-12_R64
 
+  !> Target group (m, body type) of ApplyCorrelationOpYlmNodes: the columns
+  !> (pair colPair, orbital colOrb) whose product V_pair * orbital carries
+  !> this m, the orbitals of the group and the weights
+  !> (columns x orbitals) of the correlation sum.
+  type :: T_TargetGroup
+    integer(I32), allocatable :: colPair(:)
+    integer(I32), allocatable :: colOrb(:)
+    integer(I32), allocatable :: orbs(:)
+    integer(I32) :: colOffset = 0
+    complex(R64), allocatable :: weights(:, :)
+  end type
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -919,9 +931,9 @@ contains
     !
     ! The generic version multiplies every pair potential V_(l2,k2) with every
     ! orbital (one spatial product each) and then combines the results with the
-    ! 2-RDM weights. By linearity the combination can be done first,
-    !   dOrbs(:,j1) += V_(l2,k2) * sum_k1 orbs(:,k1) rdm2spatial(k1,k2,j1,l2),
-    ! and all products are pointwise on the nodes: the orbitals are transformed
+    ! 2-RDM weights,
+    !   dOrbs(:,j1) += sum_(k1,k2,l2) V_(l2,k2) * orbs(:,k1) rdm2spatial(k1,k2,j1,l2).
+    ! On the nodes all products are pointwise: the orbitals are transformed
     ! once, each pair density/potential once, and dOrbs once at the end. The
     ! h2 elements are node quadratures of conjg(orb) V orb. The phases
     ! e^(i m phi) are bookkept: the pair (l2,k2) carries M = m_k2 - m_l2, and
@@ -933,9 +945,12 @@ contains
     ! angular integral exact, so the result equals the generic version up to
     ! round-off.
     !
-    ! The pointwise sums run over blocks of nodes with two ZGEMMs per block,
-    ! chi = orbs * rdm2spatial for all (pair, j1) and h2 = orbs^H * (V orbs w),
-    ! so that only V * chi remains elementwise.
+    ! The pointwise sums run over blocks of nodes, grouped by the target m of
+    ! the selection rule (FillTargetGroups): the products X = V_iP * orbs(:,k)
+    ! of a group (the only elementwise work) enter two ZGEMMs per block,
+    ! dOrbs = X * weights and h2 = (orbs w)^H * X, which touch only the
+    ! weights allowed by the rule. Only the potentials of unordered pairs are
+    ! stored; the swapped pair uses the conjugate.
     !
     ! Bound by Method_Mb_OrbBased_Fabricate for non-ECS Ylm grids with a
     ! body-type-independent Ylm interaction (YlmNodesFastPathQ).
@@ -960,15 +975,15 @@ contains
     complex(R64), allocatable :: rdm2spatial(:, :, :, :)
     complex(R64), allocatable, target :: orbNodes(:, :), dOrbNodes(:, :), potNodes(:, :)
     complex(R64), allocatable, target :: srcNodes(:)
-    complex(R64), allocatable :: weights(:, :), h2Pairs(:, :)
     complex(R64), contiguous, pointer :: nodes(:, :)
-    complex(R64), allocatable :: chi(:, :), potOrb(:, :), h2Block(:, :)
-    complex(R64), allocatable :: src(:), pot(:), dOrb(:)
+    complex(R64), allocatable :: x(:, :), orbW(:, :), dOrbBlock(:, :), h2Cols(:, :), h2Private(:, :)
+    complex(R64), allocatable :: srcM(:, :), potM(:, :), dOrb(:)
     real(R64), allocatable :: weightNodes(:)
-    integer(I32), allocatable :: pairK2(:), pairL2(:), pairM(:), mOrb(:)
+    integer(I32), allocatable :: pairK2(:), pairL2(:), pairM(:), pairPot(:), mOrb(:)
+    type(T_TargetGroup), allocatable :: groups(:)
 
-    integer(I32) :: nO, nOS, nRad, nNodes, nPts, lmax, lmaxPot, mmaxPot, nPairs
-    integer(I32) :: i1, j1, k1, k2, l2, iP, iB, nB, iC
+    integer(I32) :: nO, nOS, nRad, nNodes, nPts, lmax, lmaxPot, mmaxPot, nPairs, nPots
+    integer(I32) :: i1, j1, k1, k2, l2, l, iP, iB, nB, iC, iG, iJ, nC, nJ, nCols
     real(R64) :: normKept, normDropped
     logical :: h2Q, definiteQ
 
@@ -1045,121 +1060,149 @@ contains
         if (Method_Mb_OrbBased_bodyTypeOfOrb(l2) .eq. Method_Mb_OrbBased_bodyTypeOfOrb(k2)) nPairs = nPairs + 1
       end do
     end do
-    allocate (pairK2(nPairs), pairL2(nPairs), pairM(nPairs), potNodes(nPts, nPairs))
+    allocate (pairK2(nPairs), pairL2(nPairs), pairM(nPairs), pairPot(nPairs))
 
-    ! Pair list: every unordered pair (k2 >= l2) is followed by its swap
+    ! Pair list: every unordered pair (k2 >= l2) is followed by its swap; both
+    ! share the stored potential pairPot (the swap uses its conjugate, marked
+    ! by a negative index)
     iP = 0
+    nPots = 0
     do l2 = 1, nOS
       do k2 = l2, nOS
         if (Method_Mb_OrbBased_bodyTypeOfOrb(l2) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(k2)) cycle
         iP = iP + 1
+        nPots = nPots + 1
         pairK2(iP) = k2
         pairL2(iP) = l2
         pairM(iP) = mOrb(k2) - mOrb(l2)
+        pairPot(iP) = nPots
         if (k2 .ne. l2) then
           iP = iP + 1
           pairK2(iP) = l2
           pairL2(iP) = k2
           pairM(iP) = -pairM(iP - 1)
+          pairPot(iP) = -nPots
         end if
       end do
     end do
+    allocate (potNodes(nPts, nPots))
 
     ! Pair potentials V_(l2,k2) of the sources conjg(phi_l2) phi_k2 with radial
-    ! weights (m = m_k2 - m_l2; zero beyond the |m| cap of the potentials); the
-    ! swapped pair uses V_(k2,l2) = conjg(V_(l2,k2))
-    !$omp parallel default(shared) private(iP, k2, l2, srcNodes, src, pot, nodes)
+    ! weights (m = m_k2 - m_l2; pairs beyond the |m| cap of the potentials
+    ! are left out of the sums below); the swapped pair has
+    ! V_(k2,l2) = conjg(V_(l2,k2))
+    ! (on the channel matrices of the single m of the pair: radial Poisson
+    ! solves per l, channels with negligible source skipped as in
+    ! SysInteraction_FillInteractionPotential)
+    !$omp parallel default(shared) private(iP, k2, l2, l, srcNodes, srcM, potM, nodes)
     allocate (srcNodes(nPts))
-    allocate (src(Grid_Ylm_NChannels(lmaxPot, mmaxPot) * nRad))
     !$omp do schedule(dynamic)
     do iP = 1, nPairs
       k2 = pairK2(iP)
       l2 = pairL2(iP)
       if (k2 < l2) cycle
 
-      if (abs(pairM(iP)) <= mmaxPot) then
-        srcNodes(:) = conjg(orbNodes(:, l2)) * orbNodes(:, k2)
-        nodes(1:nRad, 1:nNodes) => srcNodes
-        call Grid_Ylm_FromNodes(src, nodes, lmaxPot, pairM(iP), mmax_=mmaxPot, withWeightsQ_=.true.)
-        call SysInteraction_FillInteractionPotential(pot, src, time, -1, -1)
+      if (abs(pairM(iP)) > mmaxPot) cycle
 
-        nodes(1:nRad, 1:nNodes) => potNodes(:, iP)
-        call Grid_Ylm_ToNodes(nodes, pot, lmaxPot, pairM(iP), mmax_=mmaxPot)
-      else
-        potNodes(:, iP) = 0.0_R64
-      end if
+      srcNodes(:) = conjg(orbNodes(:, l2)) * orbNodes(:, k2)
+      nodes(1:nRad, 1:nNodes) => srcNodes
+      allocate (srcM(nRad, abs(pairM(iP)):lmaxPot), potM(nRad, abs(pairM(iP)):lmaxPot))
+      call Grid_Ylm_NodesToChannels(srcM, nodes, pairM(iP))
 
-      if (k2 .ne. l2) potNodes(:, iP + 1) = conjg(potNodes(:, iP))
+      do l = abs(pairM(iP)), lmaxPot
+        srcM(:, l) = srcM(:, l) * Grid_Ylm_radialMetricWeights(:)
+        if (all(abs(srcM(:, l)) < 1.0e-14_R64)) then
+          potM(:, l) = 0.0_R64
+        else
+          call SysInteraction_Ylm_FillInteractionPotentialRadial(potM(:, l), srcM(:, l), l, pairM(iP), time, &
+                                                                 bt1_=-1, bt2_=-1)
+        end if
+      end do
+
+      nodes(1:nRad, 1:nNodes) => potNodes(:, pairPot(iP))
+      call Grid_Ylm_ChannelsToNodes(nodes, potM, pairM(iP))
+      deallocate (srcM, potM)
     end do
     !$omp end do
-    deallocate (srcNodes, src)
+    deallocate (srcNodes)
     !$omp end parallel
 
-    ! weights(k1, (iP,j1)) = rdm2spatial(k1,k2,j1,l2) for the pair iP = (k2,l2)
-    ! and m_k1 + m_iP = m_j1
-    allocate (weights(nOS, nPairs * nOS))
-    weights(:, :) = 0.0_R64
-    do iP = 1, nPairs
-      do j1 = 1, nOS
-        do k1 = 1, nOS
-          if (Method_Mb_OrbBased_bodyTypeOfOrb(j1) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(k1)) cycle
-          if (mOrb(k1) + pairM(iP) .ne. mOrb(j1)) cycle
-          weights(k1, (iP - 1) * nOS + j1) = rdm2spatial(k1, pairK2(iP), j1, pairL2(iP))
-        end do
-      end do
-    end do
+    ! Target groups (m, body type) of the selection rule m_k + m_iP = m_j:
+    ! columns (iP, k) of the products X = V_iP * orbs(:,k) with that target,
+    ! orbitals j of the group, and the weights rdm2spatial(k,k2,j,l2)
+    call FillTargetGroups(groups, mOrb, pairK2, pairL2, pairM, mmaxPot, rdm2spatial)
 
-    ! Pointwise sums over blocks of nodes:
-    !   dOrbs(:,j1) += sum_iP V_iP * chi(:,(iP,j1)),  chi = orbs * weights
-    !   h2Pairs(i1,(iP,j1)) = sum conjg(orbs(:,i1)) V_iP orbs(:,j1) w
+    ! Pointwise sums over blocks of nodes, per group:
+    !   dOrbs(:,j) += X W               (correlation sum over (iP, k))
+    !   h2Cols(i,(iP,k)) = sum w conjg(orbs(:,i)) X(:,(iP,k)),  i in the group
+    ! (h2Cols holds the columns of all groups, group iG from colOffset + 1)
+    nCols = sum([(size(groups(iG) % colPair), iG=1, size(groups))])
     if (h2Q) then
-      allocate (h2Pairs(nOS, nPairs * nOS))
-      h2Pairs(:, :) = 0.0_R64
+      allocate (h2Cols(nOS, nCols))
+      h2Cols(:, :) = 0.0_R64
     end if
 
-    !$omp parallel default(shared) private(iB, nB, iP, j1, iC, chi, potOrb, h2Block)
-    allocate (chi(blockSize, nPairs * nOS))
+    !$omp parallel default(shared) private(iB, nB, iG, iC, iJ, nC, nJ, iP, k1, j1, x, orbW, dOrbBlock, h2Private)
+    allocate (x(blockSize, maxval([(size(groups(iG) % colPair), iG=1, size(groups))])))
+    allocate (orbW(blockSize, nOS), dOrbBlock(blockSize, nOS))
     if (h2Q) then
-      allocate (potOrb(blockSize, nPairs * nOS), h2Block(nOS, nPairs * nOS))
-      h2Block(:, :) = 0.0_R64
+      allocate (h2Private(nOS, nCols))
+      h2Private(:, :) = 0.0_R64
     end if
 
     !$omp do schedule(static)
     do iB = 1, nPts, blockSize
       nB = min(blockSize, nPts - iB + 1)
 
-      call ZGEMM('N', 'N', nB, nPairs * nOS, nOS, (1.0_R64, 0.0_R64), orbNodes(iB, 1), nPts, &
-                 weights, nOS, (0.0_R64, 0.0_R64), chi, blockSize)
+      do iG = 1, size(groups)
+        nC = size(groups(iG) % colPair)
+        nJ = size(groups(iG) % orbs)
+        if (nC .eq. 0) cycle
 
-      do iP = 1, nPairs
-        do j1 = 1, nOS
-          iC = (iP - 1) * nOS + j1
-          dOrbNodes(iB:iB + nB - 1, j1) = dOrbNodes(iB:iB + nB - 1, j1) + potNodes(iB:iB + nB - 1, iP) * chi(1:nB, iC)
-          if (h2Q) potOrb(1:nB, iC) = potNodes(iB:iB + nB - 1, iP) * orbNodes(iB:iB + nB - 1, j1) * &
-                                      weightNodes(iB:iB + nB - 1)
+        do iC = 1, nC
+          iP = groups(iG) % colPair(iC)
+          k1 = groups(iG) % colOrb(iC)
+          if (pairPot(iP) > 0) then
+            x(1:nB, iC) = potNodes(iB:iB + nB - 1, pairPot(iP)) * orbNodes(iB:iB + nB - 1, k1)
+          else
+            x(1:nB, iC) = conjg(potNodes(iB:iB + nB - 1, -pairPot(iP))) * orbNodes(iB:iB + nB - 1, k1)
+          end if
         end do
-      end do
 
-      if (h2Q) call ZGEMM('C', 'N', nOS, nPairs * nOS, nB, (1.0_R64, 0.0_R64), orbNodes(iB, 1), nPts, &
-                          potOrb, blockSize, (1.0_R64, 0.0_R64), h2Block, nOS)
+        call ZGEMM('N', 'N', nB, nJ, nC, (1.0_R64, 0.0_R64), x, blockSize, groups(iG) % weights, nC, &
+                   (0.0_R64, 0.0_R64), dOrbBlock, blockSize)
+        do iJ = 1, nJ
+          j1 = groups(iG) % orbs(iJ)
+          dOrbNodes(iB:iB + nB - 1, j1) = dOrbNodes(iB:iB + nB - 1, j1) + dOrbBlock(1:nB, iJ)
+        end do
+
+        if (h2Q) then
+          do iJ = 1, nJ
+            orbW(1:nB, iJ) = orbNodes(iB:iB + nB - 1, groups(iG) % orbs(iJ)) * weightNodes(iB:iB + nB - 1)
+          end do
+          call ZGEMM('C', 'N', nJ, nC, nB, (1.0_R64, 0.0_R64), orbW, blockSize, x, blockSize, &
+                     (1.0_R64, 0.0_R64), h2Private(1, groups(iG) % colOffset + 1), nOS)
+        end if
+      end do
     end do
     !$omp end do
 
     if (h2Q) then
       !$omp critical
-      h2Pairs(:, :) = h2Pairs(:, :) + h2Block(:, :)
+      h2Cols(:, :) = h2Cols(:, :) + h2Private(:, :)
       !$omp end critical
     end if
     !$omp end parallel
 
-    !   h2(i1,l2,j1,k2) = 1/2 <orb_i1| V_(l2,k2) |orb_j1>,  m_j1 + m_iP = m_i1
+    !   h2(i1,l2,k,k2) = 1/2 <orb_i1| V_(l2,k2) |orb_k>  for the column (iP,k)
     if (h2Q) then
-      do iP = 1, nPairs
-        do j1 = 1, nOS
-          do i1 = 1, nOS
-            if (Method_Mb_OrbBased_bodyTypeOfOrb(i1) .ne. Method_Mb_OrbBased_bodyTypeOfOrb(j1)) cycle
-            if (mOrb(j1) + pairM(iP) .ne. mOrb(i1)) cycle
-            h2_(i1, pairL2(iP), j1, pairK2(iP)) = 0.5_R64 * h2Pairs(i1, (iP - 1) * nOS + j1)
+      do iG = 1, size(groups)
+        do iC = 1, size(groups(iG) % colPair)
+          iP = groups(iG) % colPair(iC)
+          k1 = groups(iG) % colOrb(iC)
+          do iJ = 1, size(groups(iG) % orbs)
+            i1 = groups(iG) % orbs(iJ)
+            h2_(i1, pairL2(iP), k1, pairK2(iP)) = 0.5_R64 * h2Cols(iJ, groups(iG) % colOffset + iC)
           end do
         end do
       end do
@@ -1187,6 +1230,80 @@ contains
         h2_(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:) = h2_(:nOS, :nOS, :nOS, :nOS)
       end if
     end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine FillTargetGroups(groups, mOrb, pairK2, pairL2, pairM, mmaxPot, rdm2spatial)
+    !---------------------------------------------------------------------------
+    ! One group per (m, body type) of the orbitals: the columns (iP, k) with
+    ! m_k + m_iP = m and the body type of k (pairs within the |m| cap of the
+    ! potentials), the orbitals j of the group, and
+    !   weights((iP,k), j) = rdm2spatial(k, k2, j, l2),  iP = (k2, l2).
+    !---------------------------------------------------------------------------
+    use M_Orbs
+
+    type(T_TargetGroup), intent(out), allocatable :: groups(:)
+    integer(I32), intent(in)               :: mOrb(:)
+    integer(I32), intent(in)               :: pairK2(:)
+    integer(I32), intent(in)               :: pairL2(:)
+    integer(I32), intent(in)               :: pairM(:)
+    integer(I32), intent(in)               :: mmaxPot
+    complex(R64), intent(in), contiguous   :: rdm2spatial(:, :, :, :)
+
+    integer(I32), allocatable :: groupOfOrb(:)
+    integer(I32) :: nOS, nG, iG, i1, k1, iP, iC, iJ, offset
+    logical :: inColQ
+
+    nOS = size(mOrb)
+
+    ! groups of orbitals with equal (m, body type)
+    allocate (groupOfOrb(nOS))
+    nG = 0
+    do i1 = 1, nOS
+      groupOfOrb(i1) = 0
+      do k1 = 1, i1 - 1
+        if (mOrb(k1) .eq. mOrb(i1) .and. Method_Mb_OrbBased_bodyTypeOfOrb(k1) .eq. Method_Mb_OrbBased_bodyTypeOfOrb(i1)) then
+          groupOfOrb(i1) = groupOfOrb(k1)
+          exit
+        end if
+      end do
+      if (groupOfOrb(i1) .eq. 0) then
+        nG = nG + 1
+        groupOfOrb(i1) = nG
+      end if
+    end do
+
+    allocate (groups(nG))
+    offset = 0
+    do iG = 1, nG
+      associate (g => groups(iG))
+        g % orbs = pack([(i1, i1=1, nOS)], groupOfOrb .eq. iG)
+
+        ! columns: count, then fill
+        allocate (g % colPair(0), g % colOrb(0))
+        do iP = 1, size(pairM)
+          if (abs(pairM(iP)) > mmaxPot) cycle
+          do k1 = 1, nOS
+            inColQ = mOrb(k1) + pairM(iP) .eq. mOrb(g % orbs(1)) .and. &
+                     Method_Mb_OrbBased_bodyTypeOfOrb(k1) .eq. Method_Mb_OrbBased_bodyTypeOfOrb(g % orbs(1))
+            if (.not. inColQ) cycle
+            g % colPair = [g % colPair, iP]
+            g % colOrb = [g % colOrb, k1]
+          end do
+        end do
+        g % colOffset = offset
+        offset = offset + size(g % colPair)
+
+        allocate (g % weights(size(g % colPair), size(g % orbs)))
+        do iJ = 1, size(g % orbs)
+          do iC = 1, size(g % colPair)
+            iP = g % colPair(iC)
+            g % weights(iC, iJ) = rdm2spatial(g % colOrb(iC), pairK2(iP), g % orbs(iJ), pairL2(iP))
+          end do
+        end do
+      end associate
+    end do
 
   end subroutine
 

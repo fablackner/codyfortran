@@ -60,6 +60,23 @@ module M_Grid_Ylm
       integer(I32), intent(in), optional    :: mmax_
       logical, intent(in), optional         :: withWeightsQ_
     end subroutine
+
+    !> Grid_Ylm_ToNodes on the channel matrix of one m:
+    !>   fNodes(r, q) = sum_l fM(r, l - |m| + 1) Theta_lm(x_q),  |m| <= l <= lmax,
+    !> with lmax = |m| + size(fM, 2) - 1 <= Grid_Ylm_lmaxNodes (one real GEMM).
+    module subroutine Grid_Ylm_ChannelsToNodes(fNodes, fM, m)
+      complex(R64), intent(out), contiguous, target :: fNodes(:, :)
+      complex(R64), intent(in), contiguous, target  :: fM(:, :)
+      integer(I32), intent(in)                      :: m
+    end subroutine
+
+    !> Grid_Ylm_FromNodes into the channel matrix of one m (columns l = |m| ..
+    !> |m| + size(fM, 2) - 1, no metric weights; one real GEMM).
+    module subroutine Grid_Ylm_NodesToChannels(fM, fNodes, m)
+      complex(R64), intent(out), contiguous, target :: fM(:, :)
+      complex(R64), intent(in), contiguous, target  :: fNodes(:, :)
+      integer(I32), intent(in)                      :: m
+    end subroutine
   end interface
 
   interface

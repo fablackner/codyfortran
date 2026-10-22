@@ -112,8 +112,7 @@ program P_ImagTimeMctdhf
   integratorList(1) % e % metricWeights = MetricWeights(Coeffs_nCoeffs)
 
   if (0 <= lmaxIn) call EmbedOrbitals(Orbs_orbs, lmaxIn)
-  call LowdinKeepingState(Coeffs_coeffs, Orbs_orbs)
-  call Coeffs_Normalize(Coeffs_coeffs)
+  call Reorthonormalize
 
   !==========================================
   call Say_Section("imaginary time propagation")
@@ -210,9 +209,12 @@ contains
   !> moves the orbital norms (exp(-eps dtau) per orbital) into the CI vector,
   !> and the non-linear derivative projects with 1 - |c><c|, which requires
   !> |c| = 1 (otherwise it amplifies, e.g. for Ne with eps(1s) = -50 a.u.).
+  !> Round-off admixtures of other m are removed in between (imaginary time
+  !> would amplify them, e.g. 3s into 3p).
   subroutine Reorthonormalize
 
     call LowdinKeepingState(Coeffs_coeffs, Orbs_orbs)
+    call ProjectOrbitalsOnDefiniteM(Orbs_orbs)
     call Coeffs_Normalize(Coeffs_coeffs)
 
   end subroutine

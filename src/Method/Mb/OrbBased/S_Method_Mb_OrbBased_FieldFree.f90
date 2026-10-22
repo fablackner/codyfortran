@@ -23,6 +23,10 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_FieldFree
   ! unphysical; restricting the dynamics to P = sum_{E < Ec} |u><u| (exact
   ! part on the kept vectors, P applied to the orbital derivatives) removes
   ! them as a source of stiffness.
+  !
+  ! The CPU transformations skip (orbital, m) columns that vanish in the block
+  ! of l (orbitals of definite m in a linearly polarized field fill one of
+  ! the 2 min(l, mmax) + 1 columns per orbital); they stay zero.
   !-----------------------------------------------------------------------------
 
   use, intrinsic :: iso_c_binding, only: c_ptr, c_null_ptr
@@ -65,6 +69,7 @@ contains
     logical, intent(in) :: imagTimeQ
 
     integer(I32) :: nRad, l, nCol, nK
+    integer(I32), allocatable :: cols(:)
     real(R64), allocatable :: x(:, :), y(:, :)
 
     if (.not. allocated(blockEvecs)) call BuildBlocks
@@ -76,19 +81,21 @@ contains
 
     nRad = Grid_Ylm_nRadial
 
-    !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, x, y)
+    !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, cols, x, y)
     do l = 0, Grid_Ylm_lmax
-      nCol = NColumns(l, size(orbs, 2))
+      cols = NonZeroColumns(orbs, l)
+      nCol = size(cols)
+      if (nCol .eq. 0) cycle
       nK = nKeep(l)
       allocate (x(nRad, 2 * nCol), y(nK, 2 * nCol))
 
       ! Eigenbasis coefficients U^T x, phases, back transformation U y (kept
       ! eigenvectors only, which also projects onto them)
-      call GatherBlock(x, orbs, l)
+      call GatherBlock(x, orbs, l, cols_=cols)
       call DGEMM('T', 'N', nK, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, :, l), nRad, x, nRad, 0.0_R64, y, nK)
       call ApplyPhases(y, l, dt, imagTimeQ)
       call DGEMM('N', 'N', nRad, 2 * nCol, nK, 1.0_R64, blockEvecs(:, :, l), nRad, y, nK, 0.0_R64, x, nRad)
-      call ScatterBlock(orbs, x, l)
+      call ScatterBlock(orbs, x, l, cols_=cols)
 
       deallocate (x, y)
     end do
@@ -111,6 +118,8 @@ contains
     real(R64), intent(in) :: dt
 
     integer(I32) :: nRad, nPhi, l, nCol, nK, m, k
+    integer(I32), allocatable :: cols(:)
+    logical, allocatable :: nonZeroQ(:)
     real(R64), allocatable :: x(:, :), y(:, :)
     complex(R64), allocatable :: phi(:, :), acc(:, :)
 
@@ -120,9 +129,19 @@ contains
     nPhi = size(orbsList, 3)
     orbs(:, :) = (0.0_R64, 0.0_R64)
 
-    !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, m, k, x, y, phi, acc)
+    !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, m, k, cols, nonZeroQ, x, y, phi, acc)
     do l = 0, Grid_Ylm_lmax
-      nCol = NColumns(l, size(orbs, 2))
+      ! columns that vanish in every slice
+      allocate (nonZeroQ(NColumns(l, size(orbs, 2))))
+      nonZeroQ(:) = .false.
+      do m = 0, nPhi - 1
+        cols = NonZeroColumns(orbsList(:, :, m), l)
+        nonZeroQ(cols) = .true.
+      end do
+      cols = pack([(k, k=1, size(nonZeroQ))], nonZeroQ)
+      deallocate (nonZeroQ)
+      nCol = size(cols)
+      if (nCol .eq. 0) cycle
       nK = nKeep(l)
       allocate (x(nRad, 2 * nCol), y(nK, 2 * nCol), phi(nK, 0:nPhi - 1), acc(nK, nCol))
 
@@ -132,7 +151,7 @@ contains
 
       acc(:, :) = (0.0_R64, 0.0_R64)
       do m = 0, nPhi - 1
-        call GatherBlock(x, orbsList(:, :, m), l)
+        call GatherBlock(x, orbsList(:, :, m), l, cols_=cols)
         call DGEMM('T', 'N', nK, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, :, l), nRad, x, nRad, 0.0_R64, y, nK)
         acc(:, :) = acc(:, :) + spread(phi(:, m), 2, nCol) * cmplx(y(:, 1:nCol), y(:, nCol + 1:), kind=R64)
       end do
@@ -140,7 +159,7 @@ contains
       y(:, 1:nCol) = real(acc, kind=R64)
       y(:, nCol + 1:) = aimag(acc)
       call DGEMM('N', 'N', nRad, 2 * nCol, nK, 1.0_R64, blockEvecs(:, :, l), nRad, y, nK, 0.0_R64, x, nRad)
-      call ScatterBlock(orbs, x, l)
+      call ScatterBlock(orbs, x, l, cols_=cols)
 
       deallocate (x, y, phi, acc)
     end do
@@ -298,17 +317,47 @@ contains
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Gathers w^{1/2} f_lm of all orbitals and m of the block of l: real parts
-  !> in columns 1:nCol, imaginary parts in nCol+1:2 nCol (one GEMM per
-  !> transformation).
-  subroutine GatherBlock(x, orbs, l)
+  !> Indices of the (orbital, m) columns of the block of l (order of
+  !> GatherBlock) in which orbs does not vanish.
+  function NonZeroColumns(orbs, l) result(res)
+    use M_Grid_Ylm
+
+    complex(R64), intent(in), contiguous :: orbs(:, :)
+    integer(I32), intent(in) :: l
+    integer(I32), allocatable :: res(:)
+
+    integer(I32) :: iOrb, m, mCap, iCol
+    logical, allocatable :: nonZeroQ(:)
+    complex(R64), allocatable :: fLm(:)
+
+    allocate (fLm(Grid_Ylm_nRadial), nonZeroQ(NColumns(l, size(orbs, 2))))
+    mCap = min(l, Grid_Ylm_mmax)
+
+    iCol = 0
+    do iOrb = 1, size(orbs, 2)
+      do m = -mCap, mCap
+        iCol = iCol + 1
+        call Grid_Ylm_GetLmComponent(fLm, l, m, orbs(:, iOrb))
+        nonZeroQ(iCol) = any(fLm .ne. (0.0_R64, 0.0_R64))
+      end do
+    end do
+    res = pack([(iCol, iCol=1, size(nonZeroQ))], nonZeroQ)
+
+  end function
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Gathers w^{1/2} f_lm of all orbitals and m of the block of l (or of the
+  !> columns cols_ only): real parts in columns 1:nCol, imaginary parts in
+  !> nCol+1:2 nCol (one GEMM per transformation).
+  subroutine GatherBlock(x, orbs, l, cols_)
     use M_Grid_Ylm
 
     real(R64), intent(out), contiguous :: x(:, :)
     complex(R64), intent(in), contiguous :: orbs(:, :)
     integer(I32), intent(in) :: l
+    integer(I32), intent(in), optional :: cols_(:)
 
-    integer(I32) :: iOrb, m, mCap, iCol, nCol
+    integer(I32) :: iOrb, m, mCap, iCol, jCol, nCol
     complex(R64), allocatable :: fLm(:)
 
     allocate (fLm(Grid_Ylm_nRadial))
@@ -316,12 +365,18 @@ contains
     nCol = size(x, 2) / 2
 
     iCol = 0
+    jCol = 0
     do iOrb = 1, size(orbs, 2)
       do m = -mCap, mCap
         iCol = iCol + 1
+        if (present(cols_)) then
+          if (jCol .eq. nCol) return
+          if (cols_(jCol + 1) .ne. iCol) cycle
+        end if
+        jCol = jCol + 1
         call Grid_Ylm_GetLmComponent(fLm, l, m, orbs(:, iOrb))
-        x(:, iCol) = sqrtWeights(:) * real(fLm(:), kind=R64)
-        x(:, nCol + iCol) = sqrtWeights(:) * aimag(fLm(:))
+        x(:, jCol) = sqrtWeights(:) * real(fLm(:), kind=R64)
+        x(:, nCol + jCol) = sqrtWeights(:) * aimag(fLm(:))
       end do
     end do
 
@@ -372,24 +427,27 @@ contains
     complex(R64), intent(inout), contiguous :: orbs(:, :)
 
     integer(I32) :: nRad, l, nCol, nK, nH
+    integer(I32), allocatable :: cols(:)
     real(R64), allocatable :: x(:, :), y(:, :)
 
     if (.not. allocated(blockEvecs)) call BuildBlocks
 
     nRad = Grid_Ylm_nRadial
 
-    !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, nH, x, y)
+    !$omp parallel do default(shared) schedule(dynamic) private(l, nCol, nK, nH, cols, x, y)
     do l = 0, Grid_Ylm_lmax
       nK = nKeep(l)
       nH = nRad - nK
       if (nH .eq. 0) cycle
-      nCol = NColumns(l, size(orbs, 2))
+      cols = NonZeroColumns(orbs, l)
+      nCol = size(cols)
+      if (nCol .eq. 0) cycle
       allocate (x(nRad, 2 * nCol), y(nH, 2 * nCol))
 
-      call GatherBlock(x, orbs, l)
+      call GatherBlock(x, orbs, l, cols_=cols)
       call DGEMM('T', 'N', nH, 2 * nCol, nRad, 1.0_R64, blockEvecs(:, nK + 1:, l), nRad, x, nRad, 0.0_R64, y, nH)
       call DGEMM('N', 'N', nRad, 2 * nCol, nH, -1.0_R64, blockEvecs(:, nK + 1:, l), nRad, y, nH, 1.0_R64, x, nRad)
-      call ScatterBlock(orbs, x, l)
+      call ScatterBlock(orbs, x, l, cols_=cols)
 
       deallocate (x, y)
     end do
@@ -398,15 +456,17 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Scatters w^{-1/2} x of the block of l back into the channels.
-  subroutine ScatterBlock(orbs, x, l)
+  !> Scatters w^{-1/2} x of the block of l (or of the columns cols_ only, the
+  !> others are left unchanged) back into the channels.
+  subroutine ScatterBlock(orbs, x, l, cols_)
     use M_Grid_Ylm
 
     complex(R64), intent(inout), contiguous :: orbs(:, :)
     real(R64), intent(in), contiguous :: x(:, :)
     integer(I32), intent(in) :: l
+    integer(I32), intent(in), optional :: cols_(:)
 
-    integer(I32) :: iOrb, m, mCap, iCol, nCol
+    integer(I32) :: iOrb, m, mCap, iCol, jCol, nCol
     complex(R64), allocatable :: fLm(:)
 
     allocate (fLm(Grid_Ylm_nRadial))
@@ -414,10 +474,16 @@ contains
     nCol = size(x, 2) / 2
 
     iCol = 0
+    jCol = 0
     do iOrb = 1, size(orbs, 2)
       do m = -mCap, mCap
         iCol = iCol + 1
-        fLm(:) = cmplx(x(:, iCol), x(:, nCol + iCol), kind=R64) / sqrtWeights(:)
+        if (present(cols_)) then
+          if (jCol .eq. nCol) return
+          if (cols_(jCol + 1) .ne. iCol) cycle
+        end if
+        jCol = jCol + 1
+        fLm(:) = cmplx(x(:, jCol), x(:, nCol + jCol), kind=R64) / sqrtWeights(:)
         call Grid_Ylm_SetLmComponent(orbs(:, iOrb), l, m, fLm)
       end do
     end do

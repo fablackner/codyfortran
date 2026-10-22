@@ -488,26 +488,18 @@ contains
     if (present(mmax_)) mmax = mmax_
     mAbs = abs(m)
 
-    if (lmax > Grid_Ylm_lmaxNodes) error stop "Grid_Ylm_ToNodes: lmax exceeds the quadrature tables"
-    if (mAbs > min(Grid_Ylm_mmaxNodes, mmax)) error stop "Grid_Ylm_ToNodes: |m| exceeds the quadrature tables or the layout"
+    if (mAbs > mmax) error stop "Grid_Ylm_ToNodes: |m| exceeds the layout"
 
     nRad = Grid_Ylm_nRadial
 
-    if (mAbs > lmax) then
-      fNodes(:, :) = (0.0_R64, 0.0_R64)
-      return
-    end if
-
     ! Channels (l, m), l = |m| .. lmax, as a matrix fM(r, l)
-    allocate (fM(nRad, mAbs:lmax))
+    allocate (fM(nRad, max(0, lmax - mAbs + 1)))
     do l = mAbs, lmax
       i = BaseIndex(l, m, mmax)
-      fM(:, l) = f(i:i + nRad - 1)
+      fM(:, l - mAbs + 1) = f(i:i + nRad - 1)
     end do
 
-    fNodes(:, :) = cmplx(matmul(real(fM), quadY(mAbs:lmax, :, mAbs)), &
-                         matmul(aimag(fM), quadY(mAbs:lmax, :, mAbs)), kind=R64)
-    if (m < 0 .and. mod(mAbs, 2) .eq. 1) fNodes(:, :) = -fNodes(:, :)
+    call Grid_Ylm_ChannelsToNodes(fNodes, fM, m)
 
   end subroutine
 
@@ -531,25 +523,87 @@ contains
     if (present(mmax_)) mmax = mmax_
     mAbs = abs(m)
 
-    if (lmax > Grid_Ylm_lmaxNodes) error stop "Grid_Ylm_FromNodes: lmax exceeds the quadrature tables"
-    if (mAbs > min(Grid_Ylm_mmaxNodes, mmax)) error stop "Grid_Ylm_FromNodes: |m| exceeds the quadrature tables or the layout"
+    if (mAbs > mmax) error stop "Grid_Ylm_FromNodes: |m| exceeds the layout"
 
     nRad = Grid_Ylm_nRadial
 
     f = (0.0_R64, 0.0_R64)
     if (mAbs > lmax) return
 
-    fM = cmplx(matmul(real(fNodes), quadWY(:, mAbs:lmax, mAbs)), &
-               matmul(aimag(fNodes), quadWY(:, mAbs:lmax, mAbs)), kind=R64)
-    if (m < 0 .and. mod(mAbs, 2) .eq. 1) fM = -fM
+    allocate (fM(nRad, lmax - mAbs + 1))
+    call Grid_Ylm_NodesToChannels(fM, fNodes, m)
+
+    ! Metric weights if requested (complex on c-product back-ends)
+    if (withWeightsQ) fM(:, :) = fM(:, :) * spread(Grid_Ylm_radialMetricWeights(:), 2, size(fM, 2))
 
     do l = mAbs, lmax
       i = BaseIndex(l, m, mmax)
       f(i:i + nRad - 1) = fM(:, l - mAbs + 1)
     end do
 
-    ! Apply metric weights if requested (complex on c-product back-ends)
-    if (withWeightsQ) call ApplyRadialMetricWeights(f, Grid_Ylm_NChannels(lmax, mmax))
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> The real GEMMs act on the complex arrays viewed as real (2 nRad, ...)
+  !> matrices: the tables are real, so real and imaginary parts transform
+  !> alike and stay interleaved.
+  module subroutine Grid_Ylm_ChannelsToNodes(fNodes, fM, m)
+    use, intrinsic :: iso_c_binding, only: c_loc, c_f_pointer
+    use M_Utils_BlasLib, only: DGEMM
+
+    complex(R64), intent(out), contiguous, target :: fNodes(:, :)
+    complex(R64), intent(in), contiguous, target  :: fM(:, :)
+    integer(I32), intent(in)                      :: m
+
+    real(R64), contiguous, pointer :: fNodesR(:, :), fMR(:, :)
+    integer(I32) :: nRad2, nL, mAbs
+
+    mAbs = abs(m)
+    nL = size(fM, 2)
+    nRad2 = 2 * size(fNodes, 1)
+
+    if (mAbs + nL - 1 > Grid_Ylm_lmaxNodes) error stop "Grid_Ylm_ChannelsToNodes: lmax exceeds the quadrature tables"
+    if (mAbs > Grid_Ylm_mmaxNodes) error stop "Grid_Ylm_ChannelsToNodes: |m| exceeds the quadrature tables"
+
+    if (nL .eq. 0) then
+      fNodes(:, :) = (0.0_R64, 0.0_R64)
+      return
+    end if
+
+    call c_f_pointer(c_loc(fNodes), fNodesR, [nRad2, Grid_Ylm_nNodes])
+    call c_f_pointer(c_loc(fM), fMR, [nRad2, nL])
+    call DGEMM('N', 'N', nRad2, Grid_Ylm_nNodes, nL, 1.0_R64, fMR, nRad2, quadY(mAbs, 1, mAbs), &
+               Grid_Ylm_lmaxNodes + 1, 0.0_R64, fNodesR, nRad2)
+    if (m < 0 .and. mod(mAbs, 2) .eq. 1) fNodes(:, :) = -fNodes(:, :)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Grid_Ylm_NodesToChannels(fM, fNodes, m)
+    use, intrinsic :: iso_c_binding, only: c_loc, c_f_pointer
+    use M_Utils_BlasLib, only: DGEMM
+
+    complex(R64), intent(out), contiguous, target :: fM(:, :)
+    complex(R64), intent(in), contiguous, target  :: fNodes(:, :)
+    integer(I32), intent(in)                      :: m
+
+    real(R64), contiguous, pointer :: fNodesR(:, :), fMR(:, :)
+    integer(I32) :: nRad2, nL, mAbs
+
+    mAbs = abs(m)
+    nL = size(fM, 2)
+    nRad2 = 2 * size(fNodes, 1)
+
+    if (mAbs + nL - 1 > Grid_Ylm_lmaxNodes) error stop "Grid_Ylm_NodesToChannels: lmax exceeds the quadrature tables"
+    if (mAbs > Grid_Ylm_mmaxNodes) error stop "Grid_Ylm_NodesToChannels: |m| exceeds the quadrature tables"
+
+    if (nL .eq. 0) return
+
+    call c_f_pointer(c_loc(fNodes), fNodesR, [nRad2, Grid_Ylm_nNodes])
+    call c_f_pointer(c_loc(fM), fMR, [nRad2, nL])
+    call DGEMM('N', 'N', nRad2, nL, Grid_Ylm_nNodes, 1.0_R64, fNodesR, nRad2, quadWY(1, mAbs, mAbs), &
+               Grid_Ylm_nNodes, 0.0_R64, fMR, nRad2)
+    if (m < 0 .and. mod(mAbs, 2) .eq. 1) fM(:, :) = -fM(:, :)
 
   end subroutine
 

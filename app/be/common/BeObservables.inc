@@ -1,5 +1,6 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-! Observables of the beryllium laser programs (included after `contains`).
+! Observables of the beryllium laser programs (included after `contains`):
+! WriteLaserObservables, TruncateLaserObservables (continuation of a run).
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -72,5 +73,51 @@ subroutine WriteLaserObservables(time, charge, energy, newFilesQ)
   write (*, '(A,F9.3,A,ES12.4,A,ES14.6,A,ES14.6,A,F9.6,A,F18.10)') " t =", time, "  E =", &
     SysGauge_Ylm_Velocity_FieldAmplitude(time), "  <z> =", dipole, "  a =", acceleration, &
     "  N =", nElectrons, "  energy =", energy
+
+end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Remove the lines with time > tCut from observables.dat and natocc.dat (if
+!> present) before a run is continued from a checkpoint; comment lines stay.
+subroutine TruncateLaserObservables(tCut)
+  real(R64), intent(in) :: tCut
+
+  call TruncateTimeSeries("observables.dat", tCut)
+  call TruncateTimeSeries("natocc.dat", tCut)
+
+end subroutine
+
+!> Keep the lines of a time series file up to time tCut (first column).
+subroutine TruncateTimeSeries(filename, tCut)
+  character(len=*), intent(in) :: filename
+  real(R64), intent(in) :: tCut
+
+  character(len=4096), allocatable :: lines(:)
+  character(len=4096) :: line
+  real(R64) :: t
+  integer(I32) :: io, ios, i
+  logical :: existsQ
+
+  inquire (file=filename, exist=existsQ)
+  if (.not. existsQ) return
+
+  allocate (lines(0))
+  open (newunit=io, file=filename, status="old", action="read")
+  do
+    read (io, '(A)', iostat=ios) line
+    if (ios .ne. 0) exit
+    if (line(1:1) .ne. "#") then
+      read (line, *) t
+      if (t > tCut) exit
+    end if
+    lines = [lines, line]
+  end do
+  close (io)
+
+  open (newunit=io, file=filename, status="replace", action="write")
+  do i = 1, size(lines)
+    write (io, '(A)') trim(lines(i))
+  end do
+  close (io)
 
 end subroutine

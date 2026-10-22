@@ -9,6 +9,9 @@
 !                         many-body state is unchanged
 ! - LowdinKeepingState:   symmetric orthonormalization of the orbitals with the
 !                         compensating CI transformation
+! - ProjectOrbitalsOnDefiniteM:
+!                         remove round-off admixtures of other m from orbitals
+!                         of definite m
 ! - MetricWeights:        FEDVR metric of a packed state (SIL integrator)
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -145,6 +148,36 @@ subroutine LowdinKeepingState(coeffs, orbs)
   sInvSqrt = matmul(evecs, matmul(sInvSqrt, conjg(transpose(evecs))))
 
   call TransformOrbitalsKeepingState(coeffs, orbs, sInvSqrt)
+
+end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Zero the channels of other m in every orbital whose dominant m holds all but
+!> a round-off fraction (1e-12, the tolerance of the definite-m correlation
+!> operator) of its squared norm; orbitals that mix m are left unchanged. In a
+!> linearly polarized field every operator conserves the m of such orbitals,
+!> but round-off admixtures (seeded by the Loewdin step, amplified by
+!> imaginary time) are spread to all orbitals by the orbital projector and
+!> keep the exact field-free part from skipping the empty channels.
+subroutine ProjectOrbitalsOnDefiniteM(orbs)
+  use M_Grid_Ylm
+
+  complex(R64), intent(inout), contiguous :: orbs(:, :)
+
+  real(R64), parameter :: roundOff = 1e-12_R64
+
+  real(R64) :: normM(-Grid_Ylm_mmax:Grid_Ylm_mmax)
+  integer(I32) :: iOrb, i, m
+
+  do iOrb = 1, size(orbs, 2)
+    normM(:) = 0.0_R64
+    do i = 1, size(orbs, 1)
+      normM(Grid_Ylm_mCoord(i)) = normM(Grid_Ylm_mCoord(i)) + Grid_Ylm_weights(i) * abs(orbs(i, iOrb))**2
+    end do
+    m = maxloc(normM, 1) - Grid_Ylm_mmax - 1
+    if (sum(normM) - normM(m) > roundOff * sum(normM)) cycle
+    where (Grid_Ylm_mCoord .ne. m) orbs(:, iOrb) = (0.0_R64, 0.0_R64)
+  end do
 
 end subroutine
 
