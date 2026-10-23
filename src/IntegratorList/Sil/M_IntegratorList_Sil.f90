@@ -38,10 +38,15 @@ module M_IntegratorList_Sil
     real(R64) :: tolerance = 1.0e-10_R64
     !> Maximum number of step-halving retries per sub-step.
     integer(I32) :: maxRestarts = 8
+    !> Krylov basis (nState x min(krylovDim, nState)) and work vectors,
+    !> allocated on the first Integrate and kept between calls.
+    complex(R64), allocatable :: basis(:, :), w(:), deriv(:), wMetric(:)
+    !> Unit weights for the Euclidean product (no metricWeights assigned).
+    real(R64), allocatable :: unitWeights(:)
   contains
     !> Read SIL-specific parameters from configuration and capture dependencies.
     procedure :: Fabricate
-    !> Allocate working memory and precompute constants.
+    !> Announce setup (the workspace is allocated in Integrate).
     procedure :: Setup
     !> Advance the state using a short Krylov/Lanczos exponential action.
     procedure :: Integrate

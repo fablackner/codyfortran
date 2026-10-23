@@ -181,7 +181,14 @@ classical Gram–Schmidt pass done as two `ZGEMV` sweeps (B^H W w, then
 w − B h). After the three-term recurrence the projections are at round-off
 level, so this matches modified Gram–Schmidt while reading the basis twice
 instead of once per basis vector; it is the dominant cost of SIL besides
-the operator applications.
+the operator applications. The other vector work per Lanczos vector is two
+fused OpenMP passes (recurrence, metric weighting) and one norm.
+
+The Krylov basis (`min(krylovDim, nState)` state vectors, e.g. ~0.5 GB for
+the Ne 9-orbital run) and the work vectors are allocated on the first
+`Integrate` and kept by the element, so an element is not re-entrant. The
+state is updated after every sub-step, so `TimeDerivative` must depend on
+its argument only, not on the integrated state through module data.
 
 With `"imagTimeQ": true` the same Lanczos basis gives the imaginary-time
 propagator exp(−Δτ Ĥ)ψ (the callback keeps the real-time convention

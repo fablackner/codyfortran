@@ -113,12 +113,19 @@ contains
   !> estimate drops below tolerance. If the maximum Krylov dimension is
   !> insufficient, the sub-step is halved and retried.
   !>
+  !> The Krylov basis and the work vectors persist in the integrator element
+  !> (reallocated only when the state size changes). The vector operations
+  !> are fused OpenMP loops, the projections and the final combination BLAS
+  !> calls, so the cost per Lanczos vector beyond the TimeDerivative call is
+  !> a few passes over the state. TimeDerivative must depend on its argument
+  !> only: the state is updated after every sub-step.
+  !>
   !> @param[inout] this   The SIL integrator instance.
   !> @param[inout] state  Complex state vector (modified in-place).
   !> @param[in]    t0     Starting time.
   !> @param[in]    t1     Target ending time.
   module subroutine Integrate(this, state, t0, t1)
-    use M_Utils_LapackLib, only: LapackLib_DiagonalizeGeneric
+    use M_Utils_BlasLib, only: ZGEMV
 
     class(T_IntegratorList_E_Sil), intent(inout) :: this
     complex(R64), intent(inout), contiguous :: state(:)
@@ -126,161 +133,125 @@ contains
     real(R64), intent(in) :: t1
 
     real(R64), parameter :: zeroThreshold = 1.0e-14_R64
+    ! states below this size are not worth the OpenMP fork/join
+    integer, parameter :: minParallelSize = 8192
+    complex(R64), parameter :: one = (1.0_R64, 0.0_R64)
+    complex(R64), parameter :: zero = (0.0_R64, 0.0_R64)
 
-    complex(R64), allocatable :: workState(:), trialState(:)
-    complex(R64), allocatable, target :: basis(:, :)
-    complex(R64), allocatable :: deriv(:), w(:), phi(:), wMetric(:), proj(:)
+    complex(R64), allocatable :: phi(:)
     real(R64), allocatable :: alpha(:), beta(:)
-    real(R64) :: dtRemaining, dtStep, tCurrent, errorEstimate
-    integer :: nState, maxDim, restartCount
-    logical :: stepConverged
+    integer :: nState, maxDim
 
     if (abs(t1 - t0) <= zeroThreshold) return
 
     nState = size(state)
     maxDim = max(1, min(this % krylovDim, nState))
 
+    if (allocated(this % basis)) then
+      if (size(this % basis, 1) .ne. nState .or. size(this % basis, 2) .ne. maxDim) &
+        deallocate (this % basis, this % w, this % deriv, this % wMetric)
+    end if
+    if (.not. allocated(this % basis)) &
+      allocate (this % basis(nState, maxDim), this % w(nState), this % deriv(nState), this % wMetric(nState))
+
+    allocate (phi(maxDim), alpha(maxDim), beta(maxDim))
+
     if (allocated(this % metricWeights)) then
       if (size(this % metricWeights) .ne. nState) then
         error stop "IntegratorList_Sil: metricWeights size does not match state size"
       end if
-    end if
-
-    allocate (workState, source=state)
-    allocate (trialState, mold=state)
-    allocate (basis(nState, maxDim))
-    allocate (deriv(nState))
-    allocate (w(nState))
-    allocate (wMetric(nState))
-    allocate (proj(maxDim))
-    allocate (phi(maxDim))
-    allocate (alpha(maxDim))
-    allocate (beta(maxDim))
-
-    tCurrent = t0
-    dtRemaining = t1 - t0
-
-    do while (abs(dtRemaining) > zeroThreshold)
-      dtStep = dtRemaining
-      restartCount = 0
-
-      do
-        call PerformLanczosStep(trialState, errorEstimate, stepConverged, workState, tCurrent, dtStep)
-        if (stepConverged) exit
-        if (abs(dtStep) <= zeroThreshold .or. restartCount >= this % maxRestarts) exit
-        dtStep = 0.5_R64 * dtStep
-        restartCount = restartCount + 1
-      end do
-
-      if (.not. stepConverged) then
-        write (*, '(A,ES13.6,A,ES13.6)') "Warning: Short iterative Lanczos step starting at t=", tCurrent, &
-          " exceeded tolerance. Estimated error=", errorEstimate
+      call Propagate(this % metricWeights)
+    else
+      if (allocated(this % unitWeights)) then
+        if (size(this % unitWeights) .ne. nState) deallocate (this % unitWeights)
       end if
-
-      workState = trialState
-      tCurrent = tCurrent + dtStep
-      dtRemaining = dtRemaining - dtStep
-    end do
-
-    state = workState
+      if (.not. allocated(this % unitWeights)) allocate (this % unitWeights(nState), source=1.0_R64)
+      call Propagate(this % unitWeights)
+    end if
 
   contains
 
-    !> Inner product in the metric selected for this integrator: the
-    !> weighted product sum(conjg(a) * w * b) if `metricWeights` is
-    !> allocated, the Euclidean product otherwise.
-    function MetricDot(a, b) result(res)
-      complex(R64), intent(in), contiguous :: a(:)
-      complex(R64), intent(in), contiguous :: b(:)
-      complex(R64) :: res
+    !> Sub-step loop from t0 to t1 in the metric with weights wts.
+    subroutine Propagate(wts)
+      real(R64), intent(in), contiguous :: wts(:)
 
-      if (allocated(this % metricWeights)) then
-        res = sum(conjg(a(:)) * this % metricWeights(:) * b(:))
-      else
-        res = dot_product(a, b)
-      end if
+      real(R64) :: dtRemaining, dtStep, tCurrent, errorEstimate, stateNorm
+      integer :: mDim, restartCount
+      logical :: stepConverged
 
-    end function
+      tCurrent = t0
+      dtRemaining = t1 - t0
 
-    !> Project v onto the orthogonal complement of basis(:, 1:nBasis) in the
-    !> integrator metric: v <- v - B (B^H W v) with one classical Gram-Schmidt
-    !> pass.
-    subroutine ReorthogonalizeOnBasis(v, nBasis)
-      use M_Utils_BlasLib, only: ZGEMV
+      do while (abs(dtRemaining) > zeroThreshold)
+        dtStep = dtRemaining
+        restartCount = 0
 
-      complex(R64), intent(inout), contiguous :: v(:)
-      integer, intent(in) :: nBasis
+        stateNorm = sqrt(MetricNormSq(state, wts))
+        if (stateNorm <= zeroThreshold) return
+        call ScaleInto(this % basis(:, 1), state, 1.0_R64 / stateNorm)
 
-      complex(R64), parameter :: one = (1.0_R64, 0.0_R64)
-      complex(R64), parameter :: zero = (0.0_R64, 0.0_R64)
+        do
+          call PerformLanczosStep(mDim, errorEstimate, stepConverged, tCurrent, dtStep, wts)
+          if (stepConverged) exit
+          if (abs(dtStep) <= zeroThreshold .or. restartCount >= this % maxRestarts) exit
+          dtStep = 0.5_R64 * dtStep
+          restartCount = restartCount + 1
+        end do
 
-      if (allocated(this % metricWeights)) then
-        wMetric(:) = this % metricWeights(:) * v(:)
-      else
-        wMetric(:) = v(:)
-      end if
+        if (.not. stepConverged) then
+          write (*, '(A,ES13.6,A,ES13.6)') "Warning: Short iterative Lanczos step starting at t=", tCurrent, &
+            " exceeded tolerance. Estimated error=", errorEstimate
+        end if
 
-      call ZGEMV('C', nState, nBasis, one, basis, nState, wMetric, 1, zero, proj, 1)
-      call ZGEMV('N', nState, nBasis, -one, basis, nState, proj, 1, one, v, 1)
+        ! state = ||state|| V_m phi
+        call ZGEMV('N', nState, mDim, cmplx(stateNorm, 0.0_R64, kind=R64), this % basis, nState, phi, 1, zero, state, 1)
+
+        tCurrent = tCurrent + dtStep
+        dtRemaining = dtRemaining - dtStep
+      end do
 
     end subroutine
 
-    !> Perform one Lanczos sub-step: grow the Krylov basis until the error
-    !> estimate is below tolerance, then apply the exponential in the
-    !> reduced basis.
+    !> Perform one Lanczos sub-step from v_1 = basis(:, 1): grow the Krylov
+    !> basis until the error estimate is below tolerance and leave the
+    !> propagated coefficients in phi(1:mDimOut).
     !>
-    !> @param[out] stateOut   Output state after propagation.
+    !> @param[out] mDimOut    Krylov dimension used.
     !> @param[out] errEst     Estimated truncation error.
     !> @param[out] converged  True if the error is below tolerance.
-    !> @param[in]  stateIn    Input state vector.
     !> @param[in]  tBase      Sub-step starting time.
     !> @param[in]  dt         Time step to propagate.
-    subroutine PerformLanczosStep(stateOut, errEst, converged, stateIn, tBase, dt)
-      complex(R64), intent(out), contiguous :: stateOut(:)
+    !> @param[in]  wts        Metric weights.
+    subroutine PerformLanczosStep(mDimOut, errEst, converged, tBase, dt, wts)
+      integer, intent(out) :: mDimOut
       real(R64), intent(out) :: errEst
       logical, intent(out) :: converged
-      complex(R64), intent(in), contiguous :: stateIn(:)
       real(R64), intent(in) :: tBase
       real(R64), intent(in) :: dt
+      real(R64), intent(in), contiguous :: wts(:)
 
-      complex(R64), parameter :: eye = (0.0_R64, 1.0_R64)
-
-      complex(R64), pointer :: vCurrent(:)
-      real(R64) :: stateNorm, timeEval
-      integer :: j, mDim
+      real(R64) :: timeEval, betaPrev
+      integer :: j
       logical :: breakdown
 
-      stateNorm = sqrt(real(MetricDot(stateIn, stateIn), kind=R64))
-      if (stateNorm <= zeroThreshold) then
-        stateOut = stateIn
-        errEst = 0.0_R64
-        converged = .true.
-        return
-      end if
-
-      basis(:, 1) = stateIn / stateNorm
       timeEval = tBase + 0.5_R64 * dt
-
-      mDim = maxDim
+      mDimOut = maxDim
 
       do j = 1, maxDim
-        vCurrent(1:nState) => basis(:, j)
-
-        ! w = Ĥ v_j (TimeDerivative supplies −i Ĥ v_j)
-        call this % TimeDerivative(deriv, vCurrent, timeEval)
-        w(:) = eye * deriv(:)
-
-        if (j > 1) w(:) = w(:) - beta(j - 1) * basis(:, j - 1)
-        alpha(j) = real(MetricDot(vCurrent, w), kind=R64)
-        w(:) = w(:) - alpha(j) * vCurrent(:)
+        ! w = Ĥ v_j - beta_(j-1) v_(j-1) (TimeDerivative supplies −i Ĥ v_j)
+        call this % TimeDerivative(this % deriv, this % basis(:, j), timeEval)
+        betaPrev = 0.0_R64
+        if (j > 1) betaPrev = beta(j - 1)
+        alpha(j) = RecurrenceStep(j, betaPrev, wts)
 
         ! full reorthogonalization against all previous Lanczos vectors; after
         ! the three-term recurrence w is orthogonal up to round-off, so one
         ! classical Gram-Schmidt pass (two BLAS sweeps over the basis instead
         ! of j sweeps) is as accurate as the modified variant
-        call ReorthogonalizeOnBasis(w, j)
+        call ZGEMV('C', nState, j, one, this % basis, nState, this % wMetric, 1, zero, phi, 1)
+        call ZGEMV('N', nState, j, -one, this % basis, nState, phi, 1, one, this % w, 1)
 
-        beta(j) = sqrt(real(MetricDot(w, w), kind=R64))
+        beta(j) = sqrt(MetricNormSq(this % w, wts))
         breakdown = beta(j) <= zeroThreshold
 
         call EvaluateExpInSubspace(phi(1:j), errEst, dt, j)
@@ -288,14 +259,74 @@ contains
         converged = errEst <= this % tolerance
 
         if (converged .or. breakdown .or. j .eq. maxDim) then
-          mDim = j
+          mDimOut = j
           exit
         end if
 
-        basis(:, j + 1) = w(:) / beta(j)
+        call ScaleInto(this % basis(:, j + 1), this % w, 1.0_R64 / beta(j))
       end do
 
-      stateOut(:) = stateNorm * matmul(basis(:, 1:mDim), phi(1:mDim))
+    end subroutine
+
+    !> One fused pass for the three-term recurrence of Lanczos vector j:
+    !> w = i deriv - betaPrev v_(j-1), alpha = Re<v_j|w>, w = w - alpha v_j,
+    !> and wMetric = W w for the reorthogonalization (W the metric weights).
+    function RecurrenceStep(j, betaPrev, wts) result(alphaJ)
+      integer, intent(in) :: j
+      real(R64), intent(in) :: betaPrev
+      real(R64), intent(in), contiguous :: wts(:)
+      real(R64) :: alphaJ
+
+      integer :: jPrev, i
+
+      jPrev = max(j - 1, 1)
+      alphaJ = 0.0_R64
+      !$omp parallel do default(shared) private(i) reduction(+:alphaJ) schedule(static) if (nState >= minParallelSize)
+      do i = 1, nState
+        this % w(i) = cmplx(-aimag(this % deriv(i)), real(this % deriv(i), kind=R64), kind=R64) &
+                      - betaPrev * this % basis(i, jPrev)
+        alphaJ = alphaJ + wts(i) * real(conjg(this % basis(i, j)) * this % w(i), kind=R64)
+      end do
+      !$omp end parallel do
+      !$omp parallel do default(shared) private(i) schedule(static) if (nState >= minParallelSize)
+      do i = 1, nState
+        this % w(i) = this % w(i) - alphaJ * this % basis(i, j)
+        this % wMetric(i) = wts(i) * this % w(i)
+      end do
+      !$omp end parallel do
+
+    end function
+
+    !> Squared norm of v in the metric with weights wts.
+    function MetricNormSq(v, wts) result(res)
+      complex(R64), intent(in), contiguous :: v(:)
+      real(R64), intent(in), contiguous :: wts(:)
+      real(R64) :: res
+
+      integer :: i
+
+      res = 0.0_R64
+      !$omp parallel do default(shared) private(i) reduction(+:res) schedule(static) if (nState >= minParallelSize)
+      do i = 1, nState
+        res = res + wts(i) * (real(v(i), kind=R64)**2 + aimag(v(i))**2)
+      end do
+      !$omp end parallel do
+
+    end function
+
+    !> y = s x.
+    subroutine ScaleInto(y, x, s)
+      complex(R64), intent(out), contiguous :: y(:)
+      complex(R64), intent(in), contiguous :: x(:)
+      real(R64), intent(in) :: s
+
+      integer :: i
+
+      !$omp parallel do default(shared) private(i) schedule(static) if (nState >= minParallelSize)
+      do i = 1, nState
+        y(i) = s * x(i)
+      end do
+      !$omp end parallel do
 
     end subroutine
 
@@ -305,8 +336,10 @@ contains
     !> @param[out] phiOut  Propagated coefficients in the Krylov basis.
     !> @param[out] errEst  Residual-based truncation error estimate.
     !> @param[in]  dt      Time step to propagate.
-    !> @param[in]  mDim    Current Krylov subspace dimension.
+    !> @param[in]  mDim Current Krylov subspace dimension.
     subroutine EvaluateExpInSubspace(phiOut, errEst, dt, mDim)
+      use M_Utils_LapackLib, only: LapackLib_DiagonalizeGeneric
+
       complex(R64), intent(out) :: phiOut(:)
       real(R64), intent(out) :: errEst
       real(R64), intent(in) :: dt
