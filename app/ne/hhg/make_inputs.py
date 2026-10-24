@@ -34,6 +34,9 @@ PRODUCTION = {
     "nLocals": 20,
     "absorberOnset": 120.0,
     "absorberOrder": 4,
+    # re-orthonormalize the orbitals after every mask; the absorbed norm moves
+    # into the CI vector (N_box = 10 <Psi|Psi>, src/Absorber/A_Absorber.md)
+    "absorberKeepOrthonormal": True,
     # angular grid: l <= lmax, |m| <= 1 (m of every orbital is conserved)
     "lmax": 40,
     # the ground-state orbitals keep a pure l, so lmax = 1 is exact for stage A
@@ -42,9 +45,12 @@ PRODUCTION = {
     "orbitals": [(1, 0, 0), (2, 0, 0), (2, 1, -1), (2, 1, 0), (2, 1, 1),
                  (3, 0, 0), (3, 1, -1), (3, 1, 0), (3, 1, 1)],
     "orbitalCharge": 8.0,
-    # time stepping: dt = outputStep / nTimeSteps = 0.0025
-    "outputStep": 0.2,
-    "nTimeSteps": 80,
+    # time stepping: dt = outputStep / nTimeSteps = 0.0025; the output every
+    # 0.05 a.u. resolves the dipole acceleration (dominated by the core
+    # region) up to harmonic pi / (0.05 omega) ~ 1100, so faster components
+    # cannot alias into the plateau
+    "outputStep": 0.05,
+    "nTimeSteps": 20,
     # checkpoint (orbitals, CI vector) every 800 steps
     "saveStep": 2.0,
     "postPulseTime": 0.0,
@@ -152,7 +158,8 @@ def laser(p, pulse):
     d["coeffsInit"] = {"load": {}}
     d.update(split_step())
     d["propagator"] = propagator(p)
-    d["absorber"] = {"ylm": {"cosinus": {"onset": p["absorberOnset"],
+    d["absorber"] = {"keepOrthonormalQ": p["absorberKeepOrthonormal"],
+                     "ylm": {"cosinus": {"onset": p["absorberOnset"],
                                          "order": p["absorberOrder"]}}}
     duration = 2.0 * math.pi * pulse["nCycles"] / OMEGA
     end = math.ceil((duration + p["postPulseTime"]) / p["outputStep"]) * p["outputStep"]

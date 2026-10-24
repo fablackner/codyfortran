@@ -13,6 +13,7 @@ cody build app
 cd app/ne/hhg
 python3 make_inputs.py                  # inputs/stageA.json, stageB.json, mctdhf_strong2c.json
 OMP_NUM_THREADS=4 ./run.sh inputs runs  # or e.g. ./run.sh inputs runs mctdhf_strong2c
+cd runs/mctdhf_strong2c && python3 ../../hhg_spectrum.py observables.dat  # hhg.dat
 ```
 
 | step | what it does |
@@ -26,9 +27,10 @@ OMP_NUM_THREADS=4 ./run.sh inputs runs  # or e.g. ./run.sh inputs runs mctdhf_st
 | | |
 |---|---|
 | pulse | F(t) = F₀ cos(ωt) sin²(ωt/4), ω = 0.057, F₀ = 0.1194 (5×10¹⁴ W/cm², below the barrier-suppression intensity 8.6×10¹⁴), velocity gauge; quiver radius 37 a.u., cutoff Ip + 3.17 Up = 4.3 a.u. (harmonic 75) |
-| radial grid | FEDVR, 40 elements × 20 points, rmax = 160 a.u. (761 points); cos^¼ absorber from 120 a.u. |
+| radial grid | FEDVR, 40 elements × 20 points, rmax = 160 a.u. (761 points); cos^¼ absorber from 120 a.u. with `keepOrthonormalQ`: the orbitals stay orthonormal and the absorbed norm moves into the CI vector, so N_box = 10 ⟨Ψ|Ψ⟩ and 1 − N_box/10 is the probability that an electron was absorbed (`src/Absorber/A_Absorber.md`) |
 | angular grid | lmax = 40, \|m\| ≤ 1 (`grid.ylm.mmax`; the m of every orbital is conserved) |
 | propagation | split step, exact field-free h0 with spectral cut 1000 a.u. and Strang composition, RK4 for the interaction, dt = 0.0025 (the fastest accurate MCTDHF setup of the Be benchmark, `app/be/README.md`) |
+| output | every 0.05 a.u. (20 steps): resolves the dipole acceleration, which is dominated by the core region, up to harmonic ~1100; with the earlier 0.2 a.u. the acceleration form flattened at ~1e-7 above H95 and rose to ~1e-6 near H200 while the length form fell to ~1e-10 (most likely aliasing); checkpoints every 2 a.u. |
 | ground state | dτ from 0.02 down to 0.001, non-linear sub-steps ≤ 0.002 |
 
 Radial grid: the exactly diagonalized hydrogenic Ne 1s eigenvalue is −50.0000
