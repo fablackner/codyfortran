@@ -1,0 +1,168 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "mmax": 1,
+            "rmin": 0.0,
+            "rmax": 160.0,
+            "fedvr": {
+                "nElements": 40,
+                "nLocals": 20
+            }
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [
+                    1.0,
+                    1.0
+                ],
+                "fedvr": {}
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 10.0,
+                "stdImpl": {}
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "blockEq": {}
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [
+                5,
+                5
+            ],
+            "bodyStatistics": [
+                "f",
+                "f"
+            ],
+            "orbBased": {
+                "nOrbs": [
+                    9,
+                    9
+                ],
+                "mOfOrbs": [
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    -1,
+                    0,
+                    1
+                ],
+                "mctdhx": {},
+                "exactFieldFreeQ": true,
+                "exactFieldFreeCut": 1000.0
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "ylm": {
+            "hydrogenLike": {
+                "charge": 8.0,
+                "n": [
+                    1,
+                    2,
+                    2,
+                    2,
+                    2,
+                    3,
+                    3,
+                    3,
+                    3
+                ],
+                "l": [
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    0,
+                    1,
+                    1,
+                    1
+                ],
+                "m": [
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    -1,
+                    0,
+                    1
+                ]
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2
+            }
+        }
+    },
+    "coeffs": {
+        "generic": {
+            "totalM": 0
+        }
+    },
+    "coeffsInit": {
+        "unary": {}
+    },
+    "integratorList": {
+        "sil1": {
+            "krylovDim": 40,
+            "tolerance": 1e-12,
+            "maxRestarts": 10,
+            "imagTimeQ": true
+        },
+        "rk2": {
+            "o4Expl": {}
+        }
+    },
+    "program": {
+        "lmaxIn": -1,
+        "dtau": 0.02,
+        "dtauMin": 0.001,
+        "dtauFactor": 0.5,
+        "dtauSwitch": 1e-08,
+        "convThresh": 1e-11,
+        "nStepsCheck": 50,
+        "maxChecks": 4000,
+        "dtauNonLinMax": 0.002
+    }
+}
