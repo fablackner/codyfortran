@@ -113,6 +113,7 @@ program P_LaserTd2rdm
       call Propagator_Propagate(Method_state, time, time + timeStep)
       time = time + timeStep
       call Absorber_ApplyAbsorber(Orbs_orbs)
+      if (Absorber_keepOrthonormalQ) call Method_Mb_OrbBased_OrthonormalizeKeepingState(Method_state)
       ! h2 of the current orbitals (Method_GetEnergy fills it only at output steps)
       if (Purification_usesH2Q) call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, Orbs_orbs, time)
       call Purification_PurifyTwoRdmState(TwoRdm_twoRdmState, Method_Mb_OrbBased_h2)

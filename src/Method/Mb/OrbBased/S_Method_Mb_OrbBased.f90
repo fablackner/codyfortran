@@ -142,6 +142,7 @@ contains
     Method_Mb_OrbBased_ApplyCorrelationOp => ApplyCorrelationOp
     Method_Mb_OrbBased_ApplyHartreeFockOp => ApplyHartreeFockOp
     Method_Mb_OrbBased_ApplySingleBodyOp => ApplySingleBodyOp
+    Method_Mb_OrbBased_OrthonormalizeKeepingState => OrthonormalizeKeepingStateUnsupported
 
     ! Declared m: correlation operator and h2 by the definite-m node quadrature
     ylmNodesQ = .false.
@@ -223,6 +224,16 @@ contains
     else
       error stop "method.mb.orbBased is missing one of: tdci, tdhx, mctdhx, td2rdm, td2rdmStaticOrbs"
     end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine OrthonormalizeKeepingStateUnsupported(state)
+    use M_Utils_UnusedVariables
+    complex(R64), intent(inout), contiguous, target :: state(:)
+
+    if (.false.) call UnusedVariables_Mark(state)
+    error stop "Method_Mb_OrbBased_OrthonormalizeKeepingState (absorber.keepOrthonormalQ) requires method.mb.orbBased.mctdhx"
 
   end subroutine
 

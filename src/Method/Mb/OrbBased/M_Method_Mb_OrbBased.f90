@@ -429,4 +429,21 @@ module M_Method_Mb_OrbBased
   procedure(I_Method_Mb_OrbBased_TimeDerivativeOrbsLin), pointer :: &
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin
 
+  !> Pointer to the Loewdin orthonormalization of the orbitals with the
+  !> compensating transformation of the many-body part, which leaves the
+  !> many-body state unchanged (MCTDHX; error stop for the other methods).
+  !> Used after absorber masks (absorber.keepOrthonormalQ) and in imaginary time.
+  procedure(I_Method_Mb_OrbBased_OrthonormalizeKeepingState), pointer :: &
+    Method_Mb_OrbBased_OrthonormalizeKeepingState
+  abstract interface
+    !> phi <- phi S^(-1/2) per symmetry block (Orbs_blockOfOrb) and the
+    !> many-body part transformed so that the state is unchanged; the norm
+    !> lost by the orbitals moves into the many-body part.
+    subroutine I_Method_Mb_OrbBased_OrthonormalizeKeepingState(state)
+      import :: R64
+      !> In/out: quantum state.
+      complex(R64), intent(inout), contiguous, target :: state(:)
+    end subroutine
+  end interface
+
 end module

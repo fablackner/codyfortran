@@ -125,6 +125,29 @@ src/Absorber/
 
 The mask depends only on r, so it acts identically on every spherical-harmonic (l,m) channel of the flattened Ylm grid (via `Grid_Ylm_rCoord`). Do not combine with an ECS radial back-end (`fedvrEcs`) — complex scaling already absorbs outgoing flux.
 
+### Orthonormal Orbitals after the Mask (`keepOrthonormalQ`)
+
+```json
+{ "absorber": { "keepOrthonormalQ": true, "ylm": { "cosinus": { "onset": 120.0, "order": 4 } } } }
+```
+
+The mask on the orbitals is the product mask on the many-body state, so the
+masked orbitals lose norm and are no longer orthonormal, which the orbital
+equations of motion assume. With `keepOrthonormalQ` (default `false`, family
+independent) the time loop calls `Method_Mb_OrbBased_OrthonormalizeKeepingState`
+after every mask: Loewdin orthonormalization of the orbitals with the
+compensating CI transformation (MCTDHX only, exact in the full CI space;
+error stop for the other methods). The many-body state is unchanged; its lost
+norm moves into the CI vector.
+
+The 1-RDM is then that of the unnormalized masked state, so one-body
+observables are ⟨Ψ|Ô|Ψ⟩ with ⟨Ψ|Ψ⟩ = 1 − P (P: probability that an electron
+was absorbed), and N_box = Tr ρ = N ⟨Ψ|Ψ⟩ instead of N minus the absorbed
+electrons. Without the option the observables are Tr(ρ O) of the
+non-orthonormal orbitals (N_box = Tr(ρ S)). For Ne at t = 198 a.u.
+(P ≈ 1.2e-3) the two differ by about that factor: energy and N_box by
+⟨Ψ|Ψ⟩, ⟨z⟩ by 5e-4 and the dipole acceleration by 1e-3 relative.
+
 ### No Absorber (Passthrough)
 
 If no `absorber` block is present, a no-op implementation is installed that leaves wavefunctions unchanged.
@@ -163,6 +186,7 @@ call Absorber_Setup       ! Precomputes mask array
 do iStep = 1, nSteps
   call Propagator_Propagate(state, t0, t1)
   call Absorber_ApplyAbsorber(Orbs_orbs)  ! Damp outgoing waves
+  if (Absorber_keepOrthonormalQ) call Method_Mb_OrbBased_OrthonormalizeKeepingState(Method_state)
 end do
 ```
 

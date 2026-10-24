@@ -211,7 +211,7 @@ contains
   !> |c| = 1 (otherwise it amplifies, e.g. for Ne with eps(1s) = -50 a.u.).
   subroutine Reorthonormalize
 
-    call LowdinKeepingState(Coeffs_coeffs, Orbs_orbs)
+    call Method_Mb_OrbBased_OrthonormalizeKeepingState(Method_state)
     call Coeffs_Normalize(Coeffs_coeffs)
 
   end subroutine

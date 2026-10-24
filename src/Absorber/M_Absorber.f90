@@ -70,6 +70,13 @@ module M_Absorber
   ! module data
   !=============================================================================
 
+  !> absorber.keepOrthonormalQ: after every mask application the orbitals are
+  !> re-orthonormalized with the compensating many-body transformation
+  !> (`Method_Mb_OrbBased_OrthonormalizeKeepingState`), so the absorbed norm
+  !> moves from the orbitals into the many-body part and the equations of
+  !> motion keep orthonormal orbitals. Applied by the time loop of the program.
+  logical :: Absorber_keepOrthonormalQ = .false.
+
   !=============================================================================
   ! module procedures pointers
   !=============================================================================

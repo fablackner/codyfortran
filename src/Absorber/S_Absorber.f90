@@ -35,6 +35,8 @@ contains
 
     call Say_Fabricate("absorber")
 
+    Absorber_keepOrthonormalQ = Json_Get("absorber.keepOrthonormalQ", .false.)
+
     !------------------------------------
     ! branch: select absorber family
     !------------------------------------

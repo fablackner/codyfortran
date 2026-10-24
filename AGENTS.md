@@ -158,7 +158,7 @@ Module doc: `src/DiagonalizerList/A_DiagonalizerList.md`.
 **Absorber**
 Domain: Numerical Infrastructure.
 Purpose: Boundary damping masks to suppress edge reflections.
-Key interfaces/notes: `Absorber_ApplyAbsorber(orbs)`; uses linear cosinus masks near boundaries.
+Key interfaces/notes: `Absorber_ApplyAbsorber(orbs)`; linear and radial (Ylm) cosinus masks near boundaries; `absorber.keepOrthonormalQ` re-orthonormalizes the orbitals after the mask with the compensating CI transformation (`Method_Mb_OrbBased_OrthonormalizeKeepingState`), moving the absorbed norm into the CI vector.
 Module doc: `src/Absorber/A_Absorber.md`.
 
 **Utils**

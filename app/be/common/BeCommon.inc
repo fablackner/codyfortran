@@ -3,15 +3,8 @@
 !
 ! - EmbedOrbitals:        load orbXX_YY.in written on a grid with a smaller
 !                         lmax (same radial grid and mmax)
-! - LowdinKeepingState:   symmetric orthonormalization of the orbitals with the
-!                         compensating CI transformation, so that the
-!                         many-body state is unchanged
 ! - HermitianFunction:    U diag(f) U^H
 ! - MetricWeights:        FEDVR metric of a packed state (SIL integrator)
-!
-! The in-space matrices are block diagonal in Orbs_blockOfOrb (body type and
-! declared m, method.mb.orbBased.mOfOrbs) and are decomposed per block, so
-! orbitals of different m are never mixed.
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -56,66 +49,6 @@ subroutine EmbedOrbitals(orbs, lmaxIn)
   end do
 
   call Orbs_ProjectOnSymmetry(orbs)
-
-end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Loewdin orthonormalization phi <- phi A, A = S^(-1/2), of the stored
-!> orbitals (S = overlap matrix, zero between the blocks Orbs_blockOfOrb),
-!> with the CI transformation that keeps Psi = sum_I c_I Phi_I[phi] unchanged.
-!>
-!> With phi = (phi A) A^-1 the determinants transform with the one-body
-!> operator exp(K^) of K = -log(A) = log(S)/2, i.e. c <- exp(K^) c, where
-!> X^ = sum_kj X_kj a+_k a_j. The exponential is summed as a Taylor series of
-!> Coeffs_ApplyH1FillRdm1 applications (||log S|| is small).
-subroutine LowdinKeepingState(coeffs, orbs)
-  use M_Utils_LapackLib
-  use M_Grid
-  use M_Coeffs
-  use M_Orbs
-  use M_Method_Mb_OrbBased
-
-  complex(R64), intent(inout), contiguous :: coeffs(:)
-  complex(R64), intent(inout), contiguous :: orbs(:, :)
-
-  real(R64), allocatable :: evals(:)
-  complex(R64), allocatable :: evecs(:, :), s(:, :), kFull(:, :)
-  complex(R64), allocatable :: term(:), termNew(:)
-  integer(I32) :: nOS, nO, i, j, k
-
-  nOS = Orbs_nOrbsInState
-  nO = Method_Mb_OrbBased_nOrbsSum
-
-  allocate (s(nOS, nOS))
-  do j = 1, nOS
-    do i = 1, nOS
-      s(i, j) = 0.0_R64
-      if (Orbs_blockOfOrb(i) .ne. Orbs_blockOfOrb(j)) cycle
-      s(i, j) = Grid_InnerProduct(orbs(:, i), orbs(:, j))
-    end do
-  end do
-
-  call LapackLib_DiagonalizeHermitianBlocks(evals, evecs, s, Orbs_blockOfOrb)
-
-  ! Orbitals: phi <- phi S^(-1/2)
-  orbs(:, 1:nOS) = matmul(orbs(:, 1:nOS), HermitianFunction(evecs, 1.0_R64 / sqrt(evals)))
-
-  ! K = log(S)/2 in the spin-orbital basis (restricted: same block for both spins)
-  allocate (kFull(nO, nO))
-  kFull(:, :) = 0.0_R64
-  kFull(1:nOS, 1:nOS) = HermitianFunction(evecs, 0.5_R64 * log(evals))
-  if (Orbs_restrictedQ) kFull(nOS + 1:, nOS + 1:) = kFull(1:nOS, 1:nOS)
-
-  ! c <- exp(K^) c
-  term = coeffs
-  allocate (termNew, mold=coeffs)
-  do k = 1, 60
-    termNew(:) = 0.0_R64
-    call Coeffs_ApplyH1FillRdm1(term, dCoeffs_=termNew, h1_=kFull)
-    term = termNew / k
-    coeffs = coeffs + term
-    if (maxval(abs(term)) < 1.0e-16_R64) exit
-  end do
 
 end subroutine
 

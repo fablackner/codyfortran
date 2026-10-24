@@ -14,7 +14,9 @@
 !> code default is strang), so SIL only
 !> carries the A.p gauge coupling; otherwise SIL carries the whole linear
 !> part. A radial cos^(1/order) mask absorbs outgoing flux after every time
-!> step.
+!> step; with absorber.keepOrthonormalQ the orbitals are then
+!> re-orthonormalized and the absorbed norm moves into the CI vector
+!> (Method_Mb_OrbBased_OrthonormalizeKeepingState).
 !>
 !> Checkpoints: with program.saveStep > 0 (a multiple of program.outputStep)
 !> the orbitals and the CI vector are saved (orbXX_YY.in, coeffs.in) after
@@ -124,6 +126,7 @@ program P_LaserMctdhf
       call Propagator_Propagate(Method_state, time, time + timeStep)
       time = time + timeStep
       call Absorber_ApplyAbsorber(Orbs_orbs)
+      if (Absorber_keepOrthonormalQ) call Method_Mb_OrbBased_OrthonormalizeKeepingState(Method_state)
     end do
 
     call WriteLaserObservables(time, charge, Method_GetEnergy(time), .false.)

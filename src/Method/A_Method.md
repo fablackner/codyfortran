@@ -157,6 +157,7 @@ Provides orbital indexing, RDM storage, and operator-application interfaces:
 | `Method_Mb_OrbBased_ApplySingleBodyOp`         | Combined T̂ + V̂_ext                         |
 | `Method_Mb_OrbBased_TimeDerivativeOrbsLin`     | Linear (static-orbital) time derivative    |
 | `...TimeDerivativeCoeffsPlusOrbsNonLin`        | Non-linear part for MCTDHX-like schemes    |
+| `Method_Mb_OrbBased_OrthonormalizeKeepingState` | Loewdin orthonormalization of the orbitals with the compensating CI transformation, state unchanged (MCTDHX; error stop otherwise); after absorber masks (`absorber.keepOrthonormalQ`) and in imaginary time |
 
 ### Concrete Methods
 

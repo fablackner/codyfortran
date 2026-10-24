@@ -33,6 +33,7 @@ contains
     Method_TimeDerivative => TimeDerivative
     Method_Mb_OrbBased_TimeDerivativeOrbsLin => TimeDerivativeOrbsLin
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin => TimeDerivativeCoeffsPlusOrbsNonLin
+    Method_Mb_OrbBased_OrthonormalizeKeepingState => OrthonormalizeKeepingState
     if (Method_Mb_OrbBased_exactFieldFreeQ) then
       Method_PropagateExactPart => PropagateExactPart
       Method_ApplyExactPartPhi => ApplyExactPartPhi
@@ -260,6 +261,79 @@ contains
     if (.not. oneBodyQ) call Method_Mb_OrbBased_ApplySpectralCut(dOrbs)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Loewdin orthonormalization phi <- phi A, A = S^(-1/2), of the stored
+  !> orbitals (S = overlap matrix, zero between the blocks Orbs_blockOfOrb),
+  !> with the CI transformation that keeps Psi = sum_I c_I Phi_I[phi] unchanged
+  !> (exact in the full CI space of the active orbitals).
+  !>
+  !> With phi = (phi A) A^-1 the determinants transform with the one-body
+  !> operator exp(K^) of K = -log(A) = log(S)/2, i.e. c <- exp(K^) c, where
+  !> X^ = sum_kj X_kj a+_k a_j. The exponential is summed as a Taylor series of
+  !> Coeffs_ApplyH1FillRdm1 applications (||log S|| is small).
+  subroutine OrthonormalizeKeepingState(state)
+    use M_Utils_LapackLib
+    use M_Grid
+    use M_Orbs
+    use M_Coeffs
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(inout), contiguous, target :: state(:)
+
+    complex(R64), contiguous, pointer :: coeffs(:), orbs(:, :)
+    real(R64), allocatable :: evals(:)
+    complex(R64), allocatable :: evecs(:, :), s(:, :), kFull(:, :)
+    complex(R64), allocatable :: term(:), termNew(:)
+    integer(I32) :: nOS, i, j, k
+
+    call GetCoeffs(coeffs, state)
+    call GetOrbs(orbs, state)
+    nOS = Orbs_nOrbsInState
+
+    allocate (s(nOS, nOS))
+    do j = 1, nOS
+      do i = 1, nOS
+        s(i, j) = 0.0_R64
+        if (Orbs_blockOfOrb(i) .ne. Orbs_blockOfOrb(j)) cycle
+        s(i, j) = Grid_InnerProduct(orbs(:, i), orbs(:, j))
+      end do
+    end do
+
+    call LapackLib_DiagonalizeHermitianBlocks(evals, evecs, s, Orbs_blockOfOrb)
+
+    ! Orbitals: phi <- phi S^(-1/2)
+    orbs(:, :) = matmul(orbs, HermitianFunction(1.0_R64 / sqrt(evals)))
+
+    ! K = log(S)/2 in the spin-orbital basis (restricted: same block for both spins)
+    allocate (kFull(Method_Mb_OrbBased_nOrbsSum, Method_Mb_OrbBased_nOrbsSum))
+    kFull(:, :) = 0.0_R64
+    kFull(1:nOS, 1:nOS) = HermitianFunction(0.5_R64 * log(evals))
+    if (Orbs_restrictedQ) kFull(nOS + 1:, nOS + 1:) = kFull(1:nOS, 1:nOS)
+
+    ! c <- exp(K^) c
+    term = coeffs
+    allocate (termNew, mold=coeffs)
+    do k = 1, 60
+      termNew(:) = 0.0_R64
+      call Coeffs_ApplyH1FillRdm1(term, dCoeffs_=termNew, h1_=kFull)
+      term = termNew / k
+      coeffs = coeffs + term
+      if (maxval(abs(term)) < 1.0e-16_R64) exit
+    end do
+
+  contains
+
+    !> U diag(f) U^H with the eigenvectors U of S.
+    function HermitianFunction(f) result(res)
+      real(R64), intent(in), contiguous :: f(:)
+      complex(R64), allocatable :: res(:, :)
+
+      res = matmul(evecs, spread(f, 2, size(f)) * conjg(transpose(evecs)))
+
+    end function
 
   end subroutine
 
