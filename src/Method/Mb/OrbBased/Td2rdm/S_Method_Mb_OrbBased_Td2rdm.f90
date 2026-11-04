@@ -64,7 +64,9 @@ contains
     Method_Mb_OrbBased_TimeDerivativeOrbsLin => TimeDerivativeOrbsLin
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin => TimeDerivativeTwoRdmPlusOrbsNonLin
 
-    ! With weak orbitals the linear part is H_L, not h0 plus the gauge coupling
+    ! With weak orbitals the linear part is H_L, not h0 plus the gauge coupling.
+    ! No phi functions; unbound pointers stay null (Method_Fabricate nullifies
+    ! them).
     if (Method_Mb_OrbBased_exactFieldFreeQ) then
       if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs > 0) &
         error stop "method.mb.orbBased.exactFieldFreeQ is not available with td2rdm.nWeakOrbs > 0"

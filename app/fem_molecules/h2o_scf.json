@@ -1,0 +1,117 @@
+{
+    "grid": {
+        "fem": {
+            "nLocals": 6,
+            "xmin": -10.0, "xmax": 10.0,
+            "ymin": -10.0, "ymax": 10.0,
+            "zmin": -10.0, "zmax": 10.0,
+            "centers": {
+                "x": [ 0.0,  1.4305227, -1.4305227 ],
+                "y": [ 0.0,  0.0,        0.0       ],
+                "z": [ 0.0, -1.1071202, -1.1071202 ],
+                "hMin": [ 0.05, 0.2, 0.2 ]
+            },
+            "growth": 1.8,
+            "hMax": 2.0,
+            "multipoleLmax": 6,
+            "multipoleCenter": [ 0.0, 0.0, 0.0 ]
+        }
+    },
+    "sysKinetic": {
+        "fem": {
+            "laplacian": {
+                "bodyMass": [ 1.0, 1.0 ]
+            }
+        }
+    },
+    "sysPotential": {
+        "fem": {
+            "coulomb": {
+                "charges": [ 8.0, 1.0, 1.0 ],
+                "smearing": [ 0.0, 0.0, 0.0 ]
+            }
+        }
+    },
+    "sysInteraction": {
+        "fem": {
+            "coulomb": {
+                "strength": 1.0
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 5, 5 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 5, 5 ],
+                "tdhx": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "fem": {
+            "sto": {
+                "orbital": [ 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5 ],
+                "center":  [ 1, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1 ],
+                "n":       [ 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2 ],
+                "l":       [ 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1 ],
+                "m":       [ 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, -1 ],
+                "zeta":    [ 7.66, 2.25, 1.0, 1.0, 2.23, 1.0, 1.0, 2.23, 1.0, 1.0, 2.23 ],
+                "coeff":   [ 1.0, 1.0, 0.3, 0.3, 1.0, 0.3, -0.3, 1.0, -0.3, -0.3, 1.0 ]
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 1
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "mixing": {
+        "linear": {
+            "alpha": 0.7
+        }
+    },
+    "groundSolver": {
+        "precShiftMin": 0.5,
+        "scf": {
+            "stdImpl": {
+                "mixTarget": "potential",
+                "aceQ": true
+            }
+        }
+    },
+    "diagonalizerList": {
+        "lobpcg": {
+            "nEvals": 5,
+            "nGuard": 0,
+            "maxIter": 100,
+            "tol": 1e-7,
+            "printLevel": 0
+        }
+    },
+    "program": {
+        "convThresh": 1e-8,
+        "epsThresh": 1e-6,
+        "maxIter": 60
+    }
+}

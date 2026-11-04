@@ -1,0 +1,28 @@
+{
+    "grid": {
+        "fem": {
+            "nLocals": 6,
+            "xmin": -8.0,
+            "xmax": 8.0,
+            "ymin": -8.0,
+            "ymax": 8.0,
+            "zmin": -8.0,
+            "zmax": 8.0,
+            "centers": {
+                "x": [0.0],
+                "y": [0.0],
+                "z": [0.0],
+                "hMin": [0.2]
+            },
+            "growth": 1.6,
+            "hMax": 2.0
+        }
+    },
+    "sysKinetic": {
+        "fem": {
+            "laplacian": {
+                "bodyMass": [1.0, 2.5]
+            }
+        }
+    }
+}

@@ -43,10 +43,16 @@ src/SysPotential/
 │   ├── Harmonic/                   ← 1D harmonic trap
 │   └── SoftYukawa/                 ← Multi-center softened Yukawa
 │
-└── Ylm/                            ← Spherical harmonics backends
-    ├── M_SysPotential_Ylm.f90
-    ├── S_SysPotential_Ylm.f90
-    └── Coulomb/                    ← Central Coulomb -Z/r
+├── Ylm/                            ← Spherical harmonics backends
+│   ├── M_SysPotential_Ylm.f90
+│   ├── S_SysPotential_Ylm.f90
+│   └── Coulomb/                    ← Central Coulomb -Z/r
+│
+└── Fem/                            ← 3D spectral elements (grid.fem)
+    ├── M_SysPotential_Fem.f90      ← family interface (Fabricate), no data
+    ├── S_SysPotential_Fem.f90      ← point-wise Multiply, dispatch
+    └── Coulomb/                    ← nuclei of the grid.fem centers (Galerkin or erf-smeared):
+                                       charges, smearing, nuclear repulsion; private static cache
 ```
 
 **Key rule:** Interface modules (`M_*.f90`) only import other `M_*` modules.
@@ -150,6 +156,93 @@ V_{00}(r) = -Z × √(4π) / r
 ```
 
 **JSON path:** `sysPotential.ylm.coulomb.stdImpl`
+
+### 4. Fem (3D Cartesian Spectral Elements)
+
+**Use case:** molecules (all-electron, several nuclei) on `grid.fem`.
+
+Potentials are nodal arrays (`Grid_nPoints`); the family binds the point-wise
+`MultiplyWithExternalPotential` (dOrb = V·orb; reentrant: serial inside the
+OpenMP loops of Method, parallel over the nodes when called outside a
+parallel region, e.g. by the Cayley exact part of Method), the model binds
+`Setup` and `FillExternalPotential`. Family modules bind through
+`use M_SysPotential, only: SysPotential_Setup, ...` and never redeclare
+`SysPotential_Setup` (a redeclared pointer would be a dead copy).
+
+**Implementations:**
+
+| Type | Formula | Time-dep? | Parameters |
+|------|---------|-----------|------------|
+| Coulomb | V(r) = Σ_I V_I(r) over the `grid.fem` centers | No | charges[], smearing[] |
+
+with, per center I (position `Grid_Fem_centers(:, I)`, charge Z_I, radius rc_I):
+
+- **rc_I = 0 — Galerkin point nucleus.** All point nuclei together are one
+  `Grid_Fem_SolvePoissonPointCharges` solve with q_I = −Z_I: the load is
+  q_I φ_i(R_I) (q_I δ_iJ for a nucleus on node J) and the box values are the
+  exact Σ q_I/|r_B − R_I|. Away from the nucleus V = −Z/r up to the mesh error;
+  the value **at the nucleus node is finite**, roughly −30 … −50 Z/hMin for
+  nLocals 5–6, depending on the mesh (measured: −27.6 Z/hMin for nLocals 5,
+  growth 1.8; −40.9 … −49.6 Z/hMin for nLocals 6, growth 1.8 … 1.6; about
+  −85 Z/hMin for nLocals 8), hMin the local element size.
+  The attraction Σ_i w_i ρ_i V_i equals −Z × (Galerkin Hartree potential of
+  ρ)(R_I), i.e. it is exactly as accurate as the FEM Hartree potential (the
+  hydrogen ⟨1s|V|1s⟩ is −0.99999874 at hMin = 0.2). Galerkin nuclei are not
+  variational: total energies may lie slightly below the basis-set limit.
+- **rc_I > 0 — smeared nucleus.** Nodal values −Z erf(|r − R|/rc)/|r − R|
+  with the limit −2Z/(√π rc) on the nucleus node (no division by r there;
+  `SysPotential_Fem_Coulomb_SmearedPotential(charge, smearing, r)`).
+- **Z_I = 0 — ghost center** (mesh refinement only).
+
+**Why smearing helps explicit time steps.** The spike of a Galerkin point
+nucleus (roughly −30 … −50 Z/hMin: about −1600 Ha for O at hMin = 0.2, and
+−6500 Ha (−40.9 Z/hMin, nLocals 6) at the hMin = 0.05 that resolves its cusp
+on the accurate H₂O mesh of app/fem_molecules) and the fine core elements
+stretch the spectrum of h = T + V, so explicit integrators of the full h need
+dt ≲ 2.8/‖h‖, about 4e-4 a.u. for O. A smeared nucleus is bounded by
+2Z/(√π rc) and has no cusp to resolve, so the core mesh can be coarse and
+explicit steps of about 0.01–0.05 a.u. become possible; only the core
+physics changes. With the exact field-free part
+(`method.mb.orbBased.exactFieldFreeQ`, h0 = T + V_static propagated
+implicitly by a Crank–Nicolson/Cayley step on Fem, A_Method.md "Exact
+Field-Free Part on grid.fem") the spike does not limit the step, and point
+nuclei are the accurate choice (T_Fem_05–07: dt = 0.01–0.02 with the
+Galerkin point nuclei of H2).
+
+**Static by design.** Method refills the external potential on every
+right-hand-side evaluation, so Setup builds the static potential once (a
+private cache of `S_SysPotential_Fem_Coulomb`) and `FillExternalPotential`
+only copies it (any time, any `bt_`; read it through
+`SysPotential_FillExternalPotential`). The laser is not a SysPotential model on
+Fem: the length-gauge dipole coupling is `sysGauge.fem.length`, which keeps
+SysPotential static so that h0 = T + V_static can be treated exactly.
+
+**Exported data (M_SysPotential_Fem_Coulomb):** the model owns its parameters,
+as `SysPotential_Ylm_Coulomb_charge` does; the family module
+`M_SysPotential_Fem` holds no data, so another Fem model never leaves stale
+Coulomb data behind. `SysPotential_Fem_Coulomb_charges(nCenters)`,
+`SysPotential_Fem_Coulomb_smearing(nCenters)`,
+`SysPotential_Fem_Coulomb_nuclearRepulsion` (Σ_{I<J} Z_I Z_J/R_IJ of the point
+charges, set at fabrication, printed at Setup; not included in Method
+energies). Used by app/fem_molecules (`P_FemScf`: nuclear dipole and E_tot;
+`P_FemKickTdhf`: E_tot) and T_Fem_03/04.
+
+**JSON path:** `sysPotential.fem.coulomb` (no implementation leaf)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `charges` | real(:) | required | Z_I, one per `grid.fem` center (size = nCenters), 0 = ghost |
+| `smearing` | real(:) | 0 each | rc_I ≥ 0, one per center: 0 = Galerkin point nucleus, > 0 = erf smearing |
+
+Errors stop with clear messages for a missing `charges`, sizes ≠ nCenters,
+a negative radius and two charged centers on the same position.
+
+**Test:** `test/componentTests/SysPotential/Fem/Coulomb/T_SysPotential_Fem_Coulomb`
+(box ±8, point proton at the origin with hMin 0.2, smeared Z = 2 and Z = 3
+nuclei, one ghost; N = 485139): static = Galerkin + erf part to 7e-17
+(relative), r = 0 limits exact; point proton max|V + 1/r| = 3.9e-6 (r > 1.5),
+5.1e-7 (r > 3), −247.94 = −49.6/hMin at the nucleus node, ⟨1s|V|1s⟩ =
+−0.99999874; nuclear repulsion exact to 1e-14.
 
 ---
 
@@ -312,6 +405,21 @@ call SysPotential_MultiplyWithExternalPotential(dOrb, cachedPot, orb)
 }
 ```
 
+### Water (Fem, grid.fem centers O, H, H)
+
+```json
+{
+  "sysPotential": {
+    "fem": {
+      "coulomb": {
+        "charges": [8.0, 1.0, 1.0],
+        "smearing": [0.0, 0.0, 0.0]
+      }
+    }
+  }
+}
+```
+
 ---
 
 ## Adding a New Potential
@@ -436,6 +544,7 @@ This creates an effective "tilting" or "rocking" of the lattice potential.
 | `M_Utils_Say` | Logging during fabrication |
 | `M_Utils_Types` | R64, I32 kinds |
 | `M_Utils_Constants` | PI (for Seesaw, Coulomb) |
+| `M_Grid_Fem` | Centers, nodes, `Grid_Fem_SolvePoissonPointCharges` (Fem) |
 
 ---
 
@@ -446,6 +555,7 @@ This creates an effective "tilting" or "rocking" of the lattice potential.
 | Lattice | All O(N) with minimal overhead |
 | Linear | O(N) for evaluation, O(N×M) for M centers |
 | Ylm | O(lmax⁴ × N_rad) for spatial product application |
+| Fem | Setup: one FDM point-charge solve (~25 ms at N = 4e5) + O(N) per smeared nucleus; Fill: one copy; Multiply: O(N) |
 
 ### Caching Recommendations
 
@@ -474,6 +584,15 @@ This creates an effective "tilting" or "rocking" of the lattice potential.
 
 6. **Random seed = -1:** Uses system clock, giving different disorder each run.
    Set a fixed seed for reproducibility.
+
+7. **Redeclared `SysPotential_Setup`:** the Linear, Lattice and Ylm family
+   modules declare their own pointer of that name; a model that binds it
+   through such a module sets a dead copy. Bind through
+   `use M_SysPotential, only: SysPotential_Setup` (as Fem does).
+
+8. **Nuclei on nodes (Fem):** every nucleus sits on a grid node, so never
+   evaluate 1/r (or z/r³) there; Galerkin point nuclei and the erf limit are
+   finite by construction.
 
 ---
 

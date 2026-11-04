@@ -1,0 +1,29 @@
+{
+    "grid": {
+        "fem": {
+            "nLocals": 6,
+            "xmin": -10.0,
+            "xmax": 10.0,
+            "ymin": -10.0,
+            "ymax": 10.0,
+            "zmin": -10.0,
+            "zmax": 10.0,
+            "centers": {
+                "x": [0.0],
+                "y": [0.0],
+                "z": [0.0],
+                "hMin": [0.2]
+            },
+            "growth": 1.6,
+            "hMax": 2.0,
+            "multipoleLmax": 6
+        }
+    },
+    "sysInteraction": {
+        "fem": {
+            "coulomb": {
+                "strength": 1.0
+            }
+        }
+    }
+}

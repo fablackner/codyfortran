@@ -6,7 +6,7 @@
 !>
 !> @details
 !> This submodule reads the JSON configuration and dispatches to the
-!> appropriate absorber family (e.g., Linear). If no absorber section is
+!> appropriate absorber family (Linear, Ylm, Fem). If no absorber section is
 !> present, a no-op absorber is installed.
 submodule(M_Absorber) S_Absorber
 
@@ -23,6 +23,7 @@ contains
   !>
   !> - **absorber.linear**: 1D linear-grid absorbers (e.g., cosine profile)
   !> - **absorber.ylm**: Ylm-grid radial absorbers (e.g., cosine profile)
+  !> - **absorber.fem**: FEM-grid boundary-layer absorbers (cosine profiles)
   !>
   !> If no absorber block is found, the no-op fallback is installed, leaving
   !> wavefunctions unmodified. This is useful for testing or when boundary
@@ -32,6 +33,7 @@ contains
     use M_Utils_Say
     use M_Absorber_Linear
     use M_Absorber_Ylm
+    use M_Absorber_Fem
 
     call Say_Fabricate("absorber")
 
@@ -46,6 +48,9 @@ contains
 
     else if (Json_GetExistence("absorber.ylm")) then
       call Absorber_Ylm_Fabricate
+
+    else if (Json_GetExistence("absorber.fem")) then
+      call Absorber_Fem_Fabricate
 
     else
       ! No absorber configured → install no-op (wavefunctions pass through)

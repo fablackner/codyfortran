@@ -6,7 +6,8 @@
 !>
 !> @details
 !> Contains the fabrication logic that inspects JSON configuration and delegates
-!> to the appropriate backend module (Linear, Lattice, GridPoint, Load, or Ylm).
+!> to the appropriate backend module (Linear, Lattice, GridPoint, Load, Ylm,
+!> Prolate or Fem).
 !> Also provides the generic `Initialize` routine that loops over body types
 !> and orbitals, calling the backend-specific `InitializeOrb` for each.
 submodule(M_OrbsInit) S_OrbsInit
@@ -20,7 +21,7 @@ contains
 !>
 !> @details
 !> Inspects the JSON tree under "orbsInit" to determine which backend to use.
-!> The search order is: linear → lattice → gridPoint → load → ylm.
+!> The search order is: linear → lattice → gridPoint → load → ylm → prolate → fem.
 !> Each backend's Fabricate routine further binds `OrbsInit_InitializeOrb`.
 !>
 !> JSON paths checked:
@@ -30,6 +31,7 @@ contains
 !> - orbsInit.load      → OrbsInit_Load_Fabricate
 !> - orbsInit.ylm       → OrbsInit_Ylm_Fabricate
 !> - orbsInit.prolate   → OrbsInit_Prolate_Fabricate
+!> - orbsInit.fem       → OrbsInit_Fem_Fabricate
   module subroutine OrbsInit_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -39,6 +41,7 @@ contains
     use M_OrbsInit_Load
     use M_OrbsInit_Ylm
     use M_OrbsInit_Prolate
+    use M_OrbsInit_Fem
 
     call Say_Fabricate("orbsInit")
 
@@ -70,8 +73,11 @@ contains
     else if (Json_GetExistence("orbsInit.prolate")) then
       call OrbsInit_Prolate_Fabricate
 
+    else if (Json_GetExistence("orbsInit.fem")) then
+      call OrbsInit_Fem_Fabricate
+
     else
-      error stop "orbsInit is missing one of: linear, lattice, gridPoint, load, ylm, prolate"
+      error stop "orbsInit is missing one of: linear, lattice, gridPoint, load, ylm, prolate, fem"
     end if
 
   end subroutine

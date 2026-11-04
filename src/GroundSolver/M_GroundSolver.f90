@@ -32,6 +32,19 @@
 !>
 !> - **scf.stdImpl**: Standard SCF Hartree–Fock (general grids)
 !> - **scf.ylmOpt**: SCF optimized for spherical-harmonics (per-l channels)
+!> - **mcscf.stdImpl**, **mcscf.ylmOpt**: multiconfiguration SCF
+!>
+!> ## Orbital preconditioner (all backends)
+!>
+!> `GroundSolver_PreconditionAction` is bound by `GroundSolver_Fabricate` for
+!> every backend. It is the `ApplyPrecOnVec` callback of a preconditioned
+!> diagonalizer (lobpcg) for any orbital eigenproblem of the solvers (the SCF
+!> Fock operator, the MCSCF RDM-weighted Fock operator):
+!>   dOrb = (T̂ + max(−shift, σ_min))⁻¹·orb
+!> through the optional kinetic hook `SysKinetic_SolveShifted` (exact on
+!> grid.fem), the identity when the kinetic backend does not provide it;
+!> σ_min = `GroundSolver_precShiftMin` (JSON `groundSolver.precShiftMin`,
+!> default 0.5).
 !>
 !> @see M_GroundSolver_Scf, M_GroundSolver_Mcscf, M_DiagonalizerList
 module M_GroundSolver
@@ -54,10 +67,27 @@ module M_GroundSolver
     !> specific procedures (for example an SCF or MCSCF variant).
     !>
     !> No allocations or state creation occur here—only pointer assignment.
+    !> For every backend it also reads `groundSolver.precShiftMin` and binds
+    !> `GroundSolver_PreconditionAction`.
     !>
     !> @pre JSON configuration loaded via `Json_LoadJsonFile`
-    !> @post `GroundSolver_Setup` and `GroundSolver_Approach` are bound
+    !> @post `GroundSolver_Setup`, `GroundSolver_Approach` and
+    !>       `GroundSolver_PreconditionAction` are bound
     module subroutine GroundSolver_Fabricate()
+    end subroutine
+  end interface
+
+  interface GroundSolver_NoteUnconverged
+    !> @brief One-line note if diagonalizer iDiag did not converge.
+    !>
+    !> @details
+    !> Called by every backend after each `DiagonalizerList(iDiag)` solve:
+    !> prints a note when its `convergedQ` is false (lobpcg at maxIter or
+    !> after a stagnation exit) and returns; the solver continues with the
+    !> best approximations the diagonalizer returned (the next Approach
+    !> warm-starts from them), so an SCF can still converge.
+    module subroutine GroundSolver_NoteUnconverged(iDiag)
+      integer(I32), intent(in) :: iDiag
     end subroutine
   end interface
 
@@ -74,6 +104,15 @@ module M_GroundSolver
       integer(I32) :: nUp
     end function
   end interface
+
+  !=============================================================================
+  ! module data
+  !=============================================================================
+
+  !> Smallest shift σ_min of the orbital preconditioner (T̂ + σ)⁻¹
+  !> (`GroundSolver_PreconditionAction`); read by `GroundSolver_Fabricate`
+  !> from `groundSolver.precShiftMin` (default 0.5, must be positive).
+  real(R64) :: GroundSolver_precShiftMin = 0.5_R64
 
   !=============================================================================
   ! module procedures pointers
@@ -128,6 +167,46 @@ module M_GroundSolver
       !> Packed state vector containing orbital coefficients. Updated in place.
       complex(R64), intent(inout), contiguous, target :: state(:)
       !> Backend-defined step parameter (e.g., physical or imaginary time).
+      real(R64), intent(in) :: time
+    end subroutine
+  end interface
+
+  !> @brief Pointer to the orbital preconditioner (≈ (F̂ − shift)⁻¹).
+  !>
+  !> Bound by `GroundSolver_Fabricate` for every backend (null before).
+  !> Matches the `ApplyPrecOnVec` callback of DiagonalizerList, so a program
+  !> wires it into a preconditioned diagonalizer (lobpcg) of any orbital
+  !> eigenproblem (SCF Fock operator, MCSCF orbital step):
+  !> `input(i) % ApplyPrecOnVec => GroundSolver_PreconditionAction`
+  !> (after `GroundSolver_Fabricate`; the assignment captures the target).
+  procedure(I_GroundSolver_PreconditionAction), pointer :: GroundSolver_PreconditionAction => null()
+  abstract interface
+    !> @brief Apply the orbital preconditioner to a residual.
+    !>
+    !> @details
+    !> dOrb = (T̂ + max(−shift, σ_min))⁻¹·orb if the kinetic backend provides
+    !> `SysKinetic_SolveShifted` (body type 1, i.e. the mass of the spin-
+    !> restricted orbitals), else dOrb = orb (identity);
+    !> σ_min = `GroundSolver_precShiftMin`. For occupied orbitals (Ritz value
+    !> θ < 0) the shifted kinetic operator T̂ − θ approximates F̂ − θ in its
+    !> stiff high-momentum part, which dominates the spectral radius on fine
+    !> grids; it is Hermitian positive definite in the grid metric for every
+    !> shift, as LOBPCG requires. Defined for orbital vectors
+    !> (Grid_nPoints entries), not for CI vectors.
+    !>
+    !> @param[out] dOrb   Preconditioned vector
+    !> @param[in]  orb    Input vector (residual of a Ritz pair)
+    !> @param[in]  shift  Current Ritz value (orbital energy estimate)
+    !> @param[in]  time   Time parameter (unused)
+    subroutine I_GroundSolver_PreconditionAction(dOrb, orb, shift, time)
+      import :: R64
+      !> Output: preconditioned vector
+      complex(R64), intent(out), contiguous, target :: dOrb(:)
+      !> Input: vector to precondition
+      complex(R64), intent(in), contiguous, target :: orb(:)
+      !> Ritz value the preconditioner adapts to
+      real(R64), intent(in) :: shift
+      !> Time parameter
       real(R64), intent(in) :: time
     end subroutine
   end interface

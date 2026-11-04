@@ -7,7 +7,8 @@
 !> This module defines the abstract, runtime-wired interface that all external
 !> potentials in CodyFortran conform to. It holds feature flags and procedure
 !> pointers which are assigned at runtime by `SysPotential_Fabricate`, based on
-!> the selected backend (e.g., Linear, Lattice, Ylm) and the JSON configuration.
+!> the selected backend (e.g., Linear, Lattice, Ylm, Prolate, Fem) and the JSON
+!> configuration.
 !>
 !> No concrete physics is implemented here; only the contract that concrete
 !> backends must satisfy and the pointers through which the rest of the code

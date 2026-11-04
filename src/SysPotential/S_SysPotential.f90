@@ -5,7 +5,7 @@
 !> Top-level fabrication submodule for external potentials.
 !>
 !> This submodule reads the JSON configuration to determine which grid family
-!> (lattice, linear, or ylm) is requested and dispatches to the appropriate
+!> (lattice, linear, ylm, prolate or fem) is requested and dispatches to the appropriate
 !> family-level fabricator. The family fabricator in turn selects the concrete
 !> potential model (harmonic, Coulomb, disorder, etc.) and wires the procedure
 !> pointers exported by M_SysPotential.
@@ -22,7 +22,7 @@ contains
   !> ```json
   !> { "sysPotential": { "<grid>": { "<model>": { ... } } } }
   !> ```
-  !> where `<grid>` is one of: `lattice`, `linear`, `ylm`.
+  !> where `<grid>` is one of: `lattice`, `linear`, `ylm`, `prolate`, `fem`.
   module subroutine SysPotential_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -32,6 +32,7 @@ contains
     use M_SysPotential_Linear
     use M_SysPotential_Ylm
     use M_SysPotential_Prolate
+    use M_SysPotential_Fem
 
     call Say_Fabricate("sysPotential")
 
@@ -51,8 +52,11 @@ contains
     else if (Json_GetExistence("sysPotential.prolate")) then
       call SysPotential_Prolate_Fabricate
 
+    else if (Json_GetExistence("sysPotential.fem")) then
+      call SysPotential_Fem_Fabricate
+
     else
-      error stop "sysPotential is missing one of: lattice, linear, ylm, prolate"
+      error stop "sysPotential is missing one of: lattice, linear, ylm, prolate, fem"
 
     end if
 

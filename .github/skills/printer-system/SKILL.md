@@ -23,6 +23,7 @@ Load these files first:
 - [Printer observable base](../../../src/Utils/M_Utils_PrinterObservable.f90)
 - [Printer observable linear](../../../src/Utils/M_Utils_PrinterObservableLinear.f90)
 - [Printer observable lattice](../../../src/Utils/M_Utils_PrinterObservableLattice.f90)
+- [Printer observable fem](../../../src/Utils/M_Utils_PrinterObservableFem.f90)
 - [Printer RDM base](../../../src/Utils/M_Utils_PrinterRdm.f90)
 - [Printer RDM linear](../../../src/Utils/M_Utils_PrinterRdmLinear.f90)
 - [Printer natural orbital](../../../src/Utils/M_Utils_PrinterNatOrb.f90)
@@ -41,7 +42,7 @@ For plotting conventions, inspect:
 - `M_Utils_PrinterNatOrb`: natural-orbital occupations from 1-RDM.
 - `M_Utils_PrinterSpectrum`: diagonalizer eigenvalue export.
 
-Use base modules for representation-independent output and specialized modules (`Linear`, `Lattice`) for geometry-dependent projections.
+Use base modules for representation-independent output and specialized modules (`Linear`, `Lattice`, `Ylm`, `Fem`) for geometry-dependent projections.
 
 ## Workflow For Adding New Printer Features
 
@@ -76,6 +77,9 @@ Use base modules for representation-independent output and specialized modules (
 
 - `PrinterObservable_DumpEnergy`: column 1 = time, columns 2-3 = complex energy (real/imag parts in scientific format).
 - `PrinterObservableLinear_DumpDipole`: column 1 = time, columns 2-3 = complex dipole.
+- `PrinterObservableFem_DumpDipole`: column 1 = time, columns 2-4 = <x>, <y>, <z> (grid.fem).
+- `PrinterObservableFem_DumpNorm`: column 1 = time, column 2 = N = Tr(rho S) (grid.fem).
+- `PrinterObservableFem_DumpDipoleVelocity`: column 1 = time, columns 2-4 = v_x, v_y, v_z = i Tr(rho [T, r_a]), the velocity form of the dipole (grid.fem).
 - `PrinterObservableLattice_DumpDensityOnSite`: column 1 = time, columns 2..N+1 = site densities.
 - `PrinterSpectrum_DumpSpectrum`: column 1 = eigenvalue index, column 2 = eigenvalue.
 - `PrinterDensityLinear_DumpOneBodyDensityOnGrid`: column 1 = x, columns 2-3 = complex density.

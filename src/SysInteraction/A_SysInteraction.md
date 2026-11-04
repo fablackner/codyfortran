@@ -25,6 +25,8 @@ paradigm:
 ```
 M_SysInteraction.f90          ← Public interface (abstract contracts)
 S_SysInteraction.f90          ← Fabrication logic (runtime dispatch)
+S_SysInteraction_MeanField.f90 ← mean field of a factored 1-RDM (generic, on the contract):
+                                 FillDirectPotential, FillExchangeAce, AddMeanField
 ├── Lattice/
 │   ├── M_SysInteraction_Lattice.f90
 │   ├── S_SysInteraction_Lattice.f90
@@ -33,10 +35,14 @@ S_SysInteraction.f90          ← Fabrication logic (runtime dispatch)
 │   ├── M_SysInteraction_Linear.f90
 │   ├── S_SysInteraction_Linear.f90
 │   └── SoftYukawa/...
-└── Ylm/
-    ├── M_SysInteraction_Ylm.f90
-    ├── S_SysInteraction_Ylm.f90
-    └── Coulomb/...
+├── Ylm/
+│   ├── M_SysInteraction_Ylm.f90
+│   ├── S_SysInteraction_Ylm.f90
+│   └── Coulomb/...
+└── Fem/
+    ├── M_SysInteraction_Fem.f90      ← nodal source, multiply, conjugate
+    ├── S_SysInteraction_Fem.f90
+    └── Coulomb/                      ← strength * Grid_Fem_SolvePoisson(src)
 ```
 
 **Key rule:** Interface modules (`M_*.f90`) only import other `M_*` modules.
@@ -63,6 +69,51 @@ procedure pointers to concrete implementations. This enables:
 | `SysInteraction_FillInteractionSrc` | `(src, orbConjg, orb)` | Build source ρ = ψ*·ψ |
 | `SysInteraction_FillInteractionPotential` | `(pot, src, t, bt1, bt2)` | Solve for V from ρ |
 | `SysInteraction_MultiplyWithInteractionPotential` | `(dOrb, pot, orb)` | Apply V·ψ |
+
+### Module Procedures: Mean Field of a Factored 1-RDM
+
+Three grid-agnostic helpers in `S_SysInteraction_MeanField.f90`, written only
+against the contract above and `Grid_InnerProduct` (any grid), for the
+one-body density matrix γ(r, r') = Σ_l g_l(r) φ_l*(r') (φ = `orbs`,
+g = `weightedOrbs`): its direct potential J, its exchange operator K
+compressed with ACE, and the application of J − K_ACE to a vector.
+
+**Direct potential.** `SysInteraction_FillDirectPotential(pot, orbs,
+weightedOrbs, time, factor_, bt1_, bt2_)`: J = V[factor ρ],
+ρ = Σ_l φ_l* g_l, from one solve of the total source (the potential is
+linear in the source; the sources are accumulated in the order of the
+orbitals; `factor_` defaults to 1, an exact scaling, as is 2).
+
+**Adaptively compressed exchange.**
+`SysInteraction_FillExchangeAce(zeta, positiveDefiniteQ, orbs, weightedOrbs,
+time, bt1_, bt2_)` compresses the exchange operator of γ,
+
+```
+K v = Σ_l V[φ_l* v] g_l,   ξ_i = K φ_i,   M = ⟨φ|ξ⟩ = L Lᴴ,   ζ = ξ L⁻ᴴ,
+K_ACE = Σ_k |ζ_k⟩⟨ζ_k|  (= K on span{φ}, Hermitian, positive semidefinite),
+```
+
+with n(n+1)/2 potential solves with `conjSymmetricQ` (the swapped pair by
+`ConjugateInteractionPotential`), else n². If M is numerically not positive
+definite it uses the pseudo-inverse on the eigenvalues above 1e-12 λ_max and
+returns `positiveDefiniteQ = .false.` (the caller warns).
+
+**Application.** `SysInteraction_AddMeanField(w, scratch, z, directPotential,
+zeta)`: w ← w + J z − Σ_k ζ_k ⟨ζ_k|z⟩ with J z by
+`MultiplyWithInteractionPotential` in `scratch`: the n inner products in
+parallel over k, then one fused pass, per element
+((w + J z) − o_1 ζ_1) − o_2 ζ_2 − …; reentrant, parallel when called outside
+a parallel region.
+
+Users:
+- the SCF (`groundSolver.scf.stdImpl`): J of the closed-shell density
+  (g = φ, `factor_ = 2`) in every iteration; with `aceQ` K_ACE of the
+  occupied orbitals of one spin (g = φ), and every Fock action applies J and
+  K_ACE in one `AddMeanField` call;
+- the frozen mean-field reference of the Cayley exact part of Method
+  (`method.mb.orbBased.exactFieldFreeMeanFieldQ`): J of the spatial 1-RDM
+  ρS (g = φ ρS), K_ACE per body type (g = φ R with the 1-RDM block R), built
+  once and applied per vector with the ζ columns of the body type.
 
 ### Public Data
 
@@ -150,6 +201,51 @@ per pair (on the channel matrix of the pair's M).
 (`FillInteractionPotentialLm`: Poisson solve or zero), so they share the solve
 and the threshold.
 
+### 4. Fem (3D Cartesian Spectral Elements)
+
+**Use case:** molecules on `grid.fem` (Coulomb e-e interaction of the
+orbital pairs, Hartree and exchange potentials).
+
+Sources and potentials are nodal arrays of `Grid_nPoints` entries. The family
+binds the parts shared by nodal kernels:
+
+| Pointer | Fem implementation |
+|---------|--------------------|
+| `FillInteractionSrc(src, a, b)` | src = conjg(a) · b · w — exactly the Galerkin load of the pair density ρ = conjg(a) b |
+| `MultiplyWithInteractionPotential` | point-wise V · orb (reentrant: OpenMP-parallel at top level, e.g. the mean-field reference of the Cayley step and ACE, serial inside Method's OpenMP loops) |
+| `ConjugateInteractionPotential` | conjg(V) |
+
+**Coulomb** (`sysInteraction.fem.coulomb`) binds
+`FillInteractionPotential`: V = strength × `Grid_Fem_SolvePoisson(src)`, the
+Galerkin solution of −lap V = 4πρ (K_II V = 4π load − K_IB V_B) with
+free-space box values V_B from the multipole expansion of the source up to
+`grid.fem.multipoleLmax` (see `src/Grid/A_Grid.md`), solved exactly by fast
+diagonalization. A real source costs one FDM solve, a complex one two (real
+and imaginary parts separately). The kernel and the weights are real, so
+`conjSymmetricQ = .true.` (the swapped pair is the conjugate, bitwise), and
+`timeIndependentQ = bodyTypeIndependentQ = .true.`; `time`, `bt1_` and `bt2_`
+are ignored (Method passes `bt1_ = bt2_ = −1`). The solver is linear in the
+source, so the SCF Hartree term may use the total density in one solve.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `sysInteraction.fem.coulomb.strength` | real | 1.0 | Prefactor of 1/\|r1 − r2\| |
+
+**Cost** (2 threads, N = 493039): 45 ms per real source, 91 ms per complex
+source. Over orbital pairs Method needs n(n+1)/2 solves per evaluation
+(conjSymmetricQ).
+
+**Test:** `test/componentTests/SysInteraction/Fem/Coulomb/T_SysInteraction_Fem_Coulomb`
+(box ±10, nLocals 6, one center at the origin, hMin 0.2, growth 1.6,
+N = 493039): Gaussian density e^(−r²) against π^1.5 erf(r)/r, max error
+3.4e-6 (r < 4), 4.8e-8 relative at the origin node (limit 2π); Hartree
+integral 24.7394343 (exact √2 π^2.5 = 24.7394295, 2e-7 relative);
+J(1s, 1s) = 0.625000041 (exact 5/8); swapped pair conjg(V_ab) − V_ba = 0;
+strength 0.5 (refabricated): the potential is exactly half of the strength-1
+one and J(1s, 1s) = 0.312500021. The density tails of this box lie far below
+the multipole warning threshold of `Grid_Fem_SolvePoisson` (1e-4; 1s
+density: 3.8e-7), so no warning is printed.
+
 ---
 
 ## Workflow
@@ -222,6 +318,19 @@ call SysInteraction_MultiplyWithInteractionPotential(dOrb, pot, orb_k)
 }
 ```
 
+### Molecule (Fem, requires `grid.fem`)
+```json
+{
+  "sysInteraction": {
+    "fem": {
+      "coulomb": {
+        "strength": 1.0
+      }
+    }
+  }
+}
+```
+
 ---
 
 ## Adding a New Interaction
@@ -258,6 +367,7 @@ call SysInteraction_MultiplyWithInteractionPotential(dOrb, pot, orb_k)
 | Lattice | Always fast (local interaction) |
 | Linear | Use `fftw` for N > 500 |
 | Ylm | Use `twoScan` for large grids; `blockEq` if many repeated solves |
+| Fem | One FDM Poisson solve per pair (2 for complex pairs); parallelism comes from inside the solve (DGEMMs, OpenMP over z) |
 
 ### Caching Opportunities
 
@@ -278,6 +388,7 @@ When `timeIndependentQ = .true.` and `bodyTypeIndependentQ = .true.`:
 | `M_Utils_Fedvr` | Finite element DVR infrastructure |
 | `M_Utils_ConvolutionIntegral` | Direct convolution utility |
 | `M_Utils_ConvolutionFftw` | FFT convolution utility |
+| `M_Grid_Fem` | Weights and the Galerkin Poisson solve (Fem) |
 
 ---
 
@@ -305,8 +416,9 @@ When `timeIndependentQ = .true.` and `bodyTypeIndependentQ = .true.`:
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `M_SysInteraction.f90` | ~120 | Public interface, procedure pointers |
+| `M_SysInteraction.f90` | ~250 | Public interface, procedure pointers, mean-field helper interfaces |
 | `S_SysInteraction.f90` | ~60 | Top-level fabrication dispatch |
+| `S_SysInteraction_MeanField.f90` | ~230 | `SysInteraction_FillDirectPotential`, `SysInteraction_FillExchangeAce` (ACE), `SysInteraction_AddMeanField` (on the contract) |
 | `*/M_*.f90` | ~30-50 | Grid/model interface modules |
 | `*/S_*.f90` | ~50-450 | Implementation submodules |
 

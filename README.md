@@ -217,6 +217,9 @@ These examples serve as excellent starting points for understanding how to set u
     -   Continuous grids in 1D: equidistant and FEDVR.
     -   Continuous grids in 2D: polar and cartesian.
     -   Continuous grids in 3D: spherical (Ylm) and cartesian with radial FEDVR.
+    -   Molecular grids: prolate spheroidal (homonuclear diatomics) and a 3D finite-element grid (`grid.fem`:
+        high-order hexahedral spectral elements on a mesh graded toward the nuclei, all-electron, e.g. H2 or H2O;
+        see `src/Grid/A_Grid.md` and `app/fem_molecules/`).
 -   **Physics Operators**
     -   Kinetic: different hopping schemes for lattices; laplacian for continuous.
     -   External potentials: Many presets (Coulomb, harmonic) and easy to extend.
@@ -225,7 +228,12 @@ These examples serve as excellent starting points for understanding how to set u
     -   Real-time and imaginary-time propagation.
     -   Various Runge–Kutta/Crank-Nicholson integrators and interface to gsl odeiv2.
     -   Split-step propagation schemes using several integrators for different Hamiltonian parts.
-    -   Ground-state search via ED, imaginary time propagation or iterative scf methods.
+    -   Exactly propagated field-free one-body part: eigen-decomposition on Ylm grids; a unitary Cayley
+        (Crank–Nicolson, GMRES) step on `grid.fem`, optionally with a frozen Hartree–Fock mean field of the ground
+        state for molecules with heavy atoms (`exactFieldFreeMeanFieldQ`; H2O TDHF kick spectra in
+        `app/fem_molecules/`).
+    -   Ground-state search via ED, imaginary time propagation or iterative scf methods (dense, ARPACK or
+        preconditioned block LOBPCG eigensolvers; adaptively compressed exchange for large grids).
 -   **I/O, Analysis, and Utilities**
     -   JSON-driven configuration mirroring the code architecture.
     -   Data output for densities, observables, spectra, and RDMs

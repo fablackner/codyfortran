@@ -15,9 +15,9 @@
 !>
 !> Concrete spatial back-ends are selected at runtime via `Grid_Fabricate`,
 !> which reads the JSON configuration and delegates to the appropriate
-!> implementation (Linear, Square, Polar, Spherical, Ylm, Lattice). Each
-!> back-end defines its own metric/quadrature so that inner products,
-!> orthonormality, and projection are metric-aware.
+!> implementation (Linear, Square, Polar, Spherical, Ylm, Prolate, Lattice,
+!> Fem). Each back-end defines its own metric/quadrature so that inner
+!> products, orthonormality, and projection are metric-aware.
 !>
 !> @par Supported Back-ends
 !>   | JSON Key         | Module             | Geometry / Basis                       |
@@ -27,7 +27,9 @@
 !>   | `grid.polar`     | M_Grid_Polar       | 2D polar (Const)                       |
 !>   | `grid.spherical` | M_Grid_Spherical   | 3D spherical (Const)                   |
 !>   | `grid.ylm`       | M_Grid_Ylm         | Radial + spherical harmonics Y_lm      |
+!>   | `grid.prolate`   | M_Grid_Prolate     | Prolate spheroidal (diatomics, FEDVR)  |
 !>   | `grid.lattice`   | M_Grid_Lattice     | 3D discrete lattice (Hubbard-style)    |
+!>   | `grid.fem`       | M_Grid_Fem         | 3D Cartesian spectral elements (GLL)   |
 !>
 !> @par Typical Initialization
 !> @code{.f90}

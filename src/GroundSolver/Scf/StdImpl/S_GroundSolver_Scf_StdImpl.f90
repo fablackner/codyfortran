@@ -11,48 +11,98 @@
 !>   1. **Setup**: Allocate working arrays for potentials and temporaries
 !>   2. **Approach** (per iteration):
 !>      a. Fill external potential V̂_ext(t)
-!>      b. Build raw Hartree potential: Ĵ = 2·∑_j ∫|φ_j|²/|r-r'| (factor 2 for
-!>         spin); for `mixTarget="potential"` mix it into the accepted
-!>         potential (Mixing_Mix), else use it directly
-!>      c. Diagonalize Fock operator F̂ = T̂ + V̂_ext + Ĵ − K̂ via ARPACK
-!>      d. Gauge-align eigenvectors with old orbitals (Orbs_AlignOnReference)
-!>      e. Update orbitals: for `mixTarget="orbitals"` mix the aligned
+!>      b. Build raw Hartree potential Ĵ = ∫ρ(r')/|r-r'| from ONE solve of the
+!>         total source ρ = 2·∑_j |φ_j|² (factor 2 for spin; the interaction
+!>         potential is linear in the source; SysInteraction_FillDirectPotential
+!>         with factor_ = 2); for `mixTarget="potential"`
+!>         mix it into the accepted potential (Mixing_Mix), else use it directly
+!>      c. With `aceQ`: build the adaptively compressed exchange operator
+!>         (`BuildAce`) of the current occupied orbitals
+!>      d. Diagonalize Fock operator F̂ = T̂ + V̂_ext + Ĵ − K̂ via
+!>         DiagonalizerList(1) (a diagonalizer without previous eigenvectors
+!>         gets the current occupied orbitals as start vectors,
+!>         SetStartVectors); if it did not converge (convergedQ), a one-line
+!>         note is printed and the SCF continues with its best approximations
+!>         (GroundSolver_NoteUnconverged)
+!>      e. Gauge-align eigenvectors with old orbitals (Orbs_AlignOnReference)
+!>      f. Update orbitals: for `mixTarget="orbitals"` mix the aligned
 !>         eigenvectors into the old orbitals (Mixing_Mix); for
 !>         `mixTarget="potential"` replace them outright
-!>      f. Copy spin-up → spin-down (restricted)
-!>      g. Gram–Schmidt orthonormalize
+!>      g. Copy spin-up → spin-down (restricted)
+!>      h. Gram–Schmidt orthonormalize
+!>
+!> ## Adaptively Compressed Exchange (ACE, Lin 2016)
+!>
+!> With ξ_j = K̂φ_j = ∑_k W(φ_k, φ_j) φ_k for the nUp occupied orbitals
+!> (nUp(nUp+1)/2 interaction-potential solves when
+!> SysInteraction_conjSymmetricQ, else nUp²), M_ij = ⟨φ_i|ξ_j⟩ = L Lᴴ
+!> (Cholesky) and ζ = ξ L⁻ᴴ, the operator K̂_ACE = ∑_k |ζ_k⟩⟨ζ_k| equals K̂
+!> on span{φ_j} and K̂ − K̂_ACE is positive semidefinite, so the SCF fixed
+!> point (lowest nUp eigenvectors) is unchanged while the Fock action costs
+!> nUp inner products instead of nUp solves per matrix–vector product. The
+!> construction (SysInteraction_FillExchangeAce) and the application
+!> together with Ĵ in one pass (SysInteraction_AddMeanField) are the
+!> grid-agnostic mean-field helpers of SysInteraction, shared with the frozen
+!> mean-field reference of the Cayley exact part of Method.
+!>
+!> ## Preconditioner
+!>
+!> The preconditioner of a lobpcg Fock diagonalizer is the backend-independent
+!> `GroundSolver_PreconditionAction` (M_GroundSolver, bound by
+!> GroundSolver_Fabricate): (T̂ + max(−θ, σ_min))⁻¹ when the kinetic backend
+!> provides `SysKinetic_SolveShifted`, else the identity.
+!>
+!> ## Eigensolvers and the exact exchange
+!>
+!> LOBPCG assumes a Fock operator self-adjoint in the grid metric. The
+!> exact exchange is so only up to the discretization of the interaction:
+!> on grid.fem up to the multipole truncation of the Poisson boundary values
+!> (|⟨φ|K̂g⟩ − conj⟨g|K̂φ⟩| ≈ 5e-4 relative for multipoleLmax 6), enough to
+!> stall LOBPCG at relative residual floors of 1e-7 (its stagnation exit
+!> then stops each solve early, unconverged). K̂_ACE = ∑_k |ζ_k⟩⟨ζ_k| is
+!> Hermitian by construction and costs nUp inner products instead of nUp
+!> Poisson solves per Fock action (fresh H2 SCF of T_Fem_03: 5.5 s with ACE,
+!> 21 s with the exact exchange, 61 s before the stagnation exit): when a
+!> Fock solve with aceQ = false does not converge (the generic convergedQ of
+!> the diagonalizer), Approach prints a one-time hint recommending
+!> aceQ = true.
 !>
 !> ## JSON Configuration
 !>
 !> @code{.json}
-!> "groundSolver": { "scf": { "stdImpl": { "mixTarget": "orbitals" } } }
+!> "groundSolver": { "scf": { "stdImpl": { "mixTarget": "orbitals", "aceQ": false } } }
 !> @endcode
 !>
-!> | Parameter   | Type   | Default    | Description                            |
-!> |-------------|--------|------------|----------------------------------------|
-!> | `mixTarget` | string | "orbitals" | What the mixer damps: "orbitals" mixes |
-!> |             |        |            | gauge-aligned eigenvectors into the    |
-!> |             |        |            | old orbitals; "potential" mixes the    |
-!> |             |        |            | Hartree potential (the Poisson solve   |
-!> |             |        |            | is linear in ρ) and replaces orbitals  |
-!> |             |        |            | outright; "density" purifies the mixed |
-!> |             |        |            | 1-RDM (1−α)·D_old + α·D_new to its top |
-!> |             |        |            | natural orbitals (Orbs_MixOccupiedSpace|
-!> |             |        |            | with α from mixing.linear.alpha)       |
+!> | Parameter      | Type   | Default    | Description                            |
+!> |----------------|--------|------------|----------------------------------------|
+!> | `mixTarget`    | string | "orbitals" | What the mixer damps: "orbitals" mixes |
+!> |                |        |            | gauge-aligned eigenvectors into the    |
+!> |                |        |            | old orbitals; "potential" mixes the    |
+!> |                |        |            | Hartree potential (the Poisson solve   |
+!> |                |        |            | is linear in ρ) and replaces orbitals  |
+!> |                |        |            | outright; "density" purifies the mixed |
+!> |                |        |            | 1-RDM (1−α)·D_old + α·D_new to its top |
+!> |                |        |            | natural orbitals (Orbs_MixOccupiedSpace|
+!> |                |        |            | with α from mixing.linear.alpha)       |
+!> | `aceQ`         | bool   | false      | Exchange via ACE (built once per       |
+!> |                |        |            | Approach) instead of nUp solves per    |
+!> |                |        |            | Fock action                            |
 !>
 !> The mixing *algorithm* (linear, DIIS) is configured separately under the
 !> top-level `mixing` block; see M_Mixing.
 !>
 !> ## Working Arrays
 !>
-!> - `hartreePotential`: Precomputed direct (Hartree) potential on grid
+!> - `hartreePotentialMixed/Raw`: direct (Hartree) potential on grid
 !> - `externalPotential`: External potential V̂_ext (recomputed if time-dependent)
 !> - `interactionPotential`: Temporary for exchange term computation
-!> - `src`: Interaction source density ρ_ij(r) = φ_i*(r)·φ_j(r)
+!> - `src`: Interaction source ρ_ij(r) = φ_i*(r)·φ_j(r) of the exact exchange
 !> - `dOrbTmp`: Temporary for operator action results
+!> - `aceZeta`: ACE vectors ζ_k (aceQ only)
 !>
-!> @note The exchange term K̂ is computed on-the-fly in `HartreeFockAction`
-!>       since it depends on which orbital is being acted upon.
+!> @note Without `aceQ` the exchange term K̂ is computed on-the-fly in
+!>       `HartreeFockAction` since it depends on which orbital is being acted
+!>       upon.
 submodule(M_GroundSolver_Scf_StdImpl) S_GroundSolver_Scf_StdImpl
 
   implicit none
@@ -81,12 +131,30 @@ submodule(M_GroundSolver_Scf_StdImpl) S_GroundSolver_Scf_StdImpl
   !> SysInteraction_FillInteractionPotential
   complex(R64), allocatable :: interactionPotential(:)
 
-  !> Interaction source density ρ_ij(r) = φ_i*(r)·φ_j(r), sized by
-  !> SysInteraction_FillInteractionSrc
+  !> Interaction source density ρ_ij(r) = φ_i*(r)·φ_j(r) of the exact
+  !> exchange, sized by SysInteraction_FillInteractionSrc
   complex(R64), allocatable :: src(:)
 
   !> Gauge-aligned new orbitals for mixing, dimension(Grid_nPoints, nOrbsInState/2)
   complex(R64), allocatable, target :: orbsRaw(:, :)
+
+  !-----------------------------------------------------------------------------
+  ! Adaptively compressed exchange (ACE)
+  !-----------------------------------------------------------------------------
+
+  !> Apply the exchange through the ACE operator ∑_k |ζ_k⟩⟨ζ_k|
+  logical :: aceQ = .false.
+
+  !> ACE vectors ζ_k, dimension(Grid_nPoints, nUp), rebuilt in every Approach
+  complex(R64), allocatable :: aceZeta(:, :)
+
+  !> Whether aceZeta holds the ACE operator (of the orbitals of the last
+  !> Approach); before that, HartreeFockAction applies the exact exchange
+  logical :: aceBuiltQ = .false.
+
+  !> Whether the aceQ hint after an unconverged Fock solve with the exact
+  !> exchange (aceQ = false) was printed (once per run)
+  logical :: aceHintPrintedQ = .false.
 
   !-----------------------------------------------------------------------------
   ! Mixing configuration
@@ -131,6 +199,8 @@ contains
       alphaDensity = Json_Get("alpha", 1.0_R64, path_="mixing.linear")
     end if
 
+    aceQ = Json_Get("aceQ", .false., path_="groundSolver.scf.stdImpl")
+
     !------------------------------------
     ! set values and procedure pointers
     !------------------------------------
@@ -164,6 +234,7 @@ contains
     allocate (orbsRaw(Grid_nPoints, nUp))
     allocate (orbsTmp(Grid_nPoints, nUp))
     allocate (lambdaDiscarded(nUp))
+    if (aceQ) allocate (aceZeta(Grid_nPoints, nUp))
 
   end subroutine
 
@@ -177,6 +248,10 @@ contains
   !>   - Ĵ·orb: Hartree potential (precomputed in Approach)
   !>   - K̂·orb: Exchange, computed on-the-fly as
   !>            K̂·φ = ∑_j W(φ_j, φ)·φ_j where W(a,b)(r) = ∫a*(r')b(r')/|r-r'|dr'
+  !>            or, with `aceQ`, as K̂_ACE·φ = ∑_k ζ_k ⟨ζ_k|φ⟩ (built in Approach
+  !>            from the orbitals of that iteration; exact exchange before the
+  !>            first Approach), applied together with Ĵ in one pass
+  !>            (SysInteraction_AddMeanField)
   !>
   !> The exchange sum runs over occupied orbitals (j = 1 to nOrbs/2 for restricted).
   subroutine HartreeFockAction(dOrb, orb, time)
@@ -205,18 +280,61 @@ contains
     call SysPotential_MultiplyWithExternalPotential(dOrbTmp, externalPotential, orb)
     dOrb = dOrb + dOrbTmp
 
-    ! Hartree (direct) term: Ĵ·orb (hartreePotentialMixed filled in Approach)
-    call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, hartreePotentialMixed, orb)
-    dOrb = dOrb + dOrbTmp
+    if (aceQ .and. aceBuiltQ) then
+      ! Hartree (direct) term and exchange via ACE in one pass:
+      ! (Ĵ − K̂_ACE)·orb = Ĵ·orb − ∑_k ζ_k ⟨ζ_k|orb⟩ (hartreePotentialMixed
+      ! and aceZeta of the last Approach; exact on its occupied space)
+      call SysInteraction_AddMeanField(dOrb, dOrbTmp, orb, hartreePotentialMixed, aceZeta)
+    else
+      ! Hartree (direct) term: Ĵ·orb (hartreePotentialMixed filled in Approach)
+      call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, hartreePotentialMixed, orb)
+      dOrb = dOrb + dOrbTmp
 
-    ! Exchange term: −K̂·orb = −∑_j W(φ_j, orb)·φ_j
-    ! Loop over occupied orbitals (spin-up only; factor 2 in Hartree)
-    do j = 1, nUp
-      call SysInteraction_FillInteractionSrc(src, Orbs_orbs(:, j), orb(:))
-      call SysInteraction_FillInteractionPotential(interactionPotential, src, time)
-      call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, interactionPotential, Orbs_orbs(:, j))
-      dOrb = dOrb - dOrbTmp
-    end do
+      ! Exchange term: −K̂·orb = −∑_j W(φ_j, orb)·φ_j
+      ! Loop over occupied orbitals (spin-up only; factor 2 in Hartree)
+      do j = 1, nUp
+        call SysInteraction_FillInteractionSrc(src, Orbs_orbs(:, j), orb(:))
+        call SysInteraction_FillInteractionPotential(interactionPotential, src, time)
+        call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, interactionPotential, Orbs_orbs(:, j))
+        dOrb = dOrb - dOrbTmp
+      end do
+    end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Build the adaptively compressed exchange (ACE) operator.
+  !>
+  !> @details
+  !> For the occupied orbitals φ_1..φ_nUp (columns of `orbs`), closed shell
+  !> (exchange within one spin, every orbital occupied once per spin):
+  !> SysInteraction_FillExchangeAce with the weighted orbitals = orbs, i.e.
+  !>   ξ_j = K̂φ_j = ∑_k W(φ_k, φ_j) φ_k, with the pair potentials
+  !>   W(φ_k, φ_j) solved for k ≤ j only when SysInteraction_conjSymmetricQ
+  !>   (W(φ_j, φ_k) = conj(W(φ_k, φ_j)) via ConjugateInteractionPotential),
+  !>   else for all pairs;
+  !>   M_ij = ⟨φ_i|ξ_j⟩ (Hermitian positive definite, Hermitized), M = L Lᴴ;
+  !>   ζ = ξ L⁻ᴴ (stored in `aceZeta`),
+  !> so that ∑_k ζ_k ⟨ζ_k|φ⟩ = ξ M⁻¹ ⟨ξ|φ⟩ reproduces K̂φ for φ in span{φ_j}.
+  !> If M is numerically not positive definite (e.g. a slightly non-symmetric
+  !> discretized interaction kernel), the pseudo-inverse of M on its positive
+  !> eigen-subspace is used and a warning is printed.
+  !>
+  !> @param[in] orbs  Occupied orbitals (Grid_nPoints x nUp)
+  !> @param[in] time  Time for the interaction potential
+  subroutine BuildAce(orbs, time)
+    use M_SysInteraction
+
+    complex(R64), intent(in), contiguous :: orbs(:, :)
+    real(R64), intent(in) :: time
+
+    logical :: positiveDefiniteQ
+
+    call SysInteraction_FillExchangeAce(aceZeta, positiveDefiniteQ, orbs, orbs, time)
+    if (.not. positiveDefiniteQ) &
+      write (*, *) "Warning: groundSolver.scf.stdImpl.aceQ: exchange matrix <phi_i|K phi_j> not positive definite, ", &
+      "using its positive eigen-subspace"
+    aceBuiltQ = .true.
 
   end subroutine
 
@@ -226,8 +344,12 @@ contains
   !> @details
   !> Algorithm:
   !>   1. Fill external potential V̂_ext for current time
-  !>   2. Build Hartree potential: Ĵ = 2·∑_j ∫|φ_j|²/|r-r'| (factor 2 for spin degeneracy)
-  !>   3. Diagonalize Fock operator via DiagonalizerList(1) (uses HartreeFockAction callback)
+  !>   2. Build Hartree potential Ĵ from one solve of the total source
+  !>      2·∑_j |φ_j|² (factor 2 for spin degeneracy); with aceQ build the ACE
+  !>      exchange operator of the current orbitals
+  !>   3. Diagonalize Fock operator via DiagonalizerList(1) (uses HartreeFockAction
+  !>      callback); a diagonalizer without previous eigenvectors gets the
+  !>      current occupied orbitals as start vectors (SetStartVectors)
   !>   4. Gauge-align eigenvectors with old orbitals
   !>   5. Update orbitals per mixTarget: mix aligned eigenvectors ("orbitals")
   !>      or replace outright ("potential", damping applied to Ĵ in step 2)
@@ -261,17 +383,10 @@ contains
     ! Step 1: Fill external potential for current time
     call SysPotential_FillExternalPotential(externalPotential, time)
 
-    ! Step 2: Build raw Hartree potential from occupied orbitals
+    ! Step 2: Build raw Hartree potential from occupied orbitals with ONE
+    ! solve of the total source (the potential is linear in the source).
     ! Factor 2 accounts for spin degeneracy (restricted: spin-up = spin-down)
-    do j = 1, nUp
-      call SysInteraction_FillInteractionSrc(src, orbs(:, j), orbs(:, j))
-      call SysInteraction_FillInteractionPotential(interactionPotential, 2.0_R64 * src, time)
-      if (j .eq. 1) then
-        hartreePotentialRaw = interactionPotential
-      else
-        hartreePotentialRaw = hartreePotentialRaw + interactionPotential
-      end if
-    end do
+    call SysInteraction_FillDirectPotential(hartreePotentialRaw, orbs(:, 1:nUp), orbs(:, 1:nUp), time, factor_=2.0_R64)
 
     if (mixTarget .eq. "potential") then
       ! Damping acts on the (gauge-invariant) Hartree potential: mix the raw
@@ -286,8 +401,30 @@ contains
       hartreePotentialMixed = hartreePotentialRaw
     end if
 
-    ! Step 3: Diagonalize Fock operator (HartreeFockAction is the matvec callback)
+    ! Exchange via ACE: compress K̂ of the current orbitals once per iteration
+    if (aceQ) call BuildAce(orbs(:, 1:nUp), time)
+
+    ! Step 3: Diagonalize Fock operator (HartreeFockAction is the matvec callback).
+    ! A diagonalizer without previous eigenvectors gets the current occupied
+    ! orbitals as start vectors of its first solve (backends that cannot
+    ! start from given vectors ignore them)
+    if (.not. allocated(DiagonalizerList(1) % e % evecs) .and. DiagonalizerList(1) % e % dim .eq. nG) then
+      call DiagonalizerList(1) % e % SetStartVectors(orbs(:, 1:nUp))
+    end if
     call DiagonalizerList(1) % e % Diagonalize(time, .true.)
+    call GroundSolver_NoteUnconverged(1)
+    ! An unconverged solve with the exact exchange: it is self-adjoint in the
+    ! metric only up to its discretization (grid.fem: the multipole truncation
+    ! of the Poisson boundary values), which can stall a metric-based solver
+    ! (LOBPCG) at a residual floor; ACE is self-adjoint by construction
+    if (.not. aceQ .and. .not. DiagonalizerList(1) % e % convergedQ .and. .not. aceHintPrintedQ) then
+      write (*, '(1X, 3A)') "hint: groundSolver.scf.stdImpl: ", DiagonalizerList(1) % e % path, &
+        " did not converge with aceQ = false: the exact exchange is Hermitian only up to its discretization"
+      write (*, '(1X, A)') "  (grid.fem: multipole truncation of the Poisson boundary values), which can stall an "// &
+        "eigensolver at a residual floor; aceQ = true is recommended (Hermitian by construction, and much "// &
+        "cheaper). Printed once."
+      aceHintPrintedQ = .true.
+    end if
 
     ! Step 4: Gauge-align the eigenvectors with the old orbitals (removes the
     ! arbitrary per-vector phase and the arbitrary rotation within degenerate

@@ -1,0 +1,29 @@
+{
+    "grid": {
+        "fem": {
+            "nLocals": 5,
+            "xmin": -6.0,
+            "xmax": 6.0,
+            "ymin": -5.0,
+            "ymax": 7.0,
+            "zmin": -4.0,
+            "zmax": 4.0,
+            "centers": {
+                "x": [0.0],
+                "y": [0.5],
+                "z": [0.0],
+                "hMin": [0.5]
+            },
+            "growth": 1.5,
+            "hMax": 1.0
+        }
+    },
+    "absorber": {
+        "fem": {
+            "cosinus": {
+                "width": 2.0,
+                "order": 4
+            }
+        }
+    }
+}

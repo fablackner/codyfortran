@@ -20,17 +20,18 @@ The module follows the **CodyFortran fabrication pattern**:
 │  - SysKinetic_Fabricate          → runtime configuration        │
 │  - SysKinetic_Setup              → precompute data (pointer)    │
 │  - SysKinetic_MultiplyWithKineticOp → apply T̂·ψ (pointer)       │
+│  - SysKinetic_SolveShifted       → (T̂ + s)⁻¹ (optional hook)    │
 ├─────────────────────────────────────────────────────────────────┤
 │                          │                                      │
 │    ┌────────────────┬────┴────────────┬───────────────┐         │
-│    ▼                ▼                 ▼               │         │
-│  Lattice         Linear             Ylm              │         │
-│ (hopping)    (Cartesian ∇²)   (spherical radial)    │         │
-│    │                │                 │              │         │
-│    ▼                ▼                 ▼              │         │
-│ NearestNeighbor  Laplacian        Laplacian         │         │
-│                  ├─FinDiff        ├─FinDiff         │         │
-│                  └─Fourier        └─Fedvr           │         │
+│    ▼                ▼                 ▼               ▼         │
+│  Lattice         Linear             Ylm             Fem         │
+│ (hopping)    (Cartesian ∇²)   (spherical radial) (3D spectral   │
+│    │                │                 │           elements)     │
+│    ▼                ▼                 ▼               ▼         │
+│ NearestNeighbor  Laplacian        Laplacian       Laplacian     │
+│                  ├─FinDiff        ├─FinDiff       (+ exact      │
+│                  └─Fourier        └─Fedvr          (T̂+s)⁻¹)     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -40,15 +41,24 @@ The module follows the **CodyFortran fabrication pattern**:
 
 2. **Runtime Binding**: Procedure pointers are assigned by `*_Fabricate()` based on JSON configuration. This allows swapping implementations without recompilation.
 
-3. **Hierarchical Dispatch**: The top-level `SysKinetic_Fabricate` reads JSON and delegates to the appropriate backend (Lattice/Linear/Ylm), which further delegates to specific implementations.
+3. **Hierarchical Dispatch**: The top-level `SysKinetic_Fabricate` reads JSON and delegates to the appropriate backend (Lattice/Linear/Ylm/Prolate/Fem), which further delegates to specific implementations.
+
+4. **Optional hooks**: `SysKinetic_SolveShifted` (exact solve of (T̂ + s) x = b) is `null()` unless the backend has a fast exact inverse (Fem). `SysKinetic_Fabricate` nullifies it before it dispatches, so a backend fabricated earlier in the same process leaves no stale binding. Callers test `associated(SysKinetic_SolveShifted)` and fall back otherwise.
 
 ## File Structure
 
 ```
 SysKinetic/
 ├── M_SysKinetic.f90          # Public facade: exports pointers and Fabricate
-├── S_SysKinetic.f90          # Dispatch to Lattice/Linear/Ylm
-├── AGENTS.md                 # This file
+├── S_SysKinetic.f90          # Dispatch to Lattice/Linear/Ylm/Prolate/Fem
+├── A_SysKinetic.md           # This file
+│
+├── Fem/                      # 3D Cartesian spectral elements (grid.fem)
+│   ├── M_SysKinetic_Fem.f90
+│   ├── S_SysKinetic_Fem.f90  # checks grid.fem, dispatches to laplacian
+│   └── Laplacian/            # T = −lap/(2m) and the exact (T + s)⁻¹ (FDM)
+│       ├── M_SysKinetic_Fem_Laplacian.f90
+│       └── S_SysKinetic_Fem_Laplacian.f90
 │
 ├── Lattice/                  # Tight-binding on discrete lattice
 │   ├── M_SysKinetic_Lattice.f90
@@ -97,6 +107,7 @@ SysKinetic/
 | **Ylm/Laplacian/FinDiff** | Radial uniform | −(1/2m)[∇²_r − l(l+1)/r²] | f(0)=0, f(r_max)=0 |
 | **Ylm/Laplacian/Fedvr** | Radial nonuniform | −(1/2m)[∇²_r − l(l+1)/r²] | f(0)=0, f(r_max)=0 |
 | **Ylm/Laplacian/FedvrEcs** | Radial nonuniform, ECS contour | −(1/2m)[∇²_z − l(l+1)/z²] on contour z(r) | f(0)=0, absorbing beyond ECS radius |
+| **Fem/Laplacian** | 3D Cartesian tensor mesh (GLL spectral elements, graded) | −(1/2m) lap, lap = −W⁻¹K3 (nodal strong form); exact (T̂ + s)⁻¹ | Dirichlet on the box surface |
 
 ## Usage
 
@@ -158,6 +169,23 @@ call SysKinetic_MultiplyWithKineticOp(dOrb, orb, time, bt_)
 }
 ```
 
+**Fem (molecules, requires `grid.fem`):**
+```json
+{
+  "sysKinetic": {
+    "fem": {
+      "laplacian": {
+        "bodyMass": [1.0, 1.0]
+      }
+    }
+  }
+}
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `sysKinetic.fem.laplacian.bodyMass` | real(:) | [1.0] | Masses, every entry > 0: a single entry is the mass of every body type (body-type independent); several entries give one mass per body type (e.g. `[1.0, 1836.0]`), and a body type beyond them stops. An absent `bt_` uses `bodyMass(1)`. |
+
 ## Exported Symbols
 
 ### Module Data (M_SysKinetic)
@@ -173,6 +201,13 @@ call SysKinetic_MultiplyWithKineticOp(dOrb, orb, time, bt_)
 |---------|-----------|-------------|
 | `SysKinetic_Setup` | `subroutine()` | Initialize grid-dependent data |
 | `SysKinetic_MultiplyWithKineticOp` | `subroutine(dOrb, orb, time, bt_)` | Apply T̂·ψ → dψ |
+| `SysKinetic_SolveShifted` | `subroutine(dOrb, orb, shift, bt_)`, `complex(R64) :: shift` | Optional (default `null()`): solve (T̂ + shift) dOrb = orb exactly; only grids with a fast exact kinetic inverse bind it (Fem). Real shift: preconditioner (T̂ + σ)⁻¹; shift = 2/(i dt) = −2i/dt: Crank–Nicolson factor 1 + i dt T̂/2 = (i dt/2)(T̂ − 2i/dt) |
+
+### Fem Laplacian (M_SysKinetic_Fem_Laplacian)
+
+| Symbol | Type | Description |
+|--------|------|-------------|
+| `SysKinetic_Fem_Laplacian_bodyMass` | `real(R64)(:)` | Mass per body type |
 
 ### Radial Operator (M_SysKinetic_Ylm)
 
@@ -203,6 +238,64 @@ T̂_{lm} f(r) = −(1/2m) [ d²f/dr² + (2/r) df/dr − l(l+1)/r² f ]
 ```
 
 This avoids the 2/r singularity in finite-difference stencils.
+
+### Fem Spectral-Element Laplacian
+
+On `grid.fem` orbitals are nodal values on the interior GLL nodes of the
+tensor mesh (see `src/Grid/A_Grid.md`). With the lumped (diagonal) mass W and
+the stiffness K3 the Galerkin Laplacian in nodal (strong) form is
+lap = −W⁻¹K3 = −Σ_a W_a⁻¹K_a, applied as three banded stencils
+(`Grid_Fem_ApplyLaplacian`), and
+
+```
+T̂ f = −lap f / (2 m_bt)
+```
+
+is self-adjoint in the metric of `Grid_InnerProduct` (⟨f|T̂g⟩ = conj⟨g|T̂f⟩ to
+1e-14), so h1 = ⟨φ_i|T̂φ_j⟩ is the Galerkin matrix element.
+
+**Exact shifted solve.** The fast diagonalization of the separable Laplacian
+(−lap = S3 D S3ᵀ W3, D(i,j,k) = λx(i) + λy(j) + λz(k)) gives
+
+```
+(T̂ + s)⁻¹ f = 2m (−lap + 2m s)⁻¹ f = 2m · S3 (D + 2m s)⁻¹ S3ᵀ W3 f
+```
+
+for a real or complex shift s (`Grid_Fem_SolveShiftedLaplacian`, generic in
+the type of the shift). The mode products stay real (real and imaginary parts
+transformed separately); only the diagonal (D + 2m s)⁻¹ is complex for a
+complex shift, where the two parts mix. A real shift must exceed −(smallest
+eigenvalue of T̂) (stop otherwise); a shift with nonzero imaginary part is
+always invertible. Uses: the preconditioner (T̂ + σ)⁻¹ of the orbital
+eigenproblems (GroundSolver) and the preconditioner of the Crank–Nicolson /
+Cayley step of the exact field-free part h0 = T̂ + V_static (shift −2i/dt,
+`S_Method_Mb_OrbBased_FieldFreeCayley`; its presence selects the Cayley
+exact part on non-Ylm grids).
+
+**Flags and masses.** `SysKinetic_timeIndependentQ = .true.`;
+`SysKinetic_bodyTypeIndependentQ = .true.` only if all masses are equal,
+always for a single `bodyMass` entry, which then serves every body type
+(the default `[1.0]` works for any number of body types). With several
+entries a body type beyond them stops, also when they are all equal.
+
+**Threading.** Both operators are reentrant (local work arrays only) and are
+called by Method inside OpenMP loops over orbitals; their own OpenMP loops
+carry `if (.not. omp_in_parallel())`.
+
+**Cost** (2 threads, N = 328509, complex fields): MultiplyWithKineticOp
+≈ 8 ms, SolveShifted ≈ 38 ms (real shift) / 41 ms (complex shift).
+
+**Test:** `test/componentTests/SysKinetic/Fem/Laplacian/T_SysKinetic_Fem_Laplacian`
+(box ±8, nLocals 6, one center, hMin 0.2, growth 1.6, N = 328509):
+Hermiticity 4e-14; ⟨g|T̂|g⟩/⟨g|g⟩ for g = e^(−a r²): 1.4999990984 (a = 1,
+exact 1.5), 0.7500001450 (a = 0.5); mass scaling 1.5e-16; (T̂ + s)x − b
+relative residual 3.2e-12 (s = 0.7), 1.3e-13 (s = −2i/0.05), 7.5e-14
+(mass 2.5); refabricated with the single mass `[1.7]`: body-type independent,
+T̂ for bt_ = 3 and without bt_ equal to bt_ = 1 (difference 0),
+⟨g|T̂|g⟩/⟨g|g⟩ = 0.8823524108 (exact 1.5/1.7), (T̂ + 0.7)x − b for
+bt_ = 3: 2.8e-12; `[1.0, 1.0]`: body-type independent.
+`T_SysKinetic_Fem_Laplacian_MissingMass` (expected error) checks that T̂ for
+body type 3 with `bodyMass: [1.0, 2.5]` stops with "no mass for body type 3".
 
 ### Lattice Tight-Binding
 
@@ -242,3 +335,4 @@ approximates the continuum Laplacian for hopping t = 1/(2ma²) where a is the la
 - `M_Utils_DerivativeFinDiff`: FD stencil implementation
 - `M_Utils_DerivativeFftw`: FFT-based derivatives
 - `M_Utils_DerivativeFedvr`: FEDVR derivatives
+- `M_Grid_Fem`: nodal Laplacian and fast-diagonalization shifted solves (Fem)

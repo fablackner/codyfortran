@@ -39,6 +39,10 @@ contains
     ! set values and procedure pointers
     !------------------------------------
 
+    ! Optional entry points: null unless the selected method binds them (no
+    ! binding of an earlier fabricate or of a test survives)
+    nullify (Method_PropagateExactPart, Method_ApplyExactPartPhi)
+
     !------------------------------------
     ! branch: single-body vs many-body
     !------------------------------------

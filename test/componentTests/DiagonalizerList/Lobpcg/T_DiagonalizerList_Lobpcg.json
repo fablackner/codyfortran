@@ -1,0 +1,60 @@
+{
+    "diagonalizerList": {
+        "lobpcgPlain": {
+            "nEvals": 5,
+            "nGuard": 3,
+            "maxIter": 1000,
+            "tol": 1e-11,
+            "printLevel": 0
+        },
+        "lobpcgPrec": {
+            "nEvals": 5,
+            "nGuard": 3,
+            "maxIter": 200,
+            "tol": 1e-11,
+            "printLevel": 1
+        },
+        "lobpcgClusterNoGuard": {
+            "nEvals": 3,
+            "nGuard": 0,
+            "maxIter": 200,
+            "tol": 1e-10,
+            "printLevel": 0
+        },
+        "lobpcgClusterGuard": {
+            "nEvals": 3,
+            "nGuard": 2,
+            "maxIter": 200,
+            "tol": 1e-10,
+            "printLevel": 0
+        },
+        "lobpcgSeeded": {
+            "nEvals": 5,
+            "nGuard": 2,
+            "maxIter": 200,
+            "tol": 1e-10,
+            "printLevel": 0
+        },
+        "lobpcgShiftInvert": {
+            "nEvals": 5,
+            "nGuard": 2,
+            "maxIter": 200,
+            "tol": 1e-10,
+            "printLevel": 0
+        },
+        "lobpcgStall": {
+            "nEvals": 5,
+            "nGuard": 2,
+            "maxIter": 1000,
+            "tol": 1e-10,
+            "printLevel": 1
+        },
+        "lobpcgEuclidean": {
+            "nEvals": 5,
+            "nGuard": 3,
+            "maxIter": 200,
+            "tol": 1e-11,
+            "printLevel": 0
+        }
+    }
+}

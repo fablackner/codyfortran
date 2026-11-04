@@ -39,6 +39,11 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   !> Whether the definite-m node path is bound (Method_Mb_OrbBased_Fabricate).
   logical :: ylmNodesQ = .false.
 
+  !> Whether the gauge coupling is bound (a sysGauge block exists;
+  !> Method_Mb_OrbBased_Fabricate): it is then a term of h1
+  !> (Method_Mb_OrbBased_H1TimeIndependentQ).
+  logical :: gaugeQ = .false.
+
   !> Skeleton of the node path (SetupYlmNodes): ordered pairs (k2, l2), every
   !> unordered pair followed by its swap, with M = m_k2 - m_l2 and the index of
   !> the stored potential (negative for the swap: conjugate); the target groups
@@ -61,11 +66,19 @@ contains
     !   - method.mb.orbBased.nOrbs:                 Orbitals per body type
     !   - method.mb.orbBased.regularizationParameter: Numerical stability (default 1e-10)
     !   - method.mb.orbBased.exactFieldFreeQ:       Exact field-free one-body
-    !                                               propagation in split steps (default false)
+    !                                               propagation in split steps (default false;
+    !                                               Ylm: eigen-decomposition, grids with
+    !                                               SysKinetic_SolveShifted: Cayley step)
     !   - method.mb.orbBased.exactFieldFreeGpuQ:    cuBLAS variant of the exact
-    !                                               propagation (default false)
+    !                                               propagation (default false; Ylm)
     !   - method.mb.orbBased.exactFieldFreeCut:     Spectral cut energy of h0
-    !                                               (default 0 = off; mctdhx only)
+    !                                               (default 0 = off; mctdhx, Ylm only)
+    !   - method.mb.orbBased.exactFieldFreeTol, exactFieldFreeKrylovDim,
+    !     exactFieldFreeMaxRestarts:                GMRES controls of the Cayley step
+    !                                               (read at setup; 1e-12, 30, 20)
+    !   - method.mb.orbBased.exactFieldFreeMeanFieldQ: Frozen mean-field reference
+    !                                               U = J0 - K0 in the Cayley step
+    !                                               (default false; mctdhx, non-Ylm)
     !   - method.mb.orbBased.mOfOrbs:               Declared m of every spin
     !                                               orbital (Ylm grids, optional)
     !
@@ -165,7 +178,8 @@ contains
       Method_Mb_OrbBased_ApplyPotentialOp => NoOpProcedures_ApplyPotentialOp
     end if
 
-    if (Json_GetExistence("sysGauge")) then
+    gaugeQ = Json_GetExistence("sysGauge")
+    if (gaugeQ) then
       Method_Mb_OrbBased_ApplyGaugeOp => ApplyGaugeOp
     else
       Method_Mb_OrbBased_ApplyGaugeOp => NoOpProcedures_ApplyPotentialOp
@@ -179,20 +193,51 @@ contains
 
     ! Exact field-free one-body propagation: the linear split-step integrator
     ! then only propagates the gauge coupling (the target bound above); the
-    ! methods with a split-step linear part bind Method_PropagateExactPart
+    ! methods with a split-step linear part bind Method_PropagateExactPart.
+    ! The four exact-part entry points are reset here, by their only owner
+    ! (no binding of an earlier fabricate survives); BindExactFieldFree binds
+    ! those of the variant, the others stay null.
+    nullify (Method_Mb_OrbBased_SetupFieldFree, Method_Mb_OrbBased_PropagateFieldFree, &
+             Method_Mb_OrbBased_ApplyFieldFreePhi, Method_Mb_OrbBased_ProjectBelowFieldFreeCut)
     Method_Mb_OrbBased_exactFieldFreeQ = Json_Get("method.mb.orbBased.exactFieldFreeQ", .false.)
     if (Method_Mb_OrbBased_exactFieldFreeQ) then
       Method_Mb_OrbBased_ApplyLinOp => Method_Mb_OrbBased_ApplyGaugeOp
+      call BindExactFieldFree
     else
       Method_Mb_OrbBased_ApplyLinOp => ApplySingleBodyOpLin
     end if
 
-    ! Spectral cut of h0 (needs the eigenvectors of the exact part); the
-    ! orbital derivatives of MCTDHX are projected onto the kept eigenvectors
+    ! Frozen mean-field reference of the Cayley exact part: h0 + U exactly,
+    ! the interaction minus U in the nonlinear part of MCTDHX (fermions; the
+    ! interaction must be body-type independent, checked at setup). The
+    ! variant is that bound by BindExactFieldFree.
+    Method_Mb_OrbBased_exactFieldFreeMeanFieldQ = Json_Get("method.mb.orbBased.exactFieldFreeMeanFieldQ", .false.)
+    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) then
+      if (.not. Method_Mb_OrbBased_exactFieldFreeQ) &
+        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ requires method.mb.orbBased.exactFieldFreeQ"
+      if (.not. associated(Method_Mb_OrbBased_PropagateFieldFree, Method_Mb_OrbBased_PropagateFieldFreeCayley)) &
+        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ is only available for the Cayley exact part &
+                   &(non-Ylm grids, e.g. grid.fem); Ylm grids propagate h0 by its eigen-decomposition"
+      if (.not. Json_GetExistence("method.mb.orbBased.mctdhx")) &
+        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ is only implemented for method.mb.orbBased.mctdhx"
+      if (.not. Json_GetExistence("sysInteraction")) &
+        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ requires sysInteraction (without an interaction &
+                   &the mean field vanishes)"
+      if (any(Method_Mb_bodyStatistics .ne. 'f')) &
+        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ requires fermions (the reference is the &
+                   &Hartree-Fock mean field J - K of the 1-RDM)"
+    end if
+
+    ! Spectral cut of h0 (needs the eigenvectors of the exact part, i.e. the
+    ! projection bound by BindExactFieldFree); the orbital derivatives of
+    ! MCTDHX are projected onto the kept eigenvectors
     Method_Mb_OrbBased_exactFieldFreeCut = Json_Get("method.mb.orbBased.exactFieldFreeCut", 0.0_R64)
-    if (Method_Mb_OrbBased_exactFieldFreeCut .ne. 0.0_R64) then
+    if (.not. (abs(Method_Mb_OrbBased_exactFieldFreeCut) <= 0.0_R64)) then
       if (.not. Method_Mb_OrbBased_exactFieldFreeQ) &
         error stop "method.mb.orbBased.exactFieldFreeCut requires method.mb.orbBased.exactFieldFreeQ"
+      if (.not. associated(Method_Mb_OrbBased_ProjectBelowFieldFreeCut)) &
+        error stop "method.mb.orbBased.exactFieldFreeCut is only available on Ylm grids &
+                   &(the Cayley exact part of other grids, e.g. grid.fem, has no h0 eigenvectors)"
       if (.not. Json_GetExistence("method.mb.orbBased.mctdhx")) &
         error stop "method.mb.orbBased.exactFieldFreeCut is only implemented for method.mb.orbBased.mctdhx"
       if (Method_Mb_OrbBased_exactFieldFreeCut < 0.0_R64) &
@@ -228,6 +273,41 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine BindExactFieldFree
+    !---------------------------------------------------------------------------
+    ! Binds the exact-part entry points (method.mb.orbBased.exactFieldFreeQ):
+    !   - grid.ylm: dense eigen-decomposition of the h0 blocks per l
+    !     (S_Method_Mb_OrbBased_FieldFreeEigen), with phi functions and spectral cut
+    !   - otherwise, if the kinetic backend binds SysKinetic_SolveShifted
+    !     (grid.fem): Crank-Nicolson (Cayley) step by preconditioned GMRES
+    !     (S_Method_Mb_OrbBased_FieldFreeCayley); no phi functions (MCTDHX then
+    !     does not bind Method_ApplyExactPartPhi), no spectral cut, real time
+    !     only: those two pointers stay null (nullified by the caller,
+    !     Method_Mb_OrbBased_Fabricate)
+    ! The only place that decides the variant; later checks test the bound
+    ! pointers. SysKinetic_Fabricate must precede Method_Fabricate.
+    !---------------------------------------------------------------------------
+    use M_Utils_Json
+    use M_SysKinetic
+
+    if (Json_GetExistence("grid.ylm")) then
+      Method_Mb_OrbBased_SetupFieldFree => Method_Mb_OrbBased_SetupFieldFreeEigen
+      Method_Mb_OrbBased_PropagateFieldFree => Method_Mb_OrbBased_PropagateFieldFreeEigen
+      Method_Mb_OrbBased_ApplyFieldFreePhi => Method_Mb_OrbBased_ApplyFieldFreePhiEigen
+      Method_Mb_OrbBased_ProjectBelowFieldFreeCut => Method_Mb_OrbBased_ProjectBelowFieldFreeCutEigen
+
+    else if (associated(SysKinetic_SolveShifted)) then
+      Method_Mb_OrbBased_SetupFieldFree => Method_Mb_OrbBased_SetupFieldFreeCayley
+      Method_Mb_OrbBased_PropagateFieldFree => Method_Mb_OrbBased_PropagateFieldFreeCayley
+
+    else
+      error stop "method.mb.orbBased.exactFieldFreeQ requires a Ylm grid or a kinetic backend with &
+                 &SysKinetic_SolveShifted (e.g. sysKinetic.fem; fabricate SysKinetic before Method)"
+    end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine OrthonormalizeKeepingStateUnsupported(state)
     use M_Utils_UnusedVariables
     complex(R64), intent(inout), contiguous, target :: state(:)
@@ -242,7 +322,15 @@ contains
     use M_Method
 
     if (ylmNodesQ) call SetupYlmNodes
-    if (associated(Method_PropagateExactPart)) call Method_Mb_OrbBased_SetupFieldFree
+
+    ! The orbital-based methods bind Method_PropagateExactPart only with
+    ! exactFieldFreeQ, which binds the setup of the exact part
+    if (associated(Method_PropagateExactPart)) then
+      if (.not. associated(Method_Mb_OrbBased_SetupFieldFree)) &
+        error stop "Method_Mb_OrbBased_Setup: Method_PropagateExactPart is bound, but the exact field-free part is not &
+                   &(Method_Mb_OrbBased_SetupFieldFree is null; it is bound by method.mb.orbBased.exactFieldFreeQ)"
+      call Method_Mb_OrbBased_SetupFieldFree
+    end if
 
   end subroutine
 
@@ -415,6 +503,25 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module function Method_Mb_OrbBased_H1TimeIndependentQ() result(res)
+    !---------------------------------------------------------------------------
+    ! h1 = T + V_ext (+ Ĥ_A if the gauge coupling is bound, gaugeQ) of
+    ! ApplySingleBodyOp is time-independent if all of its terms are. The flags
+    ! are read at call time, so the result does not depend on the order of
+    ! the Sys* fabricates.
+    !---------------------------------------------------------------------------
+    use M_SysKinetic
+    use M_SysPotential
+    use M_SysGauge
+
+    logical :: res
+
+    res = SysPotential_timeIndependentQ .and. SysKinetic_timeIndependentQ .and. &
+          (.not. gaugeQ .or. SysGauge_timeIndependentQ)
+
+  end function
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine FillH2(h2, orbs, time)
     !---------------------------------------------------------------------------
     ! Builds the two-body Hamiltonian tensor in the orbital basis:
@@ -488,6 +595,32 @@ contains
       end do
     end do
     !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_FillOneBodyMatrix(h1, orbs, hOrbs)
+    !---------------------------------------------------------------------------
+    ! h1(i,j) = ⟨φ_i|hOrbs(:,j)⟩ (FillOrbitalMatrix: equal body type) in the
+    ! nOrbsSum layout; restricted: duplicated for the second spin block.
+    !---------------------------------------------------------------------------
+    use M_Orbs
+
+    complex(R64), intent(out), allocatable :: h1(:, :)
+    complex(R64), intent(in), contiguous   :: orbs(:, :)
+    complex(R64), intent(in), contiguous   :: hOrbs(:, :)
+
+    complex(R64), allocatable :: h1Spatial(:, :)
+    integer(I32) :: nOS, nO
+
+    nOS = Orbs_nOrbsInState
+    nO = Method_Mb_OrbBased_nOrbsSum
+    call FillOrbitalMatrix(h1Spatial, orbs, hOrbs)
+
+    allocate (h1(nO, nO))
+    h1(:, :) = 0.0_R64
+    h1(:nOS, :nOS) = h1Spatial(:, :)
+    if (Orbs_restrictedQ) h1(nOS + 1:, nOS + 1:) = h1Spatial(:, :)
 
   end subroutine
 
@@ -1242,11 +1375,12 @@ contains
 
     nOS = Orbs_nOrbsInState
 
+    allocate (rho2(nOS, nOS, nOS, nOS))
     if (Orbs_restrictedQ) then
-      rho2 = rdm2(:nOS, :nOS, :nOS, :nOS) + rdm2(nOS + 1:, :nOS, nOS + 1:, :nOS) + &
-             rdm2(:nOS, nOS + 1:, :nOS, nOS + 1:) + rdm2(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:)
+      rho2(:, :, :, :) = rdm2(:nOS, :nOS, :nOS, :nOS) + rdm2(nOS + 1:, :nOS, nOS + 1:, :nOS) + &
+                         rdm2(:nOS, nOS + 1:, :nOS, nOS + 1:) + rdm2(nOS + 1:, nOS + 1:, nOS + 1:, nOS + 1:)
     else
-      rho2 = rdm2(:nOS, :nOS, :nOS, :nOS)
+      rho2(:, :, :, :) = rdm2(:nOS, :nOS, :nOS, :nOS)
     end if
 
     allocate (rdm2spatial, mold=rho2)
@@ -1376,32 +1510,18 @@ contains
     !
     ! Optionally returns h1_(i,j) = ⟨φ_i|dOrbs(:,j)⟩ from the accumulated
     ! result (equal body type; duplicated for the second spin block if
-    ! restricted).
+    ! restricted; Method_Mb_OrbBased_FillOneBodyMatrix).
     !---------------------------------------------------------------------------
-    use M_Orbs
-
     complex(R64), intent(inout), contiguous, target :: dOrbs(:, :)
     complex(R64), intent(in), contiguous, target    :: orbs(:, :)
     real(R64), intent(in)               :: time
     complex(R64), intent(out), allocatable, optional :: h1_(:, :)
 
-    complex(R64), allocatable :: h1Spatial(:, :)
-    integer(I32) :: nOS, nO
-
     call Method_Mb_OrbBased_ApplyKineticOp(dOrbs, orbs, time)
     call Method_Mb_OrbBased_ApplyPotentialOp(dOrbs, orbs, time)
     call Method_Mb_OrbBased_ApplyGaugeOp(dOrbs, orbs, time)
 
-    if (.not. present(h1_)) return
-
-    nOS = Orbs_nOrbsInState
-    nO = Method_Mb_OrbBased_nOrbsSum
-    call FillOrbitalMatrix(h1Spatial, orbs, dOrbs)
-
-    allocate (h1_(nO, nO))
-    h1_(:, :) = 0.0_R64
-    h1_(:nOS, :nOS) = h1Spatial(:, :)
-    if (Orbs_restrictedQ) h1_(nOS + 1:, nOS + 1:) = h1Spatial(:, :)
+    if (present(h1_)) call Method_Mb_OrbBased_FillOneBodyMatrix(h1_, orbs, dOrbs)
 
   end subroutine
 

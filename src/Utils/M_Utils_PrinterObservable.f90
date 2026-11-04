@@ -34,8 +34,7 @@ contains
     !> Flag controlling whether to print output to screen.
     logical, intent(in) :: toScreenQ
 
-    integer(I32) :: iGrid
-    integer(I32) :: io, istat, nO, nOS, nG
+    integer(I32) :: io, istat, nO, nOS
     integer(I32) :: i1, i2
     character(256) :: msg
 
@@ -44,7 +43,6 @@ contains
     complex(R64), allocatable :: normOrbs(:)
 
     nO = size(rdm1, 1)
-    nG = Grid_nPoints
     nOS = Orbs_nOrbsInState
 
     allocate (normOrbs(nOS))
@@ -61,11 +59,8 @@ contains
       end do
     end do
 
-    normOrbs = 0.0_R64
     do i1 = 1, nOS
-      do iGrid = 1, nG
-        normOrbs(i1) = Grid_InnerProduct(orbs(:, i1), orbs(:, i1))
-      end do
+      normOrbs(i1) = Grid_InnerProduct(orbs(:, i1), orbs(:, i1))
     end do
 
     !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -119,24 +114,21 @@ contains
     !> Flag controlling whether to print output to screen.
     logical, intent(in) :: toScreenQ
 
-    integer(I32) :: iGrid, i1, j1
-    integer(I32) :: io, istat, nOS, nG
+    integer(I32) :: i1, j1
+    integer(I32) :: io, istat, nOS
     character(256) :: msg
 
     complex(R64), allocatable :: innerP(:, :)
 
-    nG = Grid_nPoints
     nOS = Orbs_nOrbsInState
 
     allocate (innerP(nOS, nOS))
 
-    innerP(:, :) = 0.0_R64
-
-    do i1 = 1, nOS
-      do j1 = 1, nOS
-        do iGrid = 1, nG
-          innerP(i1, j1) = innerP(i1, j1) + Grid_InnerProduct(orbs(:, i1), orbs(:, j1))
-        end do
+    ! One inner product per pair (the overlap itself, formerly summed
+    ! Grid_nPoints times)
+    do j1 = 1, nOS
+      do i1 = 1, nOS
+        innerP(i1, j1) = Grid_InnerProduct(orbs(:, i1), orbs(:, j1))
       end do
     end do
 

@@ -358,6 +358,7 @@ contains
 
     ! Step 2: Diagonalize CI Hamiltonian (HamiltonianAction is the matvec callback)
     call DiagonalizerList(1) % e % Diagonalize(time, .true.)
+    call GroundSolver_NoteUnconverged(1)
 
     ! Step 3: Mix phase-aligned CI ground eigenvector with old coefficients
     ! The eigenvector's global phase is arbitrary; align it so the mixing
@@ -413,6 +414,7 @@ contains
     ! around FockAction are the matvec callbacks)
     do l = 0, Grid_Ylm_lmax
       call DiagonalizerList(l + 2) % e % Diagonalize(time, .true.)
+      call GroundSolver_NoteUnconverged(l + 2)
     end do
 
     ! Step 6: Map eigenvectors to orbitals using (n,l,m)

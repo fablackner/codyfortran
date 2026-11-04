@@ -4,7 +4,8 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Single-particle quantum dynamics (no mean-field or many-body terms).
 !>
-!> Evolves a single wavefunction under an external potential; no exchange or
+!> Evolves a single wavefunction under an external potential and, if a
+!> sysGauge block exists, the laser coupling of SysGauge; no exchange or
 !> correlation effects are included. Useful for testing grid implementations and
 !> studying fundamental phenomena (wave packets, tunneling, scattering).
 !>

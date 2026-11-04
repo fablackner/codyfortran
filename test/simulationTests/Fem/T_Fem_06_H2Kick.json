@@ -1,0 +1,103 @@
+{
+    "grid": {
+        "fem": {
+            "nLocals": 5,
+            "xmin": -10.0, "xmax": 10.0,
+            "ymin": -10.0, "ymax": 10.0,
+            "zmin": -10.0, "zmax": 10.0,
+            "centers": {
+                "x": [ 0.0, 0.0 ],
+                "y": [ 0.0, 0.0 ],
+                "z": [ -0.7, 0.7 ],
+                "hMin": [ 0.3, 0.3 ]
+            },
+            "growth": 1.7,
+            "hMax": 3.0,
+            "multipoleLmax": 6,
+            "multipoleCenter": [ 0.0, 0.0, 0.0 ]
+        }
+    },
+    "sysKinetic": {
+        "fem": {
+            "laplacian": {
+                "bodyMass": [ 1.0, 1.0 ]
+            }
+        }
+    },
+    "sysPotential": {
+        "fem": {
+            "coulomb": {
+                "charges": [ 1.0, 1.0 ],
+                "smearing": [ 0.0, 0.0 ]
+            }
+        }
+    },
+    "sysInteraction": {
+        "fem": {
+            "coulomb": {
+                "strength": 1.0
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 1, 1 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 1, 1 ],
+                "exactFieldFreeQ": true,
+                "exactFieldFreeTol": 1e-12,
+                "exactFieldFreeKrylovDim": 30,
+                "exactFieldFreeMaxRestarts": 20,
+                "mctdhx": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "load": { }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 1
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "integratorList": {
+        "rk1": {
+            "o4Expl": { }
+        },
+        "rk2": {
+            "o4Expl": { }
+        }
+    },
+    "propagator": {
+        "splitStep": {
+            "order2": { },
+            "exactPartScheme": "strang"
+        }
+    },
+    "program": {
+        "kappa": 1e-3,
+        "timeStep": 0.02,
+        "endTime": 1.0,
+        "outputEvery": 10
+    }
+}

@@ -27,12 +27,18 @@ src/Absorber/
 │   └── Cosinus/
 │       ├── M_Absorber_Linear_Cosinus.f90  # Cosine absorber interface
 │       └── S_Absorber_Linear_Cosinus.f90  # Cosine absorber implementation
-└── Ylm/
-    ├── M_Absorber_Ylm.f90      # Ylm-grid family interface
-    ├── S_Absorber_Ylm.f90      # Ylm-grid variant dispatcher
+├── Ylm/
+│   ├── M_Absorber_Ylm.f90      # Ylm-grid family interface
+│   ├── S_Absorber_Ylm.f90      # Ylm-grid variant dispatcher
+│   └── Cosinus/
+│       ├── M_Absorber_Ylm_Cosinus.f90  # Radial cosine absorber interface
+│       └── S_Absorber_Ylm_Cosinus.f90  # Radial cosine absorber implementation
+└── Fem/
+    ├── M_Absorber_Fem.f90      # FEM-grid family interface
+    ├── S_Absorber_Fem.f90      # checks grid.fem, variant dispatcher
     └── Cosinus/
-        ├── M_Absorber_Ylm_Cosinus.f90  # Radial cosine absorber interface
-        └── S_Absorber_Ylm_Cosinus.f90  # Radial cosine absorber implementation
+        ├── M_Absorber_Fem_Cosinus.f90  # width, order (exported)
+        └── S_Absorber_Fem_Cosinus.f90  # product of per-axis layer profiles
 ```
 
 ### Key Concepts
@@ -124,6 +130,46 @@ src/Absorber/
 | `order` | int | 6 | Exponent denominator (larger = sharper transition) |
 
 The mask depends only on r, so it acts identically on every spherical-harmonic (l,m) channel of the flattened Ylm grid (via `Grid_Ylm_rCoord`). Do not combine with an ECS radial back-end (`fedvrEcs`) — complex scaling already absorbs outgoing flux.
+
+### Example: Boundary-Layer Cosine Absorber on the FEM Grid
+
+```json
+{
+  "absorber": {
+    "fem": {
+      "cosinus": {
+        "width": 4.0,
+        "order": 8
+      }
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `width` | real | 0.2 · smallest box side | Thickness of the absorbing layer along every face; 0 < width ≤ (smallest side)/2 |
+| `order` | int | 6 | Exponent denominator (larger = sharper transition), ≥ 1 |
+
+The `grid.fem` box has homogeneous Dirichlet faces, so without an absorber
+outgoing waves reflect there. The mask is a product of one-dimensional layer
+profiles (a layer along each of the six faces; edges and corners get the
+product):
+
+```
+M(x, y, z) = m_x(x) m_y(y) m_z(z),
+m_a(s) = cos^(1/order)(π/2 · (width − d_a)/width)   for d_a < width,
+       = 1                                           otherwise,
+d_a    = min(s − lower_a, upper_a − s)   (distance to the nearer face of axis a)
+```
+
+It is 1 in the inner box, decays monotonically toward each face and would
+vanish on the faces themselves (Dirichlet nodes, not unknowns). It is built
+once in Setup (`Grid_nPoints` values; the default width needs the box, so
+`Grid_Fabricate` must run before `Absorber_Fabricate`), and `ApplyAbsorber`
+multiplies every orbital column (`size(orbs, 2)`). The family checks that
+`grid.fem` exists. `Absorber_Fem_Cosinus_width` and
+`Absorber_Fem_Cosinus_order` are exported for printers.
 
 ### Orthonormal Orbitals after the Mask (`keepOrthonormalQ`)
 
@@ -229,7 +275,7 @@ end do
 | `M_Utils_Say` | Logging/diagnostics |
 | `M_Utils_Constants` | PI |
 | `M_Utils_NoOpProcedures` | Default no-op implementations |
-| `M_Grid`, `M_Grid_Linear`, `M_Grid_Ylm` | Spatial grid info (nPoints, xCoord, rCoord/radialPoints) |
+| `M_Grid`, `M_Grid_Linear`, `M_Grid_Ylm`, `M_Grid_Fem` | Spatial grid info (nPoints, xCoord, rCoord/radialPoints, Fem axes and box) |
 | `M_Orbs` | Orbital count (`Orbs_nOrbsInState`) |
 
 ---
@@ -240,6 +286,11 @@ end do
 - Check norm reduction: after applying absorber, norm should decrease for wavefunctions with amplitude in absorbing region
 - Test with different `order` values to verify transition sharpness
 - Benchmark ApplyAbsorber performance (should be O(nGrid × nOrbitals))
+- `test/componentTests/Absorber/Fem/Cosinus/T_Absorber_Fem_Cosinus`: asymmetric
+  box [−6, 6] × [−5, 7] × [−4, 4], width 2, order 4; constant orbitals become
+  the mask: exactly 1 at the 27195 inner nodes, the product formula at all
+  nodes (difference 0), the explicit profile at the last x node, monotone
+  decay toward every face, 0 < M ≤ 1
 
 ---
 

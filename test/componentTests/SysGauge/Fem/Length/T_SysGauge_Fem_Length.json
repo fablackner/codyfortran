@@ -1,0 +1,33 @@
+{
+    "grid": {
+        "fem": {
+            "nLocals": 5,
+            "xmin": -5.0,
+            "xmax": 5.0,
+            "ymin": -5.0,
+            "ymax": 5.0,
+            "zmin": -5.0,
+            "zmax": 5.0,
+            "centers": {
+                "x": [0.0],
+                "y": [0.0],
+                "z": [0.0],
+                "hMin": [0.5]
+            },
+            "growth": 1.5,
+            "hMax": 1.5
+        }
+    },
+    "sysGauge": {
+        "fem": {
+            "length": {
+                "fieldStrength": 0.05,
+                "omega": 0.3,
+                "nCycles": 2.0,
+                "cep": 0.4,
+                "tStart": 3.0,
+                "polarization": [1.0, 2.0, -2.0]
+            }
+        }
+    }
+}

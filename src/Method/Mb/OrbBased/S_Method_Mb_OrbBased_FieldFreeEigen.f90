@@ -2,10 +2,15 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_FieldFree
+submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_FieldFreeEigen
   !-----------------------------------------------------------------------------
   ! Exact propagation with the field-free one-body Hamiltonian h0 = T + V_ext
-  ! on Ylm grids (method.mb.orbBased.exactFieldFreeQ).
+  ! on Ylm grids (method.mb.orbBased.exactFieldFreeQ): the *Eigen procedures,
+  ! which Method_Mb_OrbBased_Fabricate binds to the exact-part pointers
+  ! (Method_Mb_OrbBased_SetupFieldFree, _PropagateFieldFree,
+  ! _ApplyFieldFreePhi, _ProjectBelowFieldFreeCut) for grid.ylm. Other grids:
+  ! S_Method_Mb_OrbBased_FieldFreeCayley (with the frozen mean-field reference
+  ! of S_Method_Mb_OrbBased_FieldFreeMeanField).
   !
   ! For a central potential h0 is block diagonal in (l,m) and independent of
   ! m. In the metric-symmetrized radial basis (w^{1/2} f, w the radial metric
@@ -71,7 +76,7 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_FieldFree
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine Method_Mb_OrbBased_PropagateFieldFree(orbs, dt, imagTimeQ)
+  module subroutine Method_Mb_OrbBased_PropagateFieldFreeEigen(orbs, dt, imagTimeQ)
     use M_Utils_BlasLib, only: DGEMM
     use M_Grid_Ylm
 
@@ -111,7 +116,7 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine Method_Mb_OrbBased_ApplyFieldFreePhi(orbs, orbsList, dt)
+  module subroutine Method_Mb_OrbBased_ApplyFieldFreePhiEigen(orbs, orbsList, dt)
     !---------------------------------------------------------------------------
     ! Per block: every slice is transformed to the eigenbasis, weighted with
     ! phi_m(-i E dt) and summed; one back transformation (CPU only, the host
@@ -344,7 +349,7 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine Method_Mb_OrbBased_ProjectBelowFieldFreeCut(orbs)
+  module subroutine Method_Mb_OrbBased_ProjectBelowFieldFreeCutEigen(orbs)
     !---------------------------------------------------------------------------
     ! orbs <- P orbs with P = 1 - U_H U_H^T per block in the symmetrized basis,
     ! U_H the eigenvectors above the cut (few compared to the kept ones).
@@ -404,7 +409,7 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  module subroutine Method_Mb_OrbBased_SetupFieldFree
+  module subroutine Method_Mb_OrbBased_SetupFieldFreeEigen
     !---------------------------------------------------------------------------
     ! Builds and diagonalizes the symmetrized radial blocks of h0 for every l.
     !

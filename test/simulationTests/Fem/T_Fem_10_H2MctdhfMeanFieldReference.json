@@ -1,0 +1,116 @@
+{
+    "grid": {
+        "fem": {
+            "nLocals": 4,
+            "xmin": -6.0, "xmax": 6.0,
+            "ymin": -6.0, "ymax": 6.0,
+            "zmin": -6.0, "zmax": 6.0,
+            "centers": {
+                "x": [ 0.0, 0.0 ],
+                "y": [ 0.0, 0.0 ],
+                "z": [ -0.7, 0.7 ],
+                "hMin": [ 0.5, 0.5 ]
+            },
+            "growth": 1.8,
+            "hMax": 2.0,
+            "multipoleLmax": 6,
+            "multipoleCenter": [ 0.0, 0.0, 0.0 ]
+        }
+    },
+    "sysKinetic": {
+        "fem": {
+            "laplacian": {
+                "bodyMass": [ 1.0, 1.0 ]
+            }
+        }
+    },
+    "sysPotential": {
+        "fem": {
+            "coulomb": {
+                "charges": [ 1.0, 1.0 ],
+                "smearing": [ 0.0, 0.0 ]
+            }
+        }
+    },
+    "sysInteraction": {
+        "fem": {
+            "coulomb": {
+                "strength": 1.0
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 1, 1 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 2, 2 ],
+                "exactFieldFreeQ": true,
+                "exactFieldFreeMeanFieldQ": true,
+                "exactFieldFreeTol": 1e-12,
+                "exactFieldFreeKrylovDim": 30,
+                "exactFieldFreeMaxRestarts": 20,
+                "mctdhx": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "fem": {
+            "sto": {
+                "orbital": [ 1, 1, 2, 2 ],
+                "center": [ 1, 2, 1, 2 ],
+                "n": [ 1, 1, 1, 1 ],
+                "l": [ 0, 0, 0, 0 ],
+                "m": [ 0, 0, 0, 0 ],
+                "zeta": [ 1.0, 1.0, 1.0, 1.0 ],
+                "coeff": [ 1.0, 1.0, 1.0, -1.0 ]
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 1
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "integratorList": {
+        "rk1": {
+            "o4Expl": { }
+        },
+        "rk2": {
+            "o4Expl": { }
+        }
+    },
+    "propagator": {
+        "splitStep": {
+            "order2": { },
+            "exactPartScheme": "strang"
+        }
+    },
+    "program": {
+        "kappa": 0.1,
+        "timeStep": 0.005,
+        "endTime": 0.25,
+        "dipoleTolerance": 1e-5,
+        "energyTolerance": 1e-5,
+        "energyAgreement": 3e-6
+    }
+}

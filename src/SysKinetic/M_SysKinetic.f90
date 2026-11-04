@@ -24,6 +24,8 @@
 !>   - **Linear**: 1D Cartesian grid using finite-difference or Fourier methods
 !>   - **Lattice**: Tight-binding hopping on discrete 3D lattice sites
 !>   - **Ylm**: Radial Laplacian in spherical harmonics: −(1/2m)[d²/dr² + (2/r)d/dr − l(l+1)/r²]
+!>   - **Prolate**: Two-center prolate-spheroidal Laplacian per azimuthal channel
+!>   - **Fem**: 3D Cartesian spectral-element Laplacian (nodal, lumped mass)
 !>
 !> Contract
 !> --------
@@ -31,6 +33,9 @@
 !> 2. Setup is idempotent and prepares any masks, work arrays, or constants.
 !> 3. Kinetic application operates on contiguous complex arrays representing a
 !>    single orbital; an optional body-type index `bt_` allows mass scaling.
+!> 4. Optional hooks (`SysKinetic_SolveShifted`) stay null unless the backend
+!>    provides them (`SysKinetic_Fabricate` nullifies them before it
+!>    dispatches); callers test them with `associated(...)`.
 !>
 !> Initialization Sequence
 !> -----------------------
@@ -39,7 +44,8 @@
 !> call SysKinetic_Setup        ! Allocates precomputed data (stencils, k-vectors, etc.)
 !> @endcode
 !>
-!> @see M_SysKinetic_Linear, M_SysKinetic_Lattice, M_SysKinetic_Ylm
+!> @see M_SysKinetic_Linear, M_SysKinetic_Lattice, M_SysKinetic_Ylm, M_SysKinetic_Prolate,
+!>      M_SysKinetic_Fem
 module M_SysKinetic
   use M_Utils_Types
   use M_Utils_NoOpProcedures
@@ -60,6 +66,8 @@ module M_SysKinetic
     !>   - `sysKinetic.linear`  → Cartesian grid Laplacian (FinDiff/Fourier)
     !>   - `sysKinetic.lattice` → Tight-binding hopping (nearest-neighbor)
     !>   - `sysKinetic.ylm`     → Spherical radial Laplacian (FinDiff/FEDVR)
+    !>   - `sysKinetic.prolate` → Prolate-spheroidal Laplacian (FEDVR)
+    !>   - `sysKinetic.fem`     → 3D spectral-element Laplacian (binds SolveShifted)
     !>
     !> Must be invoked exactly once per simulation context before calling
     !> any other procedure in this module. Subsequent calls will overwrite
@@ -156,6 +164,37 @@ module M_SysKinetic
       real(R64), intent(in) :: time
       !> Body type index (1-based) selecting mass from bodyMass array
       integer(I32), intent(in), optional :: bt_
+    end subroutine
+  end interface
+
+  !> @brief Optional hook: solve (T̂ + shift) dOrb = orb exactly.
+  !>
+  !> @details
+  !> Optional, only grids with a fast exact kinetic inverse bind it (Fem: fast
+  !> diagonalization of the separable Laplacian); it stays null otherwise, so
+  !> callers must test `associated(SysKinetic_SolveShifted)` and fall back
+  !> (e.g. to no preconditioning). The shift is complex: real for
+  !> preconditioners of eigenproblems, (T̂ + σ)⁻¹, and 2/(i dt) = −2i/dt for
+  !> the Crank–Nicolson factor 1 + i dt T̂/2 = (i dt/2) (T̂ − 2i/dt).
+  procedure(I_SysKinetic_SolveShifted), pointer :: SysKinetic_SolveShifted => null()
+  abstract interface
+    !> @brief Exact shifted solve: dOrb = (T̂ + shift)⁻¹ · orb
+    !>
+    !> @param[out] dOrb   Solution of (T̂ + shift) dOrb = orb (length = nGridPoints)
+    !> @param[in]  orb    Right-hand side on the spatial grid
+    !> @param[in]  shift  Complex shift; T̂ + shift must be invertible (for a
+    !>                    real shift: shift > −(smallest eigenvalue of T̂))
+    !> @param[in]  bt_    Optional body-type index selecting the mass (default = 1)
+    subroutine I_SysKinetic_SolveShifted(dOrb, orb, shift, bt_)
+      import :: I32, R64
+      !> Output: solution of (T̂ + shift) dOrb = orb
+      complex(R64), intent(out), contiguous :: dOrb(:)
+      !> Input: right-hand side
+      complex(R64), intent(in), contiguous  :: orb(:)
+      !> Complex shift (real for preconditioners, −2i/dt for Crank–Nicolson)
+      complex(R64), intent(in)              :: shift
+      !> Body type index (1-based) selecting the mass from the bodyMass array
+      integer(I32), intent(in), optional    :: bt_
     end subroutine
   end interface
 

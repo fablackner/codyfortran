@@ -11,6 +11,11 @@
 !>   - `groundSolver.scf`: Self-consistent field (Hartree–Fock) method
 !>   - `groundSolver.mcscf`: Multiconfiguration self-consistent field (MCSCF) method
 !>
+!> For every backend it also binds the orbital preconditioner
+!> `GroundSolver_PreconditionAction` (key `groundSolver.precShiftMin`), and
+!> it provides `GroundSolver_NoteUnconverged`, the note every backend prints
+!> after an unconverged diagonalizer solve.
+!>
 !> This is the only file that needs modification when adding new top-level
 !> ground-state solver backends.
 submodule(M_GroundSolver) S_GroundSolver
@@ -39,6 +44,17 @@ contains
     end if
 
     !------------------------------------
+    ! orbital preconditioner (all backends)
+    !------------------------------------
+
+    GroundSolver_precShiftMin = Json_Get("precShiftMin", 0.5_R64, path_="groundSolver")
+    if (.not. (GroundSolver_precShiftMin > 0.0_R64)) then
+      error stop "groundSolver.precShiftMin must be positive"
+    end if
+
+    GroundSolver_PreconditionAction => PreconditionAction
+
+    !------------------------------------
     ! branch
     !------------------------------------
 
@@ -55,6 +71,20 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine GroundSolver_NoteUnconverged(iDiag)
+    use M_DiagonalizerList
+
+    integer(I32), intent(in) :: iDiag
+
+    if (DiagonalizerList(iDiag) % e % convergedQ) return
+
+    write (*, '(1X, 3A, I0, A, I0, A)') "note: groundSolver: ", DiagonalizerList(iDiag) % e % path, &
+      " did not converge (", DiagonalizerList(iDiag) % e % nFound, " of ", DiagonalizerList(iDiag) % e % nEvals, &
+      " wanted eigenpairs); continuing with its best approximations"
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module function GroundSolver_NumberOfSpinUpOrbs() result(nUp)
     use M_Orbs
 
@@ -67,5 +97,34 @@ contains
     end if
 
   end function
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Orbital preconditioner: dOrb ≈ (F̂ − shift)⁻¹·orb.
+  !>
+  !> @details
+  !> dOrb = (T̂ + max(−shift, GroundSolver_precShiftMin))⁻¹·orb through
+  !> `SysKinetic_SolveShifted` (no body type: the mass of body type 1, i.e.
+  !> of the spin-restricted orbitals) if the kinetic backend provides it,
+  !> else dOrb = orb. The hook is looked up on every call, so the result
+  !> does not depend on the order of the Fabricate calls. Bound to
+  !> `GroundSolver_PreconditionAction` for every backend.
+  subroutine PreconditionAction(dOrb, orb, shift, time)
+    use M_SysKinetic
+    use M_Utils_UnusedVariables
+
+    complex(R64), intent(out), contiguous, target :: dOrb(:)
+    complex(R64), intent(in), contiguous, target :: orb(:)
+    real(R64), intent(in) :: shift
+    real(R64), intent(in) :: time
+
+    if (.false.) call UnusedVariables_Mark(time)
+
+    if (associated(SysKinetic_SolveShifted)) then
+      call SysKinetic_SolveShifted(dOrb, orb, cmplx(max(-shift, GroundSolver_precShiftMin), 0.0_R64, kind=R64))
+    else
+      dOrb = orb
+    end if
+
+  end subroutine
 
 end submodule

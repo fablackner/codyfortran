@@ -73,7 +73,9 @@ module M_GroundSolver_Scf
     !>
     !> This is used as the `ApplyMatOnVec` callback for iterative eigensolvers
     !> (DiagonalizerList). The Hartree potential Ĵ is precomputed and stored;
-    !> the exchange term K̂ is computed on-the-fly for each orbital.
+    !> the exchange term K̂ is computed on-the-fly for each orbital, or (stdImpl
+    !> with `aceQ`) applied as the precomputed adaptively compressed exchange
+    !> operator.
     !>
     !> @param[out] dOrb  Result of F̂ applied to orb (same dimension as orb)
     !> @param[in]  orb   Input orbital/trial vector

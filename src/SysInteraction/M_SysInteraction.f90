@@ -22,14 +22,21 @@
 !>   - `Lattice`: Discrete on-site interactions (Hubbard U)
 !>   - `Linear`: Real-space convolution (SoftYukawa, contact)
 !>   - `Ylm`: Spherical-harmonic expansion (Coulomb via Poisson solvers)
+!>   - `Prolate`: Two-center prolate-spheroidal Coulomb solvers
+!>   - `Fem`: 3D spectral elements (Galerkin Poisson solve, multipole box values)
 !>
 !> **Workflow:**
 !> 1. `FillInteractionSrc`: Build source term ρ(r) = ψ*ᵢ(r)ψⱼ(r) from orbitals
 !> 2. `FillInteractionPotential`: Solve for V(r) = ∫ w(r,r') ρ(r') dr'
 !> 3. `MultiplyWithInteractionPotential`: Apply V·ψ to get Ŵψ contribution
 !>
-!> No interaction logic lives here directly; this module defines only the
-!> abstract interfaces and public pointers wired up during fabrication.
+!> No interaction logic lives here directly; this module defines the abstract
+!> interfaces and public pointers wired up during fabrication, plus the
+!> grid-agnostic mean field of a factored one-body density matrix built on
+!> them (S_SysInteraction_MeanField): the direct potential
+!> `SysInteraction_FillDirectPotential`, the adaptively compressed exchange
+!> `SysInteraction_FillExchangeAce`, and their application to a vector,
+!> `SysInteraction_AddMeanField`.
 module M_SysInteraction
   use M_Utils_Types
   use M_Utils_NoOpProcedures
@@ -50,6 +57,92 @@ module M_SysInteraction
     !> - select the specific interaction model (e.g. on-site, Yukawa, Coulomb)
     !> - set feature flags like `SysInteraction_timeIndependentQ`
     module subroutine SysInteraction_Fabricate
+    end subroutine
+
+    !> Direct (Hartree) potential of the one-body density matrix
+    !> gamma(r, r') = sum_l weightedOrbs_l(r) conjg(orbs_l(r')) (the convention
+    !> of SysInteraction_FillExchangeAce), a grid-agnostic helper on top of the
+    !> contract below (S_SysInteraction_MeanField):
+    !>   pot = V[factor rho],  rho = sum_l conjg(orbs_l) weightedOrbs_l,
+    !> from one potential solve of the total source (the potential is linear
+    !> in the source; sources accumulated in the order of the orbitals).
+    !> weightedOrbs = orbs with factor_ = 2 gives the closed-shell density
+    !> 2 sum |orbs_l|^2 (groundSolver.scf.stdImpl); weightedOrbs = orbs rhoS,
+    !> rhoS a Hermitian spatial 1-RDM, that of a correlated state (frozen
+    !> mean-field reference of Method, exactFieldFreeMeanFieldQ).
+    module subroutine SysInteraction_FillDirectPotential(pot, orbs, weightedOrbs, time, factor_, bt1_, bt2_)
+      !> Output: the potential, in the representation of
+      !> SysInteraction_FillInteractionPotential.
+      complex(R64), intent(out), allocatable :: pot(:)
+      !> Orbitals (nPoints x n, n >= 1).
+      complex(R64), intent(in), contiguous :: orbs(:, :)
+      !> Weighted orbitals of the density matrix gamma (nPoints x n).
+      complex(R64), intent(in), contiguous :: weightedOrbs(:, :)
+      !> Time of the potential.
+      real(R64), intent(in) :: time
+      !> Optional factor of the density (default 1).
+      real(R64), intent(in), optional :: factor_
+      !> Optional body types (target, source) passed to
+      !> SysInteraction_FillInteractionPotential.
+      integer(I32), intent(in), optional :: bt1_
+      integer(I32), intent(in), optional :: bt2_
+    end subroutine
+
+    !> Adaptively compressed exchange (ACE, Lin 2016), a grid-agnostic helper
+    !> on top of the contract below (S_SysInteraction_MeanField): the
+    !> exchange operator of the one-body density matrix
+    !> gamma(r, r') = sum_l weightedOrbs_l(r) conjg(orbs_l(r')),
+    !>   K v = sum_l V[conjg(orbs_l) v] weightedOrbs_l,
+    !> (V[src] = SysInteraction_FillInteractionPotential) is compressed to
+    !> K_ACE = sum_k |zeta_k><zeta_k| with xi_i = K orbs_i,
+    !> M = <orbs|xi> = L L^H (Grid_InnerProduct, Hermitized) and
+    !> zeta = xi L^-H. K_ACE equals K on span(orbs) and is Hermitian and
+    !> positive semidefinite in the grid metric; applying it costs one inner
+    !> product per vector zeta_k instead of one potential solve per orbital.
+    !> weightedOrbs = orbs gives the exchange of closed-shell orbitals of
+    !> one spin (groundSolver.scf.stdImpl, aceQ); weightedOrbs = orbs R, R a
+    !> Hermitian 1-RDM block, that of a correlated state (frozen mean-field
+    !> reference of Method, exactFieldFreeMeanFieldQ).
+    !> Cost: n(n+1)/2 potential solves for n orbitals if
+    !> SysInteraction_conjSymmetricQ, else n^2.
+    module subroutine SysInteraction_FillExchangeAce(zeta, positiveDefiniteQ, orbs, weightedOrbs, time, bt1_, bt2_)
+      !> Output: ACE vectors zeta (same shape as orbs, allocated by the caller).
+      complex(R64), intent(out), contiguous :: zeta(:, :)
+      !> Output: false if M was numerically not positive definite; zeta then
+      !> compresses K on the eigenvectors of M above 1e-12 of its largest
+      !> eigenvalue (pseudo-inverse of M; the other columns are zero).
+      logical, intent(out) :: positiveDefiniteQ
+      !> Orbitals spanning the space on which K_ACE = K (nPoints x n).
+      complex(R64), intent(in), contiguous :: orbs(:, :)
+      !> Weighted orbitals of the density matrix gamma (nPoints x n).
+      complex(R64), intent(in), contiguous :: weightedOrbs(:, :)
+      !> Time of the interaction potentials.
+      real(R64), intent(in) :: time
+      !> Optional body types (target, source) passed to
+      !> SysInteraction_FillInteractionPotential.
+      integer(I32), intent(in), optional :: bt1_
+      integer(I32), intent(in), optional :: bt2_
+    end subroutine
+
+    !> Applies the mean field J - K_ACE to a vector and accumulates,
+    !>   w = w + J z - sum_k zeta_k <zeta_k|z>,
+    !> with J = directPotential (SysInteraction_FillDirectPotential) applied by
+    !> SysInteraction_MultiplyWithInteractionPotential and the ACE vectors
+    !> zeta (SysInteraction_FillExchangeAce): n inner products, one
+    !> multiplication and one fused pass, per element
+    !> ((w + J z) - o_1 zeta_1) - o_2 zeta_2 - ... Reentrant; parallel when
+    !> called outside a parallel region (S_SysInteraction_MeanField).
+    module subroutine SysInteraction_AddMeanField(w, scratch, z, directPotential, zeta)
+      !> In/out: vector to accumulate into (nPoints).
+      complex(R64), intent(inout), contiguous :: w(:)
+      !> Work vector (nPoints), overwritten with J z.
+      complex(R64), intent(inout), contiguous :: scratch(:)
+      !> Vector the mean field acts on (nPoints).
+      complex(R64), intent(in), contiguous :: z(:)
+      !> Direct potential J.
+      complex(R64), intent(in), contiguous :: directPotential(:)
+      !> ACE vectors (nPoints x n; n = 0: J only).
+      complex(R64), intent(in), contiguous :: zeta(:, :)
     end subroutine
   end interface
 

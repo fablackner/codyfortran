@@ -79,8 +79,6 @@ contains
     use M_Utils_Constants
     use M_Coeffs
     use M_Method_Mb_OrbBased
-    use M_SysKinetic
-    use M_SysPotential
     use M_SysInteraction
     use M_Orbs
 
@@ -88,7 +86,10 @@ contains
     complex(R64), intent(in), contiguous, target  :: coeffs(:)
     real(R64), intent(in)             :: time
 
-    if (.not. SysPotential_timeIndependentQ .or. .not. SysKinetic_timeIndependentQ) then
+    ! h1 (kinetic + external potential + gauge coupling) at this time if any
+    ! of its terms depends on time (the laser of sysGauge, e.g. the length
+    ! gauge sysGauge.fem.length or the Ylm velocity gauge, included)
+    if (.not. Method_Mb_OrbBased_H1TimeIndependentQ()) then
       call Method_Mb_OrbBased_FillH1(Method_Mb_OrbBased_h1, Orbs_orbs, time)
     end if
 

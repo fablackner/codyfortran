@@ -10,6 +10,8 @@
 !>   - `sysInteraction.linear`  → 1D real-space convolutions
 !>   - `sysInteraction.lattice` → discrete tight-binding models
 !>   - `sysInteraction.ylm`     → spherical-harmonic Coulomb solvers
+!>   - `sysInteraction.prolate` → two-center (prolate) Coulomb solvers
+!>   - `sysInteraction.fem`     → 3D spectral-element Galerkin Poisson solve
 submodule(M_SysInteraction) S_Interaction
 
   implicit none
@@ -22,7 +24,8 @@ contains
   !> Reads the JSON path `sysInteraction.*` to determine which grid back-end
   !> to activate, then delegates to the corresponding `*_Fabricate` routine.
   !>
-  !> @note Exactly one of `linear`, `lattice`, or `ylm` must be present.
+  !> @note Exactly one of `linear`, `lattice`, `ylm`, `prolate` or `fem` must
+  !> be present.
   module subroutine SysInteraction_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -31,6 +34,7 @@ contains
     use M_SysInteraction_Lattice
     use M_SysInteraction_Ylm
     use M_SysInteraction_Prolate
+    use M_SysInteraction_Fem
 
     call Say_Fabricate("sysInteraction")
 
@@ -54,8 +58,11 @@ contains
     else if (Json_GetExistence("sysInteraction.prolate")) then
       call SysInteraction_Prolate_Fabricate
 
+    else if (Json_GetExistence("sysInteraction.fem")) then
+      call SysInteraction_Fem_Fabricate
+
     else
-      error stop "sysInteraction is missing one of: linear, lattice, ylm, prolate"
+      error stop "sysInteraction is missing one of: linear, lattice, ylm, prolate, fem"
 
     end if
 

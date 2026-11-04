@@ -13,6 +13,7 @@ contains
     use M_Utils_Json
     use M_Utils_Say
     use M_SysGauge_Ylm
+    use M_SysGauge_Fem
 
     implicit none
 
@@ -25,8 +26,11 @@ contains
     if (Json_GetExistence("sysGauge.ylm")) then
       call SysGauge_Ylm_Fabricate
 
+    else if (Json_GetExistence("sysGauge.fem")) then
+      call SysGauge_Fem_Fabricate
+
     else
-      error stop "sysGauge is missing one of: ylm"
+      error stop "sysGauge is missing one of: ylm, fem"
     end if
 
   end subroutine

@@ -20,15 +20,26 @@
 !> 1. Client creates `T_DiagonalizerList_FabricateInput` with callback + dimension
 !> 2. `DiagonalizerList_Fabricate(input)` allocates backends per JSON config
 !> 3. `DiagonalizerList_Setup()` initializes all backends
-!> 4. `DiagonalizerList(i)%e%Diagonalize(time, evecsQ)` computes eigenpairs
-!> 5. Results in `%evals(:)`, `%evecs(:,:)`, `%nFound`
+!> 4. Optionally `DiagonalizerList(i)%e%SetStartVectors(vecs)`: start vectors
+!>    for the next call (used by backends that can start from given vectors)
+!> 5. `DiagonalizerList(i)%e%Diagonalize(time, evecsQ)` computes eigenpairs
+!> 6. Results in `%evals(:)`, `%evecs(:,:)`, `%nFound`
 !>
 !> **Available Backends:**
 !> - LAPACK: Dense solver for small-medium matrices (explicit assembly)
 !> - ARPACK: Iterative Arnoldi/Lanczos for large sparse/matrix-free problems
+!> - LOBPCG: Preconditioned block eigensolver for the lowest eigenpairs of
+!>   operators that are self-adjoint in a (possibly weighted) metric
 !>
-!> @see M_DiagonalizerList_Lapack, M_DiagonalizerList_Arpack for implementations
-!> @see AGENTS.md in this directory for detailed onboarding documentation
+!> **Optional inputs** (ignored by LAPACK and ARPACK):
+!> - `ApplyPrecOnVec` (callback): preconditioner, approximately (A − shift)⁻¹
+!> - `metricWeights` (element component, set after fabrication): the diagonal
+!>   metric in which A is self-adjoint (e.g. a grid's quadrature weights);
+!>   Euclidean when unallocated, the convention of IntegratorList
+!>
+!> @see M_DiagonalizerList_Lapack, M_DiagonalizerList_Arpack,
+!>      M_DiagonalizerList_Lobpcg for implementations
+!> @see A_DiagonalizerList.md in this directory for detailed onboarding documentation
 module M_DiagonalizerList
   use M_Utils_Types
   use M_Utils_NoOpProcedures, only: NoOpProcedures_Setup
@@ -53,6 +64,8 @@ module M_DiagonalizerList
   !> type(T_DiagonalizerList_FabricateInput) :: inputs(1)
   !> inputs(1)%ApplyMatOnVec => MyHamiltonianCallback
   !> inputs(1)%dim = hilbert_space_size
+  !> ! optional, used by preconditioned solvers (lobpcg) only:
+  !> inputs(1)%ApplyPrecOnVec => MyPreconditioner
   !> call DiagonalizerList_Fabricate(inputs)
   !> @endcode
   !-----------------------------------------------------------------------------
@@ -63,6 +76,10 @@ module M_DiagonalizerList
     procedure(I_ApplyMatOnVec), pointer, nopass :: ApplyMatOnVec => null()
     !> Dimension of the operator matrix (size of the Hilbert space).
     integer(I32) :: dim = 0
+    !> Optional preconditioner: y ≈ (A(t) − shift)⁻¹ · x (interface
+    !> `I_ApplyPrecOnVec`). Unassociated means no preconditioning (identity).
+    !> Only used by preconditioned backends (lobpcg).
+    procedure(I_ApplyPrecOnVec), pointer, nopass :: ApplyPrecOnVec => null()
   end type
 
   interface
@@ -85,7 +102,7 @@ module M_DiagonalizerList
     !> @endcode
     !>
     !> **Name convention:** Child name containing "lapack" → LAPACK backend,
-    !> "arpack" → ARPACK backend.
+    !> "arpack" → ARPACK backend, "lobpcg" → LOBPCG backend.
     !>
     !> @param[in] input  Array of fabrication inputs (one per JSON child).
     !>                   `size(input)` must equal number of JSON children.
@@ -116,7 +133,8 @@ module M_DiagonalizerList
   !> @code
   !> T_DiagonalizerList_E (abstract)
   !>   ├── T_DiagonalizerList_E_Lapack   (dense, explicit matrix)
-  !>   └── T_DiagonalizerList_E_Arpack   (iterative, Arnoldi/Lanczos)
+  !>   ├── T_DiagonalizerList_E_Arpack   (iterative, Arnoldi/Lanczos)
+  !>   └── T_DiagonalizerList_E_Lobpcg   (iterative, preconditioned block)
   !> @endcode
   !>
   !> **Output convention:**
@@ -129,13 +147,30 @@ module M_DiagonalizerList
     !> Used by iterative solvers directly or to assemble explicit matrices.
     procedure(I_ApplyMatOnVec), pointer, nopass :: ApplyMatOnVec => null()
 
+    !> Optional preconditioner y ≈ (A(t) − shift)⁻¹ · x (copied from the
+    !> fabrication input; unassociated = identity). Ignored by LAPACK/ARPACK.
+    procedure(I_ApplyPrecOnVec), pointer, nopass :: ApplyPrecOnVec => null()
+
+    !> Optional metric weights (size dim) defining the inner product in which
+    !> the operator is self-adjoint, for metric-aware backends (lobpcg): when
+    !> allocated, inner products are sum(conjg(a) * metricWeights * b); when
+    !> unallocated, the Euclidean product is used. The same contract as
+    !> IntegratorList's `metricWeights`: required on grids whose quadrature
+    !> weights are not absorbed into the vectors (e.g. FEDVR, finite
+    !> elements: A = W⁻¹H is self-adjoint only in the weighted metric).
+    !> Assign directly on the registry element after fabrication and before
+    !> the first `Diagonalize` (grid weights typically exist only after
+    !> `Grid_Setup`). Ignored by LAPACK/ARPACK.
+    real(R64), allocatable :: metricWeights(:)
+
     !> Computed eigenvalues (real, sorted ascending by default).
     !> Allocated to size `nEvals`, but only `nFound` entries are valid.
     real(R64), allocatable :: evals(:)
 
     !> Computed eigenvectors (column-major: evecs(:,j) is j-th eigenvector).
     !> Shape (dim, nEvals), with `nFound` valid columns after diagonalization.
-    !> Only allocated/filled if `evecsQ=.true.` in `Diagonalize`.
+    !> Only allocated/filled if `evecsQ=.true.` in `Diagonalize`. An output:
+    !> clients pass start vectors through `SetStartVectors`.
     complex(R64), allocatable :: evecs(:, :)
 
     !> Number of eigenpairs requested. Set to `-1` for all eigenvalues.
@@ -143,6 +178,14 @@ module M_DiagonalizerList
 
     !> Number of converged eigenpairs actually found (≤ nEvals).
     integer(I32) :: nFound = 0
+
+    !> Whether the last `Diagonalize` call converged all `nEvals` wanted
+    !> eigenpairs. Backends that can return unconverged approximations set it
+    !> on every call (lobpcg: `.false.` at maxIter or on stagnation, with
+    !> nFound < nEvals); LAPACK is direct and ARPACK stops instead, so they
+    !> keep the default `.true.`. Clients that may continue with
+    !> approximations (e.g. the SCF ground solvers) check it after every call.
+    logical :: convergedQ = .true.
 
     !> Dimension of the operator matrix (Hilbert space size).
     integer(I32) :: dim = 0
@@ -159,7 +202,34 @@ module M_DiagonalizerList
     procedure(I_Setup), deferred :: Setup
     !> Compute eigenvalues and optionally eigenvectors.
     procedure(I_Diagonalize), deferred :: Diagonalize
+    !> Start vectors for the next `Diagonalize` (default: ignored).
+    procedure :: SetStartVectors => DiagonalizerList_E_SetStartVectors
   end type
+
+  interface
+    !---------------------------------------------------------------------------
+    !> @brief Start vectors for the next `Diagonalize` (binding
+    !>        `SetStartVectors`).
+    !>
+    !> @details
+    !> Contract: the columns of `vecs` (dim rows, any number of columns) are
+    !> offered as start vectors for the next `Diagonalize` call, e.g. the
+    !> current orbitals for the first solve of an SCF, before the solver holds
+    !> eigenvectors of its own. A backend may ignore them: this default is a
+    !> no-op (LAPACK is direct; ARPACK warm-starts only from its own converged
+    !> eigenvectors). LOBPCG overrides it, but starts from the vectors only
+    !> when its `warmStartQ` is true (the default), the switch that also
+    !> governs the reuse of its previous eigenvectors; with `warmStartQ`
+    !> false they are stored and ignored.
+    !>
+    !> @param[inout] this  Diagonalizer instance
+    !> @param[in]    vecs  Start vectors, one per column (dim rows)
+    !---------------------------------------------------------------------------
+    module subroutine DiagonalizerList_E_SetStartVectors(this, vecs)
+      class(T_DiagonalizerList_E), intent(inout) :: this
+      complex(R64), intent(in), contiguous :: vecs(:, :)
+    end subroutine
+  end interface
 
   !-----------------------------------------------------------------------------
   ! Abstract Interfaces
@@ -196,6 +266,9 @@ module M_DiagonalizerList
     !> - `this%nFound` contains number of converged eigenpairs
     !> - `this%evals(1:nFound)` contains eigenvalues (sorted ascending)
     !> - `this%evecs(:,1:nFound)` contains eigenvectors (if `evecsQ=.true.`)
+    !> - `this%convergedQ` tells whether all `nEvals` wanted pairs converged
+    !>   (lobpcg keeps all nEvals best approximations in `evals`/`evecs` and
+    !>   counts the converged ones in `nFound`, see M_DiagonalizerList_Lobpcg)
     !>
     !> @param[inout] this    Diagonalizer instance
     !> @param[in]    time    Time parameter for time-dependent operators.
@@ -228,6 +301,30 @@ module M_DiagonalizerList
       import :: R64
       complex(R64), intent(out), contiguous, target :: dState(:)
       complex(R64), intent(in), contiguous, target  :: state(:)
+      real(R64), intent(in)                         :: time
+    end subroutine
+  end interface
+
+  abstract interface
+    !> @brief Preconditioner callback: y ≈ (A(t) − shift)⁻¹ · x.
+    !>
+    !> @details
+    !> Applied by preconditioned eigensolvers (LOBPCG) to the residual of a
+    !> Ritz pair, with `shift` the current Ritz value. Any approximation that
+    !> is Hermitian positive definite in the solver metric for shifts below
+    !> the wanted part of the spectrum works (e.g. (T + σ)⁻¹ for a Fock
+    !> operator with kinetic part T); only the direction of the result
+    !> matters. Same aliasing contract as `I_ApplyMatOnVec`.
+    !>
+    !> @param[out] dState  Preconditioned vector y
+    !> @param[in]  state   Input vector x (a residual)
+    !> @param[in]  shift   Current Ritz value the preconditioner may adapt to
+    !> @param[in]  time    Time at which the operator is evaluated
+    subroutine I_ApplyPrecOnVec(dState, state, shift, time)
+      import :: R64
+      complex(R64), intent(out), contiguous, target :: dState(:)
+      complex(R64), intent(in), contiguous, target  :: state(:)
+      real(R64), intent(in)                         :: shift
       real(R64), intent(in)                         :: time
     end subroutine
   end interface

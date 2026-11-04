@@ -11,7 +11,8 @@
 !>   E(t) = E0 * sin^2(pi * (t - t0) / T) * cos(omega * (t - t0 - T/2) + cep)
 !> for t0 <= t <= t0 + T (zero outside), where T = 2*pi*nCycles/omega. The
 !> carrier is centered on the envelope maximum so that cep = 0 gives a
-!> cos-like pulse peaking at the envelope peak.
+!> cos-like pulse peaking at the envelope peak (Pulse_Sin2Field of
+!> M_Utils_Pulse, shared with sysGauge.fem.length).
 !>
 !> In the Ylm expansion only two components are nonzero:
 !>   V_00(r) = -Z * sqrt(4 pi) / r

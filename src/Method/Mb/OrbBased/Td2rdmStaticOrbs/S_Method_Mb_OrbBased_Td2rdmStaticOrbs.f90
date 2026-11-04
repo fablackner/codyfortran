@@ -76,10 +76,10 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine TimeDerivative(dTwoRdmState, twoRdmState, time)
-    use M_Utils_UnusedVariables
     use M_Utils_Constants
     use M_Reconstruction
     use M_TwoRdm
+    use M_Orbs
     use M_Method
     use M_Method_Mb_OrbBased
 
@@ -87,7 +87,12 @@ contains
     complex(R64), intent(in), contiguous, target  :: twoRdmState(:)
     real(R64), intent(in)             :: time
 
-    if (.false.) call UnusedVariables_Mark(time)
+    ! h1 at this time if any of its terms depends on time (as TDCI): a laser
+    ! (time-dependent sysPotential or sysGauge) would otherwise stay frozen at
+    ! its t = 0 value; h2 is static
+    if (.not. Method_Mb_OrbBased_H1TimeIndependentQ()) then
+      call Method_Mb_OrbBased_FillH1(Method_Mb_OrbBased_h1, Orbs_orbs, time)
+    end if
 
     dTwoRdmState(:) = 0.0_R64
 

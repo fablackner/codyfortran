@@ -60,12 +60,13 @@ module M_Utils_Fedvr
   public :: T_Fedvr_Ctx
   public :: T_Fedvr_Element
   public :: Fedvr_CreateCtx
+  public :: Fedvr_CreateCtxFromBounds
   public :: Fedvr_DestroyCtx
 
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Creates and initializes an FEDVR grid
+!> Creates and initializes an FEDVR grid of nE equally sized elements
 !> @param ctx The FEDVR grid structure to initialize
 !> @param xmin Lower bound of the domain
 !> @param xmax Upper bound of the domain
@@ -74,25 +75,68 @@ contains
 !> @param xminExcludedQ Logical flag to determine if global lower endpoint (xmin) is excluded
 !> @param xmaxExcludedQ Logical flag to determine if global upper endpoint (xmax) is excluded
   subroutine Fedvr_CreateCtx(ctx, xmin, xmax, nE, nLocals, xminExcludedQ, xmaxExcludedQ)
-    use stdlib_quadrature, only: gauss_legendre_lobatto
 
     type(T_Fedvr_Ctx), intent(out) :: ctx
     real(R64), intent(in) :: xmin, xmax
     integer(I32), intent(in) :: nE, nLocals
     logical, intent(in) :: xminExcludedQ
     logical, intent(in) :: xmaxExcludedQ
-    integer(I32) :: iE, iLocal, iGrid
+    integer(I32) :: iE
     real(R64) :: elementSize
+    real(R64), allocatable :: bounds(:)
+
+    ! Uniform element boundaries xmin + iE * elementSize
+    elementSize = (xmax - xmin) / nE
+
+    allocate (bounds(0:nE))
+    do iE = 0, nE
+      bounds(iE) = xmin + iE * elementSize
+    end do
+
+    call Fedvr_CreateCtxFromBounds(ctx, bounds, nLocals, xminExcludedQ, xmaxExcludedQ)
+
+    ! Keep the uniform bookkeeping bitwise as before: the requested domain
+    ! limits (bounds(nE) may differ from xmax in the last bit) and the common
+    ! element size instead of the individual bound differences
+    ctx % xmin = xmin
+    ctx % xmax = xmax
+    ctx % elements(:) % size = elementSize
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Creates and initializes an FEDVR grid on explicit, possibly non-uniform
+!> element boundaries (element iE spans [bounds(iE-1), bounds(iE)])
+!> @param ctx The FEDVR grid structure to initialize
+!> @param bounds Element boundaries bounds(0:nE), strictly increasing; nE = size(bounds) - 1
+!> @param nLocals Number of local points within each element (>= 2)
+!> @param xminExcludedQ Logical flag to determine if global lower endpoint (bounds(0)) is excluded
+!> @param xmaxExcludedQ Logical flag to determine if global upper endpoint (bounds(nE)) is excluded
+  subroutine Fedvr_CreateCtxFromBounds(ctx, bounds, nLocals, xminExcludedQ, xmaxExcludedQ)
+    use stdlib_quadrature, only: gauss_legendre_lobatto
+
+    type(T_Fedvr_Ctx), intent(out) :: ctx
+    real(R64), intent(in) :: bounds(0:)
+    integer(I32), intent(in) :: nLocals
+    logical, intent(in) :: xminExcludedQ
+    logical, intent(in) :: xmaxExcludedQ
+    integer(I32) :: nE, iE, iLocal, iGrid
     real(R64), allocatable :: elementPoints(:)
+
+    nE = size(bounds) - 1
+
+    if (nE < 1) error stop "Fedvr_CreateCtxFromBounds: at least two element boundaries are required"
+    if (nLocals < 2) error stop "Fedvr_CreateCtxFromBounds: nLocals must be >= 2"
+    ! NaN-safe: a NaN bound fails the comparison
+    if (.not. all(bounds(1:nE) > bounds(0:nE - 1))) error stop "Fedvr_CreateCtxFromBounds: bounds must be strictly increasing"
 
     ! Set grid parameters
     ctx % nElements = nE
-    ctx % xmin = xmin
-    ctx % xmax = xmax
+    ctx % xmin = bounds(0)
+    ctx % xmax = bounds(nE)
     ctx % nLocals = nLocals
     ctx % xminExcludedQ = xminExcludedQ
     ctx % xmaxExcludedQ = xmaxExcludedQ
-    elementSize = (xmax - xmin) / nE
 
     ! Allocate temporary arrays for element points and weights
     allocate (elementPoints(nLocals))
@@ -101,9 +145,9 @@ contains
     allocate (ctx % elements(nE))
     do iE = 1, nE
       associate (element => ctx % elements(iE))
-        element % leftBound = xmin + (iE - 1) * elementSize
-        element % rightBound = xmin + iE * elementSize
-        element % size = elementSize
+        element % leftBound = bounds(iE - 1)
+        element % rightBound = bounds(iE)
+        element % size = bounds(iE) - bounds(iE - 1)
       end associate
     end do
 

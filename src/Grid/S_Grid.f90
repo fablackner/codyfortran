@@ -20,6 +20,7 @@
 !>   5. `grid.ylm`       → Grid_Ylm_Fabricate
 !>   6. `grid.prolate`   → Grid_Prolate_Fabricate
 !>   7. `grid.lattice`   → Grid_Lattice_Fabricate
+!>   8. `grid.fem`       → Grid_Fem_Fabricate
 !>
 !> @par Orthonormalization Algorithm
 !> Uses modified Gram–Schmidt with one re-orthogonalization pass ("twice is
@@ -49,7 +50,8 @@ contains
 !>
 !> Binds the generic Grid_Orthonormalize and Grid_ProjectOnSubspace pointers
 !> to the shared implementations in this submodule, then delegates to the
-!> selected coordinate family (Linear, Square, Polar, Spherical, Ylm, Lattice).
+!> selected coordinate family (Linear, Square, Polar, Spherical, Ylm, Prolate,
+!> Lattice, Fem).
   module subroutine Grid_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -60,6 +62,7 @@ contains
     use M_Grid_Ylm
     use M_Grid_Prolate
     use M_Grid_Lattice
+    use M_Grid_Fem
 
     call Say_Fabricate("grid")
 
@@ -95,8 +98,11 @@ contains
     else if (Json_GetExistence("grid.lattice")) then
       call Grid_Lattice_Fabricate
 
+    else if (Json_GetExistence("grid.fem")) then
+      call Grid_Fem_Fabricate
+
     else
-      error stop "grid is missing one of: linear, square, polar, spherical, ylm, prolate, lattice"
+      error stop "grid is missing one of: linear, square, polar, spherical, ylm, prolate, lattice, fem"
     end if
 
   end subroutine

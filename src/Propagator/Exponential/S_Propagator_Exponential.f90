@@ -37,8 +37,13 @@ contains
     ! applicability
     !------------------------------------
 
+    ! The Cayley exact part (method.mb.orbBased.exactFieldFreeQ on non-Ylm
+    ! grids, e.g. grid.fem) binds Method_PropagateExactPart but no phi functions
     if (.not. (associated(Method_PropagateExactPart) .and. associated(Method_ApplyExactPartPhi))) &
-      error stop "propagator.exponential requires a method with an exactly propagated part and its phi functions"
+      error stop "propagator.exponential requires a method with an exactly propagated part and its phi functions &
+                 &(method.mb.orbBased.exactFieldFreeQ with mctdhx on a Ylm grid); exactFieldFreeQ on non-Ylm grids &
+                 &(e.g. grid.fem) is a Cayley step without phi functions: use propagator.splitStep with &
+                 &exactPartScheme strang"
     if (IntegratorList(1) % e % imagTimeQ .or. IntegratorList(2) % e % imagTimeQ) &
       error stop "propagator.exponential: imaginary time is not supported"
 

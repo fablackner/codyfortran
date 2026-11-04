@@ -34,9 +34,12 @@ contains
     Method_Mb_OrbBased_TimeDerivativeOrbsLin => TimeDerivativeOrbsLin
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin => TimeDerivativeCoeffsPlusOrbsNonLin
     Method_Mb_OrbBased_OrthonormalizeKeepingState => OrthonormalizeKeepingState
+    ! Phi functions only for the eigen-decomposed exact part (Ylm grids); the
+    ! Cayley exact part of other grids has none (no propagator.exponential).
+    ! Unbound pointers stay null (Method_Fabricate nullifies them).
     if (Method_Mb_OrbBased_exactFieldFreeQ) then
       Method_PropagateExactPart => PropagateExactPart
-      Method_ApplyExactPartPhi => ApplyExactPartPhi
+      if (associated(Method_Mb_OrbBased_ApplyFieldFreePhi)) Method_ApplyExactPartPhi => ApplyExactPartPhi
     end if
 
   end subroutine
@@ -144,7 +147,10 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Exact field-free propagation of the orbitals (the CI coefficients are
-  !> constant in the linear split step).
+  !> constant in the linear split step). With exactFieldFreeMeanFieldQ the
+  !> first call after Method_Setup builds the frozen mean-field reference U
+  !> from the state (EnsureFieldFreeMeanField), and the Cayley step then
+  !> propagates h0 + U.
   subroutine PropagateExactPart(state, t0, t1, imagTimeQ_)
     use M_Method_Mb_OrbBased
 
@@ -159,8 +165,32 @@ contains
     imagTimeQ = .false.
     if (present(imagTimeQ_)) imagTimeQ = imagTimeQ_
 
+    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ .and. .not. imagTimeQ) call EnsureFieldFreeMeanField(state, t0)
+
     call GetOrbs(orbs, state)
     call Method_Mb_OrbBased_PropagateFieldFree(orbs, t1 - t0, imagTimeQ)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Builds the frozen mean-field reference of the Cayley exact part from
+  !> state (its stored orbitals and 1-RDM) unless it exists since the last
+  !> Method_Setup: at the first exact-part call, or at the first nonlinear
+  !> call if a propagator starts with that part.
+  subroutine EnsureFieldFreeMeanField(state, time)
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(in), contiguous, target :: state(:)
+    real(R64), intent(in) :: time
+
+    complex(R64), contiguous, pointer :: orbs(:, :)
+    complex(R64), allocatable :: rdm1(:, :)
+
+    if (Method_Mb_OrbBased_FieldFreeMeanFieldBuiltQ()) return
+
+    call GetOrbs(orbs, state)
+    call FillRdm1(rdm1, state)
+    call Method_Mb_OrbBased_BuildFieldFreeMeanField(orbs, rdm1, time)
 
   end subroutine
 
@@ -215,6 +245,16 @@ contains
   !> the interaction, since the linear part rotates the orbitals with the
   !> unprojected h at fixed coefficients (applying h1 here as well would count
   !> it twice); its orbital derivative is projected with the spectral cut.
+  !>
+  !> With the frozen mean-field reference U of the exact part
+  !> (exactFieldFreeMeanFieldQ), which propagates h0 + U unprojected at fixed
+  !> coefficients (the exact one-body flow of U^), the non-linear part is the
+  !> flow of the interaction minus U^ in the gauge without in-space rotation:
+  !> orbitals -i Q (W - U) phi, coefficients -i (H2 - U^) c with
+  !> U^ = sum_kj <phi_k|U|phi_j> a+_k a_j (for nOrbs = nBodies U^ c is
+  !> parallel to c and removed by Coeffs_ProjectOnSubspace). The sum of both
+  !> parts is the unchanged equation of motion; near the reference state
+  !> (the SCF ground state for TDHF) the non-linear part vanishes.
   subroutine FillTimeDerivative(dState, state, time, oneBodyQ)
     use M_Coeffs
     use M_Orbs
@@ -237,6 +277,9 @@ contains
     complex(R64), allocatable :: rdm1(:, :)
     complex(R64), allocatable :: invRdm1(:, :)
     complex(R64), allocatable :: rdm2(:, :, :, :)
+    complex(R64), allocatable :: uOrbs(:, :)
+    complex(R64), allocatable :: uMat(:, :)
+    logical :: meanFieldQ
 
     dState(:) = 0.0_R64
 
@@ -253,8 +296,19 @@ contains
     call Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
     call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_=h2)
 
+    ! Frozen mean-field reference: W - U on the orbitals (before Q)
+    meanFieldQ = Method_Mb_OrbBased_exactFieldFreeMeanFieldQ .and. .not. oneBodyQ
+    if (meanFieldQ) then
+      call EnsureFieldFreeMeanField(state, time)
+      allocate (uOrbs, mold=dOrbs)
+      uOrbs(:, :) = 0.0_R64
+      call Method_Mb_OrbBased_ApplyFieldFreeMeanField(uOrbs, orbs, h1_=uMat)
+      dOrbs(:, :) = dOrbs(:, :) - uOrbs(:, :)
+    end if
+
     if (oneBodyQ) call Coeffs_ApplyH1FillRdm1(coeffs, dCoeffs_=dCoeffs, h1_=h1)
     call Coeffs_ApplyH2FillRdm2(coeffs, dCoeffs_=dCoeffs, h2_=h2)
+    if (meanFieldQ) call Coeffs_ApplyH1FillRdm1(coeffs, dCoeffs_=dCoeffs, h1_=-uMat)
 
     call Coeffs_ProjectOnSubspace(dCoeffs, coeffs)
     call Orbs_ProjectOnSubspace(dOrbs, orbs)

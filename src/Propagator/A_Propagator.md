@@ -171,6 +171,24 @@ The exact substeps carry the time; every integrator substep is centred on the
 time reached, so its midpoint evaluation of a time-dependent part (e.g. the
 vector potential) stays consistent with the symmetric composition.
 
+**Exact part on grid.fem (Cayley step).** With `exactFieldFreeQ` on grids
+without a dense h0 eigen-decomposition (grid.fem) the exact part is a
+GMRES-solved Crank–Nicolson (Cayley) step of h0 = T + V_static. It is unitary
+and time-reversible, Cayley(−Δt) = Cayley(Δt)⁻¹ (negative substeps are fine
+in real time), but only second order, so use `exactPartScheme: "strang"`: the
+fourth-order schemes spend 2–3.5× more exact substeps without raising the
+order. Real time only (an integrator 1 with `imagTimeQ` stops in the exact
+part); a laser is the length gauge `sysGauge.fem.length` (E(t) e_pol·r),
+which integrator 1 (e.g. RK4) propagates. For molecules with heavier atoms
+(a core) also set `method.mb.orbBased.exactFieldFreeMeanFieldQ` (MCTDHX): it
+moves a frozen Fock mean field U = J0 − K0 into the exact part and subtracts
+it in the nonlinear part, a pure change of the splitting, without which the
+split h0 | mean field needs tiny time steps there; the composition and the
+integrators stay as they are. Details: A_Method.md, "Exact Field-Free Part
+on grid.fem: Cayley Step" and "Frozen Mean-Field Reference of the Cayley
+Step" (which state to build U from, restarts); measured drifts and costs:
+app/fem_molecules/README.md.
+
 ```json
 {
   "propagator": {
@@ -211,6 +229,11 @@ and N; real time only.
 | `"krogstad4"` | 4 | 4 | exponential Runge–Kutta (Krogstad 2005), one step |
 | `"adams"` | k + 1 | 2 | exponential Adams PECE, `nSteps` = k (1..6, default 4) |
 | `"adamsLawson"` | k + 1 | 2 | Adams PECE in the interaction picture of L (Auzinger et al. 2021), `nSteps` = k |
+
+Not available for the Cayley exact part of grid.fem (`exactFieldFreeQ` on
+non-Ylm grids): it has no phi functions, MCTDHX binds no
+`Method_ApplyExactPartPhi`, and `Propagator_Exponential_Fabricate` stops with a
+message pointing to `propagator.splitStep` (T_Fem_08_ExponentialUnsupported).
 
 The multistep schemes need a fixed step size: a step that does not continue
 the previous one (other t0 or step size) restarts the history with Krogstad
@@ -436,6 +459,8 @@ end program
 
 5. **Incomplete eigenbasis:** If DiagonalizerList returns `nFound < dim`, EigenExpansion will project out missing components.
 
+6. **Exact part on grid.fem:** `exactFieldFreeQ` there is a second-order Cayley step: use `splitStep` with `exactPartScheme: "strang"`; `exponential` and imaginary time stop with an error. For molecules with heavier atoms (a core) add `exactFieldFreeMeanFieldQ` (MCTDHX), otherwise the split h0 | mean field needs tiny steps.
+
 ---
 
 ## Testing
@@ -446,6 +471,11 @@ Relevant test patterns:
 
 - `T_Propagator_Exponential` — convergence order and norm conservation of
   the exponential integrators on a small model with exact test bindings
+- `T_Fem_05`–`T_Fem_10` — split-step TDHF with the Cayley exact part on
+  grid.fem (stationary ground state, dipole kick, exponential refused, frozen
+  mean-field reference: ground state stationary at Δt = 0.1, second-order
+  convergence of the kick to the trajectory of the plain split; in MCTDHF
+  with nOrbs > nBodies the same trajectory as the plain split)
 
 Run propagator-related tests:
 ```bash

@@ -17,3 +17,4 @@ thirdPartySave*
 thirdParty/include/*
 thirdParty/installation/*
 thirdParty/sources/*
+app/fem_molecules/runs/

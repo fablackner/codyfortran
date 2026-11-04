@@ -8,13 +8,15 @@
 !> @details
 !> This submodule contains the factory logic that reads the JSON configuration
 !> and instantiates the appropriate eigensolver backends. The name-based
-!> dispatch ("lapack" vs "arpack" in the JSON key) determines which concrete
-!> implementation is allocated.
+!> dispatch ("lapack", "arpack" or "lobpcg" in the JSON key) determines which
+!> concrete implementation is allocated. It also holds the default of the
+!> implemented binding `SetStartVectors` (a no-op).
 !>
 !> **Fabrication Flow:**
 !> 1. Read number of children under `"diagonalizerList"` JSON path
 !> 2. Verify input array size matches JSON structure
-!> 3. For each child: allocate backend by name, bind callback, call `Fabricate`
+!> 3. For each child: allocate backend by name, bind callbacks (operator and
+!>    the optional preconditioner), call `Fabricate`
 !> 4. Bind global `DiagonalizerList_Setup` to local `Setup` procedure
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 submodule(M_DiagonalizerList) S_DiagonalizerList
@@ -31,11 +33,12 @@ contains
 !> per child object. Backend selection is based on substring matching:
 !> - Name contains "lapack" → LAPACK dense solver
 !> - Name contains "arpack" → ARPACK iterative solver
+!> - Name contains "lobpcg" → LOBPCG preconditioned block solver
 !>
 !> **Error conditions:**
 !> - `size(input)` must match number of JSON children
 !> - Each JSON child must be an object (not scalar/array)
-!> - Child name must contain "lapack" or "arpack"
+!> - Child name must contain "lapack", "arpack" or "lobpcg"
 !>
 !> @param[in] input  Array of fabrication inputs with callbacks and dimensions
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -44,6 +47,7 @@ contains
     use M_Utils_Say
     use M_DiagonalizerList_Lapack, only: DiagonalizerList_Lapack_Allocate
     use M_DiagonalizerList_Arpack, only: DiagonalizerList_Arpack_Allocate
+    use M_DiagonalizerList_Lobpcg, only: DiagonalizerList_Lobpcg_Allocate
 
     type(T_DiagonalizerList_FabricateInput), intent(in) :: input(:)
 
@@ -82,13 +86,16 @@ contains
         call DiagonalizerList_Lapack_Allocate(DiagonalizerList(i) % e, "diagonalizerList."//childName)
       else if (index(childName, "arpack") .ne. 0) then
         call DiagonalizerList_Arpack_Allocate(DiagonalizerList(i) % e, "diagonalizerList."//childName)
+      else if (index(childName, "lobpcg") .ne. 0) then
+        call DiagonalizerList_Lobpcg_Allocate(DiagonalizerList(i) % e, "diagonalizerList."//childName)
       else
-        error stop "DiagonalizerList element must be one of: lapack, arpack"
+        error stop "DiagonalizerList element must be one of: lapack, arpack, lobpcg"
       end if
 
       ! Bind common fields and invoke backend-specific fabrication
       DiagonalizerList(i) % e % path = "diagonalizerList."//childName
       DiagonalizerList(i) % e % ApplyMatOnVec => input(i) % ApplyMatOnVec
+      DiagonalizerList(i) % e % ApplyPrecOnVec => input(i) % ApplyPrecOnVec
       DiagonalizerList(i) % e % dim = input(i) % dim
       call DiagonalizerList(i) % e % Fabricate()
 
@@ -111,6 +118,23 @@ contains
     do i = 1, size(DiagonalizerList)
       call DiagonalizerList(i) % e % Setup()
     end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Default `SetStartVectors`: the start vectors are ignored.
+!>
+!> @details
+!> Kept by the backends that cannot start from given vectors (LAPACK,
+!> ARPACK); LOBPCG overrides it.
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine DiagonalizerList_E_SetStartVectors(this, vecs)
+    use M_Utils_UnusedVariables
+
+    class(T_DiagonalizerList_E), intent(inout) :: this
+    complex(R64), intent(in), contiguous :: vecs(:, :)
+
+    if (.false.) call UnusedVariables_Mark(this, vecs)
 
   end subroutine
 

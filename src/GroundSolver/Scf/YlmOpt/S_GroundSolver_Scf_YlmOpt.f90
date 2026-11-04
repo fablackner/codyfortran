@@ -281,6 +281,7 @@ contains
     ! Step 3: Diagonalize each l-channel's radial Fock operator
     do l = 0, Grid_Ylm_lmax
       call DiagonalizerList(l + 1) % e % Diagonalize(time, .true.)
+      call GroundSolver_NoteUnconverged(l + 1)
     end do
 
     ! Step 4: Map eigenvectors to orbitals using (n,l,m)

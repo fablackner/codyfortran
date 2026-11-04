@@ -1,0 +1,63 @@
+{
+    "grid": {
+        "fem": {
+            "nLocals": 6,
+            "xmin": -12.0, "xmax": 12.0,
+            "ymin": -12.0, "ymax": 12.0,
+            "zmin": -12.0, "zmax": 12.0,
+            "centers": {
+                "x": [ 0.0 ],
+                "y": [ 0.0 ],
+                "z": [ 0.0 ],
+                "hMin": [ 0.4 ]
+            },
+            "growth": 1.6,
+            "hMax": 3.0,
+            "multipoleLmax": 6,
+            "multipoleCenter": [ 0.0, 0.0, 0.0 ]
+        }
+    },
+    "sysKinetic": {
+        "fem": {
+            "laplacian": {
+                "bodyMass": [ 1.0 ]
+            }
+        }
+    },
+    "sysPotential": {
+        "fem": {
+            "coulomb": {
+                "charges": [ 1.0 ],
+                "smearing": [ 0.0 ]
+            }
+        }
+    },
+    "method": {
+        "sb": { }
+    },
+    "orbsInit": {
+        "fem": {
+            "sto": {
+                "orbital": [ 1 ],
+                "center": [ 1 ],
+                "n": [ 1 ],
+                "l": [ 0 ],
+                "m": [ 0 ],
+                "zeta": [ 1.3 ],
+                "coeff": [ 1.0 ]
+            }
+        }
+    },
+    "diagonalizerList": {
+        "lobpcg": {
+            "nEvals": 1,
+            "nGuard": 2,
+            "maxIter": 100,
+            "tol": 1e-8,
+            "printLevel": 1
+        }
+    },
+    "program": {
+        "precShiftMin": 0.5
+    }
+}

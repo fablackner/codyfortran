@@ -111,7 +111,8 @@ module M_Method
   !> Pointer to the exact propagation of the part of the linear split-step
   !> generator that the method solves in closed form (e.g. the field-free
   !> one-body Hamiltonian); unassociated if the linear integrator propagates
-  !> the whole linear part. Split-step propagators compose every linear step
+  !> the whole linear part (Method_Fabricate nullifies it before the method
+  !> binds it). Split-step propagators compose every linear step
   !> from exact substeps and integrator-1 substeps
   !> (propagator.splitStep.exactPartScheme; default Strang exact(dt/2)
   !> integrator(dt) exact(dt/2), see A_Propagator.md).
@@ -134,7 +135,8 @@ module M_Method
 
   !> Pointer to the phi functions of the exactly propagated part, for
   !> exponential integrators (propagator.exponential); unassociated if the
-  !> method does not provide them.
+  !> method does not provide them (Method_Fabricate nullifies it before the
+  !> method binds it).
   procedure(I_Method_ApplyExactPartPhi), pointer :: Method_ApplyExactPartPhi => null()
   abstract interface
     !> res = sum_m phi_m(-i H0 dt) vecs(:, m), m = 0 .. size(vecs, 2) - 1,

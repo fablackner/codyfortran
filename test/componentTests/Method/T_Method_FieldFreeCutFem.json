@@ -1,0 +1,48 @@
+{
+    "grid": {
+        "fem": {
+            "nLocals": 4,
+            "xmin": -6.0, "xmax": 6.0,
+            "ymin": -6.0, "ymax": 6.0,
+            "zmin": -6.0, "zmax": 6.0,
+            "centers": {
+                "x": [ 0.0 ],
+                "y": [ 0.0 ],
+                "z": [ 0.0 ],
+                "hMin": [ 0.5 ]
+            },
+            "growth": 1.8,
+            "hMax": 2.0,
+            "multipoleLmax": 6,
+            "multipoleCenter": [ 0.0, 0.0, 0.0 ]
+        }
+    },
+    "sysKinetic": {
+        "fem": {
+            "laplacian": {
+                "bodyMass": [ 1.0 ]
+            }
+        }
+    },
+    "sysPotential": {
+        "fem": {
+            "coulomb": {
+                "charges": [ 1.0 ],
+                "smearing": [ 0.0 ]
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 1,
+            "nBodies": [ 1 ],
+            "bodyStatistics": [ "f" ],
+            "orbBased": {
+                "nOrbs": [ 1 ],
+                "exactFieldFreeQ": true,
+                "exactFieldFreeCut": 5.0,
+                "mctdhx": { }
+            }
+        }
+    }
+}

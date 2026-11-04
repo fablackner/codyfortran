@@ -21,8 +21,15 @@ M_OrbsInit (Interface)
             │
             ├── Load/            ─── File-based orbital loading
             │
-            └── Ylm/             ─── Spherical harmonics R(r)·Y_lm
-                └── HydrogenLike/─── Hydrogenic radial functions R_nl(r)
+            ├── Ylm/             ─── Spherical harmonics R(r)·Y_lm
+            │   └── HydrogenLike/─── Hydrogenic radial functions R_nl(r)
+            │
+            ├── Prolate/         ─── Two-center prolate grid
+            │   └── Lcao/        ─── gerade/ungerade hydrogenic LCAO
+            │
+            └── Fem/             ─── 3D spectral elements (grid.fem)
+                └── Sto/         ─── Slater-type orbitals with real solid
+                                     harmonics on the centers (LCAO)
 ```
 
 ### Design Patterns
@@ -62,6 +69,7 @@ M_OrbsInit (Interface)
 | Linear | `InitFunction(x, index, bt_) → real` | Amplitude at position x |
 | Lattice | `InitFunction(ix,iy,iz, index, bt_) → real` | Amplitude at site (ix,iy,iz) |
 | Ylm | `InitFunction(r, l, m, index, bt_) → complex` | Radial part at (r,l,m) |
+| Fem | `OrbsInit_Fem_InitFunction(x, y, z, ind, bt_) → real` | Amplitude at the node (x,y,z); must be thread-safe (OpenMP node loop) |
 
 ## JSON Configuration
 
@@ -134,6 +142,62 @@ projection of `OrbsInit_Initialize` (below).
 ```
 Produces `φ_i(j) = δ_{ij}` normalized via grid inner product.
 
+### Fem / Slater-Type Orbitals (Molecules)
+
+Requires `grid.fem`. The family-level `InitializeOrb` (template:
+OrbsInit_Linear) samples `OrbsInit_Fem_InitFunction(x, y, z, ind, bt_)` at
+every interior node (OpenMP over z planes outside parallel regions) and
+normalizes the orbital with `Grid_InnerProduct`; it does **not**
+orthonormalize (programs orthonormalize after `Method_Setup`). An absent
+`bt_` (method.sb) is fine; the same orbitals are used for every body type.
+
+The `sto` model takes the terms as parallel arrays (one entry per term);
+orbital `ind` is the sum over the terms t with `orbital(t) = ind`:
+
+```
+φ_ind(r) = Σ_t coeff_t · ρ^(n_t − l_t − 1) · S_{l_t m_t}(r − R_t) · exp(−ζ_t ρ),
+ρ = |r − R_t|,   R_t = Grid_Fem_centers(:, center_t)
+```
+
+with the real regular solid harmonics S_lm in Racah normalization
+(`M_Utils_SolidHarmonics`: S₀₀ = 1, S₁₀ = z, S₁₁ = x, S₁,₋₁ = y,
+S₂₀ = (3z² − r²)/2, S₂,₋₂ = √3 xy, …; m > 0 cos-type, m < 0 sin-type). So
+ρ^(n−l−1) S_lm is r^(n−1) times an angular factor — no division by ρ, regular
+on the nucleus nodes. The terms are unnormalized primitives (coeff weights
+them as they are); the whole orbital is normalized on the grid.
+
+```json
+{
+  "orbsInit": {
+    "fem": {
+      "sto": {
+        "orbital": [1, 2, 3, 4, 5, 5, 5],
+        "center":  [1, 1, 1, 1, 1, 2, 3],
+        "n":       [1, 2, 2, 2, 2, 1, 1],
+        "l":       [0, 0, 1, 1, 1, 0, 0],
+        "m":       [0, 0, 1, 0, -1, 0, 0],
+        "zeta":    [7.66, 2.25, 2.23, 2.23, 2.23, 1.0, 1.0],
+        "coeff":   [1, 1, 1, 1, 1, 0.3, 0.3]
+      }
+    }
+  }
+}
+```
+
+| Key | Type | Default | Validation |
+|-----|------|---------|------------|
+| `orbital` | integer(:) | required | ≥ 1; every index 1..max(orbital) has a term |
+| `center` | integer(:) | required | 1 ≤ center ≤ number of `grid.fem` centers |
+| `n` | integer(:) | required | n > l |
+| `l` | integer(:) | required | l ≥ 0 |
+| `m` | integer(:) | required | \|m\| ≤ l |
+| `zeta` | real(:) | required | > 0 |
+| `coeff` | real(:) | 1 each | — |
+
+All arrays need equal sizes. The model defines `OrbsInit_Fem_nOrbitals =
+max(orbital)` orbitals; requesting more (e.g. a larger
+`method.mb.orbBased.nOrbs`) stops in `InitializeOrb` with a clear message.
+
 ## Initialization Sequence
 
 ```fortran
@@ -201,6 +265,7 @@ this initialization, it is the only projection on the declared m
 | `M_Utils_Json` | JSON configuration parsing |
 | `M_Utils_SfGslLib` | Hermite polynomials, Laguerre polynomials |
 | `M_Utils_DataStorage` | Binary file I/O for Load backend |
+| `M_Grid_Fem`, `M_Utils_SolidHarmonics` | Nodes and centers, real solid harmonics (Fem/Sto) |
 
 ## Adding a New Backend
 
@@ -242,7 +307,7 @@ this initialization, it is the only projection on the declared m
      call OrbsInit_PlaneWave_Fabricate
    ```
 
-5. **Update CMakeLists.txt** to include new files.
+5. **CMake** collects new sources automatically (`GLOB_RECURSE`).
 
 ## Common Pitfalls
 
@@ -263,6 +328,12 @@ Tests using OrbsInit are found in:
 - `test/componentTests/OrbsInit/Load/` — loading with declared m: round-off
   admixtures are removed, orbitals of another m stop with an error
   (`ctest-pass-regex` test)
+- `test/componentTests/OrbsInit/Fem/Sto/T_OrbsInit_Fem_Sto` — two-center
+  mesh (N = 257594): six orbitals (1s, LCAO of two 1s, 2p_x, 3d_xy, 3s,
+  4f (x² − y²)z) normalized to 8e-14 and equal to the analytic functions
+  (normalized on the grid) to 1.4e-15; 1s at the nucleus node vs 1/√π:
+  1.6e-6 (the grid norm error); p, d, f reflection symmetries to 8e-14; the
+  same orbitals for every body type and without `bt_`.
 
 Run tests:
 ```bash

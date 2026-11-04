@@ -7,7 +7,9 @@
 !> L is the part of the generator that the method propagates exactly
 !> (`Method_PropagateExactPart`, e.g. -i h0 on Ylm grids with
 !> method.mb.orbBased.exactFieldFreeQ) and whose phi functions it provides
-!> (`Method_ApplyExactPartPhi`); N is the sum of the TimeDerivative callbacks
+!> (`Method_ApplyExactPartPhi`; not available for the Cayley exact part of
+!> exactFieldFreeQ on non-Ylm grids such as grid.fem, where fabricate stops);
+!> N is the sum of the TimeDerivative callbacks
 !> of IntegratorList(1) and IntegratorList(2) (their Integrate procedures are
 !> not used). Schemes (`"propagator.exponential.<scheme>"`):
 !> - `krogstad4`: exponential Runge–Kutta of order 4 (one step, 4 N per step)

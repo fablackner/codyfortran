@@ -57,29 +57,17 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Electric field E(t) of the sin^2-envelope pulse (zero outside the pulse).
+  !> Electric field E(t) of the sin^2-envelope pulse (zero outside the pulse;
+  !> Pulse_Sin2Field).
   module function SysPotential_Ylm_CoulombLaser_FieldAmplitude(time) result(res)
-    use M_Utils_Constants
+    use M_Utils_Pulse
 
     real(R64), intent(in) :: time
     real(R64) :: res
 
-    real(R64) :: tRel, duration, envelope, carrier
-
-    res = 0.0_R64
-
-    if (SysPotential_Ylm_CoulombLaser_omega <= 0.0_R64) return
-
-    duration = 2.0_R64 * PI * SysPotential_Ylm_CoulombLaser_nCycles / SysPotential_Ylm_CoulombLaser_omega
-    tRel = time - SysPotential_Ylm_CoulombLaser_tStart
-
-    if (tRel < 0.0_R64 .or. tRel > duration) return
-
-    envelope = sin(PI * tRel / duration)**2
-    carrier = cos(SysPotential_Ylm_CoulombLaser_omega * (tRel - 0.5_R64 * duration) &
-                  + SysPotential_Ylm_CoulombLaser_cep)
-
-    res = SysPotential_Ylm_CoulombLaser_fieldStrength * envelope * carrier
+    res = Pulse_Sin2Field(time, SysPotential_Ylm_CoulombLaser_fieldStrength, SysPotential_Ylm_CoulombLaser_omega, &
+                          SysPotential_Ylm_CoulombLaser_nCycles, SysPotential_Ylm_CoulombLaser_cep, &
+                          SysPotential_Ylm_CoulombLaser_tStart)
 
   end function
 
