@@ -86,7 +86,7 @@ DOWNLOAD_OPENBLAS="true"
 
 ```bash
 # Clone repository
-git clone https://github.com/flackner/codyfortran
+git clone https://github.com/fablackner/codyfortran
 cd CodyFortran
 cd thirdParty
 
@@ -116,7 +116,7 @@ After building the third-party libraries, it is recommended to start a new termi
 
 ```bash
 # Clone repository (can be skipped if already done)
-git clone https://github.com/flackner/codyfortran
+git clone https://github.com/fablackner/codyfortran
 cd CodyFortran
 
 # source the setBuildVars.sh file

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # Project metadata
 project(CodyFortran LANGUAGES Fortran)
 set(PROJECT_DESCRIPTION "CodyFortran: Correlated Dynamics with Fortran")
-set(PROJECT_URL "https://github.com/flackner/codyfortran")
+set(PROJECT_URL "https://github.com/fablackner/codyfortran")
 
 # Enable testing early
 include(CTest)

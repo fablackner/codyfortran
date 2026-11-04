@@ -4,7 +4,7 @@ src_dir: ./src
 output_dir: ./doc
 media_dir: ./assets
 favicon: ./assets/img_126x87.png
-project_github: https://github.com/flackner/codyfortran
+project_github: https://github.com/fablackner/codyfortran
 summary: ![CodyFortran](|media|/img_850x248.png)<br/><br/>
          A framework based on modern Fortran for simulating interacting, correlated dynamical systems — fermions, bosons, and mixed systems on lattice and continuous grids.
 docmark: <
