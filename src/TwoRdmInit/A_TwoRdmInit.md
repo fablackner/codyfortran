@@ -109,7 +109,7 @@ src/TwoRdmInit/
 }
 ```
 
-No parameters needed. Requires files in working directory:
+Optional `"dir"`: directory of the files (default: the working directory). Requires the files:
 - `rdm2Bt01_01.in` — α-α block
 - `rdm2Bt01_02.in` — α-β block
 - `rdm2Bt02_01.in` — β-α block

@@ -1,0 +1,121 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 32,
+            "mmax": 1,
+            "rmin": 0.0,
+            "rmax": 200.0,
+            "fedvr": {
+                "nElements": 50,
+                "nLocals": 20
+            }
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [
+                    1.0,
+                    1.0
+                ],
+                "fedvr": {}
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 4.0,
+                "stdImpl": {}
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "blockEq": {}
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [
+                2,
+                2
+            ],
+            "bodyStatistics": [
+                "f",
+                "f"
+            ],
+            "orbBased": {
+                "nOrbs": [
+                    5,
+                    5
+                ],
+                "mOfOrbs": [
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1
+                ],
+                "td2rdm": {},
+                "exactFieldFreeQ": true
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "load": {
+            "dir": "../mctdhf",
+            "lmaxIn": 1
+        }
+    },
+    "twoRdm": {
+        "fermionic": {
+            "singlet": {}
+        }
+    },
+    "twoRdmInit": {
+        "load": {
+            "dir": "../mctdhf"
+        }
+    },
+    "reconstruction": {
+        "singlet": {
+            "singletNy": {
+                "ccQ": true
+            }
+        }
+    },
+    "integratorList": {
+        "sil1": {
+            "krylovDim": 40,
+            "tolerance": 1e-10,
+            "maxRestarts": 10
+        },
+        "rk2": {
+            "o4Expl": {}
+        }
+    },
+    "propagator": {
+        "splitStep": {
+            "order2": {},
+            "exactPartScheme": "blanesMoan6Swap"
+        }
+    },
+    "program": {
+        "averagingTime": 40.0,
+        "outputStep": 0.2,
+        "nTimeSteps": 80
+    }
+}

@@ -74,7 +74,7 @@ Module doc: `src/Orbs/A_Orbs.md`.
 **OrbsInit**
 Domain: Quantum State Containers.
 Purpose: Initializes orbitals for selected grid/physics model.
-Key interfaces/notes: `OrbsInit_Initialize(orbs)`; supports HO, hydrogen-like, on-site, load-from-file, grid-point, prolate LCAO, and Fem `sto` (sums of Slater-type orbitals with real solid harmonics on the grid centers) initialization; orbitals are normalized but not orthonormalized (programs orthonormalize after `Method_Setup`).
+Key interfaces/notes: `OrbsInit_Initialize(orbs)`; supports HO, hydrogen-like, on-site, load-from-file (`orbsInit.load`: optional `dir`; on Ylm grids `lmaxIn` embeds orbitals of a smaller lmax), grid-point, prolate LCAO, and Fem `sto` (sums of Slater-type orbitals with real solid harmonics on the grid centers) initialization; orbitals are normalized but not orthonormalized (programs orthonormalize after `Method_Setup`).
 Module doc: `src/OrbsInit/A_OrbsInit.md`.
 
 **Coeffs**
@@ -86,7 +86,7 @@ Module doc: `src/Coeffs/A_Coeffs.md`.
 **CoeffsInit**
 Domain: Quantum State Containers.
 Purpose: Initializes CI coefficient vectors.
-Key interfaces/notes: `CoeffsInit_Initialize(coeffs)`; supports unary ground state, excited-state operator chains, and load from `coeffs.in`.
+Key interfaces/notes: `CoeffsInit_Initialize(coeffs)`; supports unary ground state, excited-state operator chains, and load from `coeffs.in` (optional `coeffsInit.load.dir`).
 Module doc: `src/CoeffsInit/A_CoeffsInit.md`.
 
 **TwoRdm**
@@ -98,7 +98,7 @@ Module doc: `src/TwoRdm/A_TwoRdm.md`.
 **TwoRdmInit**
 Domain: Quantum State Containers.
 Purpose: Initializes two-body RDM states.
-Key interfaces/notes: Supports excited-state and load-from-file initialization using `rdm2Bt{bt1}_{bt2}.in`.
+Key interfaces/notes: Supports excited-state and load-from-file initialization using `rdm2Bt{bt1}_{bt2}.in` (optional `twoRdmInit.load.dir`).
 Module doc: `src/TwoRdmInit/A_TwoRdmInit.md`.
 
 **ConfigList**
@@ -164,7 +164,7 @@ Module doc: `src/Absorber/A_Absorber.md`.
 **Utils**
 Domain: Numerical Infrastructure.
 Purpose: Stateless numerical/algebra utility modules.
-Key interfaces/notes: Includes types, BLAS/LAPACK/ARPACK/FFT/GSL wrappers, optional cuBLAS GPU layer (`M_Utils_CublasLib`, CMake `CODY_USE_CUDA`), block-wise Hermitian eigen-decomposition (`LapackLib_DiagonalizeHermitianBlocks`), real regular solid harmonics (`M_Utils_SolidHarmonics`: values, polynomial coefficients, Racah normalization), the sin² laser pulse of the length-gauge couplings (`Pulse_Sin2Field`, `M_Utils_Pulse`), restarted flexible right-preconditioned GMRES with a caller-owned context and callbacks (`M_Utils_Gmres`: `Gmres_CreateCtx`, `Gmres_Solve`; used by the Cayley step of Method), RDM algebra utilities, derivatives/convolutions, JSON/data I/O, and logging.
+Key interfaces/notes: Includes types, BLAS/LAPACK/ARPACK/FFT/GSL wrappers, optional cuBLAS GPU layer (`M_Utils_CublasLib`, CMake `CODY_USE_CUDA`), block-wise Hermitian eigen-decomposition (`LapackLib_DiagonalizeHermitianBlocks`), real regular solid harmonics (`M_Utils_SolidHarmonics`: values, polynomial coefficients, Racah normalization), the sin² laser pulse of the length-gauge couplings (`Pulse_Sin2Field`, `M_Utils_Pulse`), the HHG spectrum of a dipole time series (`M_Utils_HhgSpectrum`: `HhgSpectrum_Write`, `HhgSpectrum_WriteFromTable`), restarted flexible right-preconditioned GMRES with a caller-owned context and callbacks (`M_Utils_Gmres`: `Gmres_CreateCtx`, `Gmres_Solve`; used by the Cayley step of Method), RDM algebra utilities, derivatives/convolutions, JSON/data I/O, and logging.
 Module doc: `src/Utils/A_Utils.md`.
 
 ---

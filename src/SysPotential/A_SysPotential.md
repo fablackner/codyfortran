@@ -197,7 +197,7 @@ with, per center I (position `Grid_Fem_centers(:, I)`, charge Z_I, radius rc_I):
 **Why smearing helps explicit time steps.** The spike of a Galerkin point
 nucleus (roughly −30 … −50 Z/hMin: about −1600 Ha for O at hMin = 0.2, and
 −6500 Ha (−40.9 Z/hMin, nLocals 6) at the hMin = 0.05 that resolves its cusp
-on the accurate H₂O mesh of app/fem_molecules) and the fine core elements
+on the accurate H₂O mesh of app/molecules/h2o) and the fine core elements
 stretch the spectrum of h = T + V, so explicit integrators of the full h need
 dt ≲ 2.8/‖h‖, about 4e-4 a.u. for O. A smeared nucleus is bounded by
 2Z/(√π rc) and has no cusp to resolve, so the core mesh can be coarse and
@@ -224,8 +224,8 @@ Coulomb data behind. `SysPotential_Fem_Coulomb_charges(nCenters)`,
 `SysPotential_Fem_Coulomb_smearing(nCenters)`,
 `SysPotential_Fem_Coulomb_nuclearRepulsion` (Σ_{I<J} Z_I Z_J/R_IJ of the point
 charges, set at fabrication, printed at Setup; not included in Method
-energies). Used by app/fem_molecules (`P_FemScf`: nuclear dipole and E_tot;
-`P_FemKickTdhf`: E_tot) and T_Fem_03/04.
+energies). Used by app/molecules (`P_GroundScfFem`: nuclear dipole and E_tot;
+`P_KickTdhfFem`: E_tot) and T_Fem_03/04.
 
 **JSON path:** `sysPotential.fem.coulomb` (no implementation leaf)
 

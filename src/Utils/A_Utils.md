@@ -85,7 +85,7 @@ complex(R64), intent(inout), contiguous :: A2(:,:,:,:)
 | `M_Utils_PrinterObservableLinear` | `PrinterObservableLinear_DumpDipole`, `_DumpPotentialFullExpansion` | Linear grids |
 | `M_Utils_PrinterObservableLattice` | `PrinterObservableLattice_DumpDensityCenter`, `_DumpDensityOnSite` | Lattice grids |
 | `M_Utils_PrinterObservableYlm` | `PrinterObservableYlm_DumpDipole` (optional `dipole_` out), `PrinterObservableYlm_DumpDipoleAcceleration` (optional `acceleration_` out) | Ylm grids; z = r√(4π/3)Y₁₀ applied as spatial product; acceleration form −Z⟨cosθ/r²⟩ |
-| `M_Utils_PrinterObservableFem` | `PrinterObservableFem_DumpDipole(rdm1, orbs, filename, toScreenQ, time, dipole_)` (line "time ⟨x⟩ ⟨y⟩ ⟨z⟩", optional `dipole_(3)` out), `PrinterObservableFem_DumpNorm(..., norm_)` (line "time N", N = Tr(ρ S)), `PrinterObservableFem_DumpDipoleVelocity(..., velocity_)` (line "time v_x v_y v_z", the velocity form v_a = i Tr(ρ_s [T, r_a]) of the dipole, d⟨r_a⟩/dt wherever the equations of motion obey Ehrenfest's theorem for r_a, e.g. TDHF; optional `velocity_(3)` out) | grid.fem; Method-aware like `M_Utils_PrinterObservable`: ρ_s = `Method_Mb_OrbBased_FillSpatialRdm1` of rdm1 (rdm1 itself, or the sum of the two spin blocks for restricted storage), body type of stored orbital i = `Method_Mb_OrbBased_bodyTypeOfOrb(i)`. Dipole and N: one pass over the nodes with the density ρ = Σ_ij ρ_s(i,j) φ_j* φ_i and the nodal weights (no orthonormality assumed), node coordinates from `Grid_Fem_FillNodeCoordinate`. Velocity: Re(i Σ_ij ρ_s(i,j)(⟨Tφ_j\|r_aφ_i⟩ − ⟨r_aφ_j\|Tφ_i⟩)) with `SysKinetic_MultiplyWithKineticOp` (one T application per orbital, 2 nOS² inner products per axis); the potential, the length gauge and the interaction commute with r_a, so after a kick e^{iκr_a} it gives the TRK value Nκ/m on the grid (P_FemKickTdhf and FemKick.inc take their initial slope from it); early return without output request |
+| `M_Utils_PrinterObservableFem` | `PrinterObservableFem_DumpDipole(rdm1, orbs, filename, toScreenQ, time, dipole_)` (line "time ⟨x⟩ ⟨y⟩ ⟨z⟩", optional `dipole_(3)` out), `PrinterObservableFem_DumpNorm(..., norm_)` (line "time N", N = Tr(ρ S)), `PrinterObservableFem_DumpDipoleVelocity(..., velocity_)` (line "time v_x v_y v_z", the velocity form v_a = i Tr(ρ_s [T, r_a]) of the dipole, d⟨r_a⟩/dt wherever the equations of motion obey Ehrenfest's theorem for r_a, e.g. TDHF; optional `velocity_(3)` out) | grid.fem; Method-aware like `M_Utils_PrinterObservable`: ρ_s = `Method_Mb_OrbBased_FillSpatialRdm1` of rdm1 (rdm1 itself, or the sum of the two spin blocks for restricted storage), body type of stored orbital i = `Method_Mb_OrbBased_bodyTypeOfOrb(i)`. Dipole and N: one pass over the nodes with the density ρ = Σ_ij ρ_s(i,j) φ_j* φ_i and the nodal weights (no orthonormality assumed), node coordinates from `Grid_Fem_FillNodeCoordinate`. Velocity: Re(i Σ_ij ρ_s(i,j)(⟨Tφ_j\|r_aφ_i⟩ − ⟨r_aφ_j\|Tφ_i⟩)) with `SysKinetic_MultiplyWithKineticOp` (one T application per orbital, 2 nOS² inner products per axis); the potential, the length gauge and the interaction commute with r_a, so after a kick e^{iκr_a} it gives the TRK value Nκ/m on the grid (P_KickTdhfFem and FemKick.inc take their initial slope from it); early return without output request |
 
 ---
 
@@ -164,6 +164,18 @@ Stateless, thread-safe; tables are indexed by
 Test: `test/componentTests/Utils/T_Utils_SolidHarmonics` (closed forms for
 l ≤ 3, values vs. polynomial coefficients for l ≤ 8 to 7e-16, addition
 theorem to 3e-16, regular at the origin).
+
+---
+
+## HHG Spectrum: `M_Utils_HhgSpectrum`
+
+Stateless spectrum of a dipole time series, written at the end of the laser
+programs in `app/` (`hhg.dat`).
+
+| Routine | Purpose |
+|---------|---------|
+| `HhgSpectrum_Write(outFile, time, dipole, omega0, acceleration_, maxOrder_, dOrder_)` | Hann-windowed Fourier transforms over the whole equidistant series: acceleration form \|FT[a w]\|² (if `acceleration_` is given) and length form ω⁴ \|FT[(z − ⟨z⟩) w]\|², versus harmonic order ω/ω0 from `dOrder_` (0.1) to `maxOrder_` (300), stopping at the Nyquist frequency |
+| `HhgSpectrum_WriteFromTable(outFile, inFile, omega0, colTime, colDipole, colAcceleration_, maxOrder_, dOrder_)` | Same, with the series read from columns of a whitespace table (`#` lines skipped) |
 
 ---
 

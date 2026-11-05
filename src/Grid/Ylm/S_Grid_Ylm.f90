@@ -10,14 +10,6 @@ submodule(M_Grid_Ylm) S_Grid_Ylm
   ! local data
   !=============================================================================
 
-  !> Gauss-Legendre tables of Grid_Ylm_ToNodes/FromNodes and of the m = 0
-  !> fast path of SpatialProduct (Setup): quadY(l, q, m) = Theta_lm(x_q) and
-  !> quadWY(q, l, m) = 2 pi w_q Theta_lm(x_q) for 0 <= m <= Grid_Ylm_mmaxNodes,
-  !> m <= l <= Grid_Ylm_lmaxNodes (zero for l < m) on the Grid_Ylm_nNodes
-  !> Gauss-Legendre nodes x_q in cos(theta); Theta_l,-m = (-1)^m Theta_lm.
-  real(R64), allocatable :: quadY(:, :, :)
-  real(R64), allocatable :: quadWY(:, :, :)
-
   !> Parity-split tables of Grid_Ylm_ChannelsToNodes/NodesToChannels. With
   !> the symmetric nodes x_(n+1-q) = -x_q (n = Grid_Ylm_nNodes, middle node
   !> x_c = 0, c = (n + 1)/2) and Theta_lm(-x) = (-1)^(l+m) Theta_lm(x), the
@@ -146,8 +138,11 @@ contains
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Tabulate Theta_lm (Y_lm = Theta_lm(theta) e^(i m phi), Condon-Shortley
-  !> phase) on Gauss-Legendre nodes for Grid_Ylm_ToNodes/FromNodes and the
-  !> m = 0 fast path of SpatialProduct. The tables cover l <= 2 lmax + 2 and
+  !> phase) on Gauss-Legendre nodes for Grid_Ylm_ToNodes/FromNodes:
+  !> quadY(l, q, m) = Theta_lm(x_q) and quadWY(q, l, m) = 2 pi w_q Theta_lm(x_q)
+  !> for 0 <= m <= Grid_Ylm_mmaxNodes, m <= l <= Grid_Ylm_lmaxNodes (zero for
+  !> l < m) on the Grid_Ylm_nNodes nodes x_q in cos(theta),
+  !> Theta_l,-m = (-1)^m Theta_lm, stored split by parity. The tables cover l <= 2 lmax + 2 and
   !> |m| <= 2 mmax (orbitals, densities and potentials of the default
   !> interaction layout, multiplicative operators). Products of fixed-m fields
   !> whose m add up to zero are polynomials in cos(theta) of degree l1 + l2 + ...
@@ -158,7 +153,7 @@ contains
     use M_Grid_Ylm
     use stdlib_quadrature, only: gauss_legendre
 
-    real(R64), allocatable :: x(:), w(:), sinTheta(:)
+    real(R64), allocatable :: x(:), w(:), sinTheta(:), quadY(:, :, :), quadWY(:, :, :)
     integer(I32) :: l, m, i, p, lmaxNodes, mmaxNodes, nNodes, nRows, iMid
 
     lmaxNodes = Grid_Ylm_lmaxNodes
@@ -172,8 +167,6 @@ contains
     w(:) = 0.5_R64 * (w(:) + w(nNodes:1:-1))
     sinTheta = sqrt(1.0_R64 - x(:)**2)
 
-    if (allocated(quadY)) deallocate (quadY)
-    if (allocated(quadWY)) deallocate (quadWY)
     allocate (quadY(0:lmaxNodes, Grid_Ylm_nNodes, 0:mmaxNodes), quadWY(Grid_Ylm_nNodes, 0:lmaxNodes, 0:mmaxNodes))
     quadY(:, :, :) = 0.0_R64
 
@@ -295,13 +288,6 @@ contains
       ! Spherically symmetric first factor (e.g. a central potential): the Gaunt
       ! sum collapses to Y_00 Y_lm = Y_lm / sqrt(4 pi), a radial scaling of f
       call SpatialProductL0(fOut, fConjg, f, conjgQ, lMaxOut, lMax, mMaxOut, mMax)
-
-    else if (mMaxOut .eq. 0 .and. mMaxConjg .eq. 0 .and. mMax .eq. 0 .and. &
-             max(lMaxOut, lMaxConjg, lMax) <= Grid_Ylm_lmaxNodes .and. &
-             lMaxOut + lMaxConjg + lMax < 2 * Grid_Ylm_nNodes) then
-      ! Axially symmetric operands: exact Gauss-Legendre quadrature in cos(theta)
-      ! (O(lmax^2) per radial point instead of the O(lmax^3) Gaunt sum)
-      call SpatialProductM0(fOut, fConjg, f, conjgQ, lMaxOut, lMaxConjg, lMax)
 
     else
       ! General case: Gaunt-coefficient expansion
@@ -472,48 +458,6 @@ contains
         fOut(iOut:iOut + nRad - 1) = g(:) * f(iIn:iIn + nRad - 1)
       end do
     end do
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Spatial product of axially symmetric (m = 0) fields by quadrature.
-  !>
-  !> With m = 0 the layout is a matrix f(r, l). Both factors are evaluated on
-  !> the Gauss-Legendre nodes in cos(theta), multiplied pointwise and projected
-  !> back onto Y_l0, l <= lMaxOut. The node count makes the angular integral
-  !> exact, so the result equals the Gaunt-coefficient expansion.
-  pure subroutine SpatialProductM0(fOut, fConjg, f, conjgQ, lMaxOut, lMaxConjg, lMax)
-    complex(R64), intent(out), contiguous :: fOut(:)
-    complex(R64), intent(in), contiguous  :: fConjg(:)
-    complex(R64), intent(in), contiguous  :: f(:)
-    logical, intent(in)                   :: conjgQ
-    integer(I32), intent(in)              :: lMaxOut
-    integer(I32), intent(in)              :: lMaxConjg
-    integer(I32), intent(in)              :: lMax
-
-    integer(I32) :: nRad
-    real(R64), allocatable :: aRe(:, :), aIm(:, :), bRe(:, :), bIm(:, :), pRe(:, :), pIm(:, :)
-
-    nRad = Grid_Ylm_nRadial
-
-    fOut = (0.0_R64, 0.0_R64)
-
-    ! First factor on the angular nodes (conjugation commutes with real Y_l0)
-    aRe = matmul(reshape(real(fConjg(1:nRad * (lMaxConjg + 1))), [nRad, lMaxConjg + 1]), quadY(0:lMaxConjg, :, 0))
-    aIm = matmul(reshape(aimag(fConjg(1:nRad * (lMaxConjg + 1))), [nRad, lMaxConjg + 1]), quadY(0:lMaxConjg, :, 0))
-    if (conjgQ) aIm = -aIm
-
-    ! Second factor on the angular nodes
-    bRe = matmul(reshape(real(f(1:nRad * (lMax + 1))), [nRad, lMax + 1]), quadY(0:lMax, :, 0))
-    bIm = matmul(reshape(aimag(f(1:nRad * (lMax + 1))), [nRad, lMax + 1]), quadY(0:lMax, :, 0))
-
-    ! Pointwise product, then projection onto Y_l0
-    pRe = aRe * bRe - aIm * bIm
-    pIm = aRe * bIm + aIm * bRe
-
-    fOut(1:nRad * (lMaxOut + 1)) = reshape(cmplx(matmul(pRe, quadWY(:, 0:lMaxOut, 0)), &
-                                                 matmul(pIm, quadWY(:, 0:lMaxOut, 0)), kind=R64), &
-                                           [nRad * (lMaxOut + 1)])
 
   end subroutine
 

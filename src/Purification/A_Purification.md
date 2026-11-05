@@ -154,7 +154,7 @@ call Purification_PurifyTwoRdmState(twoRdmState, h2)
 
 `h2` is always the full spin-orbital two-body tensor in the `Method_Mb_OrbBased_h2` layout (nOrbsSum⁴, spin-up orbitals first, then spin-down); each backend extracts the blocks it needs (Singlet/Reduce also accepts the (up,down) block alone).
 
-`h2` is read only if `Purification_usesH2Q` (module data of `M_Purification`, set during fabrication to `conserveEnergyQ` of the active backend). Callers that propagate the orbitals refresh h2 from the current orbitals only when this flag is set (see `app/be/laser/P_LaserTd2rdm.f90`).
+`h2` is read only if `Purification_usesH2Q` (module data of `M_Purification`, set during fabrication to `conserveEnergyQ` of the active backend). Callers that propagate the orbitals refresh h2 from the current orbitals only when this flag is set (see `app/atoms/be/dynamics/td2rdm/P_LaserTd2rdmVelocity.f90`).
 
 ---
 

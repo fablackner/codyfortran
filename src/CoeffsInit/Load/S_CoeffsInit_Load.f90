@@ -51,6 +51,8 @@ contains
     ! set values and procedure pointers
     !------------------------------------
 
+    CoeffsInit_Load_dir = Json_Get("coeffsInit.load.dir", "")
+
     CoeffsInit_Initialize => Initialize
 
     !------------------------------------
@@ -60,7 +62,8 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Loads CI coefficients from the binary file `coeffs.in`.
+  !> Loads CI coefficients from the binary file `coeffs.in` (in
+  !> coeffsInit.load.dir if given).
   !>
   !> The entire coefficient vector is read in a single I/O operation.
   !> The caller must ensure that `coeffs` is allocated with the correct
@@ -72,7 +75,10 @@ contains
 
     complex(R64), intent(out), contiguous :: coeffs(:)
 
-    character(len=*), parameter :: filename = "coeffs.in"
+    character(len=:), allocatable :: filename
+
+    filename = "coeffs.in"
+    if (len_trim(CoeffsInit_Load_dir) > 0) filename = trim(CoeffsInit_Load_dir)//"/"//filename
 
     call LoadData(coeffs, filename, storage_size(coeffs))
 

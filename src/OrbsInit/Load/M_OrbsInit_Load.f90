@@ -25,8 +25,12 @@
 !> JSON Configuration
 !> ------------------
 !>   {"orbsInit": {"load": {}}}
+!>   {"orbsInit": {"load": {"dir": "../groundstate", "lmaxIn": 2}}}
 !>
-!> @note Files must exist in the working directory at runtime.
+!> - dir (optional): directory of the files (default: working directory)
+!> - lmaxIn (optional, Ylm grids): the files hold orbitals of a grid with the
+!>   same radial grid and mmax but lmax = lmaxIn; they are embedded with zero
+!>   high-l channels
 module M_OrbsInit_Load
   use M_Utils_Types
   use M_Utils_NoOpProcedures
@@ -48,6 +52,11 @@ module M_OrbsInit_Load
   !=============================================================================
   ! module data
   !=============================================================================
+
+  !> Directory of the orbital files (orbsInit.load.dir, "" = working directory)
+  character(len=:), allocatable :: OrbsInit_Load_dir
+  !> lmax of the stored orbitals (orbsInit.load.lmaxIn, < 0: same grid)
+  integer(I32) :: OrbsInit_Load_lmaxIn = -1
 
   !=============================================================================
   ! module procedures pointers

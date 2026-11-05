@@ -38,8 +38,8 @@ module M_CoeffsInit_Load
     !> --------
     !> - Binds `CoeffsInit_Initialize` in `M_CoeffsInit` to read
     !>   coefficients from the binary file `coeffs.in`.
-    !> - The file must exist in the working directory at runtime.
-    !> - No additional JSON parameters are currently supported.
+    !> - The file is read from coeffsInit.load.dir (optional, default:
+    !>   the working directory).
     module subroutine CoeffsInit_Load_Fabricate
     end subroutine
   end interface
@@ -47,5 +47,8 @@ module M_CoeffsInit_Load
   !=============================================================================
   ! module data
   !=============================================================================
+
+  !> Directory of coeffs.in (coeffsInit.load.dir, "" = working directory)
+  character(len=:), allocatable :: CoeffsInit_Load_dir
 
 end module

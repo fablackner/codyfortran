@@ -128,7 +128,11 @@ initialization then checks (see below).
   }
 }
 ```
-Reads binary files `orb{bt}_{ind}.in` via DataStorage routines. With declared
+Reads binary files `orb{bt}_{ind}.in` via DataStorage routines, from the
+working directory or from `"dir"` (optional). With `"lmaxIn"` (Ylm grids only)
+the files hold orbitals of a grid with the same radial grid and mmax but
+lmax = lmaxIn; the channel layout is l-major, so they are embedded as a prefix
+with zero high-l channels (e.g. a ground state relaxed at small lmax). With declared
 m, round-off admixtures of other m in the files are removed by the final
 projection of `OrbsInit_Initialize` (below).
 
@@ -218,8 +222,7 @@ call OrbsInit_InitializeOrb(orb(:), orbital_index, body_type)
 m (`method.mb.orbBased.mOfOrbs`) the channels of other m are zeroed, and the
 program stops with an error if more than 1e-8 of an orbital's norm would be
 removed (orbitals that do not have the declared m); without declaration it is
-a NoOp. Apart from `EmbedOrbitals` of the Be/Ne programs, which replaces
-this initialization, it is the only projection on the declared m
+a NoOp. It is the only projection on the declared m
 (src/Method/A_Method.md).
 `OrbsInit_InitializeOrb` alone does not project.
 

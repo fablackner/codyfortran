@@ -49,7 +49,7 @@ a `coeffs.in` of another sector).
 | Backend | JSON Key | Description | Typical Use |
 |---------|----------|-------------|-------------|
 | **Unary** | `coeffsInit.unary` | Sets `c(1)=1`, all others zero | Ground-state search, mean-field |
-| **Load** | `coeffsInit.load` | Reads from `coeffs.in` | Restarts, checkpoints |
+| **Load** | `coeffsInit.load` | Reads `coeffs.in` (from `"dir"` if given, else the working directory) | Restarts, checkpoints |
 | **Excited** | `coeffsInit.excited` | Applies â†/â to build excitations | Response, dynamics |
 
 ---

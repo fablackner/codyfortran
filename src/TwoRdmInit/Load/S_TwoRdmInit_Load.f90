@@ -38,6 +38,8 @@ contains
     ! set values and procedure pointers
     !------------------------------------
 
+    TwoRdmInit_Load_dir = Json_Get("twoRdmInit.load.dir", "")
+
     ! Map the local implementation to the main procedure pointer
     TwoRdmInit_InitializeBlock => InitializeBlock
 
@@ -60,6 +62,8 @@ contains
 !> rdm2Bt{bt1:02d}_{bt2:02d}.in
 !> @endcode
 !> Examples: rdm2Bt01_01.in, rdm2Bt01_02.in, rdm2Bt02_01.in, rdm2Bt02_02.in
+!> The files are read from twoRdmInit.load.dir (optional, default: the
+!> working directory).
 !>
 !> @param[out] rdm2Bt  Output tensor (shape must match file contents)
 !> @param[in]  bt1     Body type index 1 (used in filename)
@@ -76,6 +80,7 @@ contains
     character(len=256) :: filename
 
     write (filename, '("rdm2Bt",I2.2,"_",I2.2,".in")') bt1, bt2
+    if (len_trim(TwoRdmInit_Load_dir) > 0) filename = trim(TwoRdmInit_Load_dir)//"/"//trim(filename)
 
     call LoadData(rdm2Bt, trim(filename), storage_size(rdm2Bt))
 

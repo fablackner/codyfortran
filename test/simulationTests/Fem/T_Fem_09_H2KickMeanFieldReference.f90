@@ -37,7 +37,7 @@
 !>    trajectory); the error with the reference stays below
 !>    program.refineTolerance = 2e-5 relative to the response.
 !> 5. A reference built explicitly before the kick, from the ground state (as
-!>    app/fem_molecules does), is kept at the first call: at the kicked state
+!>    app/molecules does), is kept at the first call: at the kicked state
 !>    the nonlinear orbital derivative is then the response
 !>    -i Q (W(0+) - W0) phi = O(kappa), above MIN_RESPONSE_DERIVATIVE = 1e-4
 !>    relative to the ground state's derivative without reference (3.0e-3),

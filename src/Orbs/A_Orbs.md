@@ -168,9 +168,8 @@ pointer is a NoOp.
 
 - `Orbs_ProjectOnSymmetry(orbs)` zeroes the channels of other than the
   declared m (`Grid_Ylm_ProjectOnM`). It is called once where orbitals are
-  initialized: at the end of `OrbsInit_Initialize`, and, as the only other
-  call, at the end of `EmbedOrbitals` of the Be/Ne programs, which replaces
-  that initialization when orbitals are embedded from a smaller lmax. It
+  initialized, at the end of `OrbsInit_Initialize` (also for orbitals
+  embedded from a smaller lmax, `orbsInit.load.lmaxIn`). It
   stops with an error if more than 1e-8 of an orbital's squared norm would be
   removed (norms in the positive metric `Grid_Ylm_weights`, also on ECS
   grids); the overlaps change by at most the removed parts.

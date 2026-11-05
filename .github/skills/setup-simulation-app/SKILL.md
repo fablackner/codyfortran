@@ -1,16 +1,24 @@
 ---
 name: setup-simulation-app
 description: "Use when creating a new CodyFortran simulation app scaffold under app/, including folder creation and a matched Fortran program (.f90) + JSON input (.json). Provides a complete starter workflow (fabricate, setup, propagate, output) and reusable templates. Keywords: app scaffold, simulation setup, create app folder, generate f90 json, new simulation program."
-argument-hint: "[app group] [scenario folder] [program base name]"
+argument-hint: "[category] [system] [groundstate|dynamics] [method] [program base name]"
 ---
 
 # Setup Complete Simulation App Scaffold
 
 Use this skill when you want to create a new runnable simulation app under `app/` with:
 
-1. A dedicated folder path.
+1. A folder `app/<category>/<system>/<stage>/<method>/` (layout: `app/README.md`).
 2. A program source file `P_*.f90`.
 3. A matching JSON input `P_*.json`.
+
+A folder holds exactly one program and one JSON input with the same base
+name. A variant (another pulse, another orbital space) gets its own folder,
+e.g. `dynamics/mctdhf/weak4c/`. Programs run in their folder; a dynamics
+input reads the ground state from its folder with `orbsInit.load.dir`
+(and `coeffsInit.load.dir`, `twoRdmInit.load.dir`).
+
+Analysis scripts (`*.py`) of a system go to `app/<category>/<system>/analysis/`.
 
 ## Required References
 
@@ -22,16 +30,18 @@ Use this skill when you want to create a new runnable simulation app under `app/
 
 ## Input Contract
 
-Provide three values:
+Provide five values:
 
-1. `appGroup`: top-level app bucket under `app/` (example: `myProject`).
-2. `scenario`: scenario folder under that group (example: `baseline`).
-3. `programBase`: base program file name without extension (example: `P_MySystem_TdciPropagate`).
+1. `category`: `atoms`, `molecules`, or a new one.
+2. `system`: the physical system (example: `be`, `h2o`, `chain6`).
+3. `stage`: `groundstate` or `dynamics`.
+4. `method`: method folder (example: `scf`, `mcscf`, `mctdhf`, `tdci`, `td2rdm`).
+5. `programBase`: base program file name without extension (example: `P_TdciPropagate`).
 
 Resulting files:
 
-- `app/<appGroup>/<scenario>/<programBase>.f90`
-- `app/<appGroup>/<scenario>/<programBase>.json`
+- `app/<category>/<system>/<stage>/<method>/<programBase>.f90`
+- `app/<category>/<system>/<stage>/<method>/<programBase>.json`
 
 ## Standard Workflow
 
@@ -40,12 +50,12 @@ Resulting files:
 - Use ASCII letters, digits, `_` for folder and file names.
 
 2. Create target directory.
-- Make `app/<appGroup>/<scenario>/` if missing.
+- Make `app/<category>/<system>/<stage>/<method>/` if missing.
 
 3. Create `.f90` from template.
 - Copy [Fortran template](./templates/P_Simulation_Scaffold.f90).
 - Replace `__PROGRAM_NAME__` with `<programBase>`.
-- Replace `__JSON_REL_PATH__` with `app/<appGroup>/<scenario>/<programBase>.json`.
+- Replace `__JSON_REL_PATH__` with `app/<category>/<system>/<stage>/<method>/<programBase>.json`.
 
 4. Create `.json` from template.
 - Copy [JSON template](./templates/P_Simulation_Scaffold.json).
@@ -59,7 +69,7 @@ Resulting files:
 ```bash
 source setBuildVars.sh -c gnu -t release
 cmake -B build && cmake --build build && cmake --install build
-./app/<appGroup>/<scenario>/<programBase>.exe
+./app/<category>/<system>/<stage>/<method>/<programBase>.exe
 ```
 
 ## Notes
@@ -70,12 +80,12 @@ cmake -B build && cmake --build build && cmake --install build
 
 ## Example Invocation
 
-`/setup-simulation-app hubbard1d sweepA P_Hubbard1d_TdciPropagate`
+`/setup-simulation-app hubbard chain6 dynamics tdci P_TdciPropagate`
 
 Expected output:
 
-- `app/hubbard1d/sweepA/P_Hubbard1d_TdciPropagate.f90`
-- `app/hubbard1d/sweepA/P_Hubbard1d_TdciPropagate.json`
+- `app/hubbard/chain6/dynamics/tdci/P_TdciPropagate.f90`
+- `app/hubbard/chain6/dynamics/tdci/P_TdciPropagate.json`
 
 ## Done Checklist
 

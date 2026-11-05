@@ -236,7 +236,7 @@ nucleus) is 7–35× larger than the SIL time-step error at the peak of a
 4×10¹⁴ W/cm² pulse. Use the fourth-order composition
 `propagator.splitStep.exactPartScheme = "blanesMoan6"` (A_Propagator.md): its
 errors coincide with those of SIL at the same Δt (the outer Strang error
-dominates) at 2.5–5× lower cost; see `app/be/README.md`.
+dominates) at 2.5–5× lower cost (app/atoms/be; measurements in the git history of app/be/README.md).
 
 `"exactFieldFreeGpuQ": true` runs the two GEMMs per l on the GPU with cuBLAS
 (`M_Utils_CublasLib`, build with `cmake -DCODY_USE_CUDA=ON`): the eigenvectors
@@ -258,7 +258,7 @@ eigenvectors, P = 1 − U_H U_Hᵀ) or to a no-op. The cut changes the model:
 relax the ground state with the same cut (the initial projection of an uncut
 state is a jump). For Be HHG, Ec = 1000 with `strang` is ~2× faster per step
 than `blanesMoan6Swap` and shifts harmonics 21–60 by 0.02–0.04 decades
-(`app/be/README.md`). T_Ne3d_11 checks that no weight appears above the cut.
+(git history of app/be/README.md). T_Ne3d_11 checks that no weight appears above the cut.
 
 **Phi functions.** MCTDHX with `exactFieldFreeQ` also binds
 `Method_ApplyExactPartPhi(res, vecs, dt)`: res = Σ_m φ_m(−i H0 dt) vecs(:, m+1)
@@ -388,7 +388,8 @@ Cayley(−Δt) Cayley(Δt) = 1, the agreement of both (all ~1e-12, tolerance
 1e-11) and the iteration counts; T_Method_FieldFreeCayleyImagTimeFem and
 T_Method_FieldFreeCutFem check the refusals of imaginary time and of
 `exactFieldFreeCut`. Timings (per FDM solve, Cayley solve, GMRES iteration
-and time step, H2 and H2O) are kept in one place, app/fem_molecules/README.md.
+and time step, H2 and H2O) of the app/molecules runs are in the
+git history of app/fem_molecules/README.md.
 
 ### Frozen Mean-Field Reference of the Cayley Step (`exactFieldFreeMeanFieldQ`)
 
@@ -401,7 +402,7 @@ against ε = −20.6 Ha (valence orbitals: about −7 and +6.4 Ha against ε of
 −i Q W φ = i Q h0 φ of the size of the core energies and the commutators of
 the Strang split are huge. Under this split the ground state of H2O is far
 from stationary, and its TDHF energy drifts by several Ha per a.u. at
-Δt = 0.05 (the measured drifts: app/fem_molecules/README.md, "H₂O
+Δt = 0.05 (the measured drifts: git history of app/fem_molecules/README.md, "H₂O
 dynamics"); H2 (no core) was fine.
 
 **What.** `"exactFieldFreeQ": true, "exactFieldFreeMeanFieldQ": true`
@@ -449,7 +450,7 @@ matrix (`Method_Mb_OrbBased_ApplyFieldFreeMeanField`; the matrix by
 interaction and prints the mean-field line.
 
 **Which state.** For linear response build U from the unperturbed ground
-state, before the kick, as app/fem_molecules does (`P_FemKickTdhf`:
+state, before the kick, as app/molecules does (`P_KickTdhfFem`:
 `Method_Mb_OrbBased_BuildFieldFreeMeanField` with the SCF orbitals and their
 1-RDM; the first exact-part call then keeps it). B(t) = W(t) − W0 is then
 the pure response δW(t), O(κ) and oscillating. U from the kicked state (the
@@ -459,7 +460,7 @@ O(κ) part of another shape. These static parts cost far more than the
 oscillating response (H2O, presumably through the core): after a kick the
 energy drifts about two orders of magnitude faster with U from the kicked
 state than with U from the ground state, and with U rebuilt from a later
-state of a kicked run it grows quadratically (app/fem_molecules/README.md,
+state of a kicked run it grows quadratically (git history of app/fem_molecules/README.md,
 "Which U").
 
 **Equations of motion unchanged.** A at fixed CI coefficients is the exact
@@ -489,7 +490,7 @@ multiplication by J0, n inner products ⟨ζ_k|z⟩ (parallel over k) and one
 fused pass over the n ACE vectors (the preconditioner is unchanged); per
 nonlinear derivative: U φ for the n orbitals and the n × n matrix ⟨φ|Uφ⟩,
 negligible against the pair potentials of W. Memory: n ACE vectors and J0.
-Timings: app/fem_molecules/README.md.
+Timings: git history of app/fem_molecules/README.md.
 
 **Tests.** T_Fem_09_H2KickMeanFieldReference (H2, N = 130331): at the
 ground state |B φ| / |−i Q W φ| = 2.5e-11 (the 1-RDM regularization
@@ -513,8 +514,8 @@ runs of the same system over 0.5 a.u. against the plain split at Δt =
 0.00125: dipole within 2.0e-7 with and 3.4e-7 without the reference at
 Δt = 0.005, 5.8e-6 and 9.5e-6 at Δt = 0.025.
 
-The runs of app/fem_molecules are documented in one place,
-app/fem_molecules/README.md ("Results on this machine"): H2 over 50 a.u. with
+The runs of app/molecules are documented in the
+git history of app/fem_molecules/README.md ("Results on this machine"): H2 over 50 a.u. with
 and without the reference, and H2O on the dynamics mesh (energy drift per
 time step and choice of U, the ground state without kick, GMRES iterations
 per solve, cost per GMRES iteration and per step, the 10 a.u. demo and its
@@ -533,7 +534,7 @@ checks the refusal for TD-2RDM, whose nonlinear part does not subtract U.
 propagation builds it again unless the program does. Method neither saves nor
 loads U, so a run continued from a checkpoint must rebuild U from the state
 it was first built from, not from the checkpoint state ("Which state"); the
-program owns this plumbing. `P_FemKickTdhf` does it with two of its own
+program owns this plumbing. `P_KickTdhfFem` does it with two of its own
 procedures: `BuildAndSaveReference` builds U from the ground state before
 the kick and saves that state (orbitals and 1-RDM, `meanFieldReference.dat`),
 and in a continued run `LoadAndBuildReference` rebuilds U from it (it stops
@@ -619,9 +620,8 @@ With the declaration:
   this removes round-off admixtures of loaded orbitals and stops with an
   error if more than 1e-8 of an orbital's norm would be removed (orbitals
   that do not have the declared m, e.g. mOfOrbs in another order than the
-  files). The only other call is the end of `EmbedOrbitals` of the Be/Ne
-  programs, which replaces this initialization when orbitals are embedded
-  from a grid with smaller lmax (`program.lmaxIn`).
+  files). This also covers orbitals embedded from a grid with smaller lmax
+  (`orbsInit.load.lmaxIn`).
 - **Exact zeros**: inner products of orbitals of different m are exactly 0
   and every operator is Δm = 0, so the other channels stay exactly zero. The
   only operations that could seed admixtures are eigen-decompositions in

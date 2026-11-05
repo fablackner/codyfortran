@@ -218,13 +218,11 @@ pointwise product of node fields with m₁ and m₂ represents m₁ + m₂, the 
 conjugate −m, and a product is integrated over φ (factor 2π, included in the
 node weights) only when its m add up to zero. Such products are polynomials in
 cos θ (the sin^|m| θ factors pair up), so the quadrature is exact for total
-degree ≤ 4 lmax + 5, as for m = 0. The table sizes are set by `Grid_Ylm_Fabricate`, the
+degree ≤ 4 lmax + 5. The table sizes are set by `Grid_Ylm_Fabricate`, the
 tables in `Grid_Ylm` Setup (`SetupQuadrature`, normalized associated Legendre
-recurrences) and are used by
-`SpatialProductM0` and by Method's `ApplyCorrelationOpYlmNodes` and
+recurrences) and are used by Method's `ApplyCorrelationOpYlmNodes` and
 `FillH2YlmNodes` (`S_Method_Mb_OrbBased.f90`, orbitals of declared m,
-`method.mb.orbBased.mOfOrbs`); see also the Ylm spatial
-product bullet under Performance Notes.
+`method.mb.orbBased.mOfOrbs`).
 
 **Parity split.** The nodes are symmetrized exactly in Setup, x_{n+1−q} = −x_q
 (odd n, middle node x = 0), and Θ_lm(−x) = (−1)^{l+m} Θ_lm(x).
@@ -233,12 +231,8 @@ odd l − |m| (every second column of fM) separately on the nodes x_q ≥ 0 and
 restores the mirrored half by a butterfly (f = e ± o);
 `Grid_Ylm_NodesToChannels` folds the node field into its even and odd parts
 first (a local, i.e. thread-private, buffer). Both halve the GEMM work of the
-unsplit tables, which are kept for `SpatialProductM0`; the result differs
-from the unsplit transform by round-off only
-(`test/componentTests/Grid/Ylm/T_Grid_Ylm_Nodes.f90`). The symmetrization
-also changes the unsplit tables and `Grid_Ylm_nodeWeights` by round-off, so
-`SpatialProductM0` (every Ylm run, with or without
-`method.mb.orbBased.mOfOrbs`) is reproduced to round-off, not bitwise.
+unsplit transform (only the split tables are stored); the result differs from
+it by round-off only (`test/componentTests/Grid/Ylm/T_Grid_Ylm_Nodes.f90`).
 
 | Name | Kind | Contract |
 |------|------|----------|
@@ -400,7 +394,7 @@ subspace projection of `S_Grid.f90` apply unchanged.
 | `Grid_Fem_SolvePoisson(pot, load)` | subroutine | Galerkin solve of −lap pot = 4πρ for load = wρ (the weighted pair density of SysInteraction): K_II pot = 4π load − K_IB V_B, V_B the multipole expansion of the load (moments of the real and imaginary parts in one pass, V_B = T Q with the precomputed face table T); warns once per run if more than 1e-4 of Σ\|load\| lies outside the convergence radius |
 | `Grid_Fem_SolvePoissonPointCharges(pot, charges, positions)` | subroutine | Galerkin potential of point charges q_I at R_I = positions(:, I) (strictly inside the box): load_i = Σ q_I φ_i(R_I), exact V_B = Σ q_I/\|r_B − R_I\| |
 | `Grid_Fem_Index(ix, iy, iz)` | pure function | flattened node index |
-| `Grid_Fem_FillNodeCoordinate(coord, direction)` | subroutine | coord(i) = direction · r_i at every node (`real(R64)`, allocatable intent(out), allocated to Grid_nPoints; after `Grid_Setup`), evaluated as d₁x + (d₂y + d₃z): an axis unit vector gives x, y or z exactly. Used for e_pol·r of `sysGauge.fem.length`, the coordinates of the FEM dipole printer and the kicks e^(iκ r_a) of the Fem tests and `app/fem_molecules` |
+| `Grid_Fem_FillNodeCoordinate(coord, direction)` | subroutine | coord(i) = direction · r_i at every node (`real(R64)`, allocatable intent(out), allocated to Grid_nPoints; after `Grid_Setup`), evaluated as d₁x + (d₂y + d₃z): an axis unit vector gives x, y or z exactly. Used for e_pol·r of `sysGauge.fem.length`, the coordinates of the FEM dipole printer and the kicks e^(iκ r_a) of the Fem tests and `app/molecules` |
 
 All field arguments are complex(R64), contiguous, of size `Grid_nPoints`
 (the real node coordinates of `Grid_Fem_FillNodeCoordinate` excepted). The
@@ -781,15 +775,11 @@ call Grid_ProjectOnSubspace(dOrbs, Orbs_orbs)
 - **Linear grids**: Inner product is O(N) with vectorized `sum()`.
 - **Lattice grids**: Uses intrinsic `dot_product` (no weights needed), typically BLAS-optimized.
 - **Ylm spatial product**: O(l_max⁴ × N_radial) due to Gaunt coefficient loops; precompute where possible.
-  When all three operands are axially symmetric (`mMax*_ = 0`, e.g. `grid.ylm.mmax = 0`
-  with a z-polarized laser) an exact Gauss–Legendre quadrature in cos θ is used instead:
-  both factors are evaluated on the nodes, multiplied pointwise and projected back
-  (O(l_max² × N_radial), matrix products). Tables cover l ≤ 2 lmax + 2 and products of
-  total degree ≤ 4 lmax + 5; larger layouts fall back to the Gaunt sum.
   A spherically symmetric first factor (`lMaxConjg_ = 0`, e.g. a central external
-  potential) takes precedence: Y₀₀ Y_lm = Y_lm/√(4π), so the product is an exact
+  potential) is a special case: Y₀₀ Y_lm = Y_lm/√(4π), so the product is an exact
   radial scaling of every channel of the second factor (O(N), no transforms).
-  All three paths share one metric-weight step (`withWeightsQ_`).
+  Both paths share one metric-weight step (`withWeightsQ_`). Products of orbitals
+  of declared m in Method use the node representation above instead.
 - **Gaunt table** (`M_Utils_SphericalHarmonics`): SysInteraction and SysPotential
   tabulate only |m| ≤ max(grid mmax, operator mmax) in a compact (l, m) index;
   other m fall back to the direct Wigner-3j evaluation. With `mmax = 0` and

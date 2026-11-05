@@ -53,9 +53,9 @@ module M_TwoRdmInit_Load
     !>        implementation.
     !>
     !> @details
-    !> Currently reads no additional parameters from JSON; the empty
-    !> `"twoRdmInit.load"` block simply selects this implementation.
-    !> File paths are constructed from body-type indices at load time.
+    !> Optional `"twoRdmInit.load.dir"`: directory of the files (default:
+    !> the working directory). File names are constructed from body-type
+    !> indices at load time.
     !>
     !> Binds `TwoRdmInit_InitializeBlock` -> `InitializeBlock`
     module subroutine TwoRdmInit_Load_Fabricate
@@ -65,5 +65,8 @@ module M_TwoRdmInit_Load
   !=============================================================================
   ! module data
   !=============================================================================
+
+  !> Directory of the rdm2Bt files (twoRdmInit.load.dir, "" = working directory)
+  character(len=:), allocatable :: TwoRdmInit_Load_dir
 
 end module

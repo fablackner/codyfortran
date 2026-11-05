@@ -171,7 +171,7 @@ function cody() {
         elif [[ "$target" == "test" ]]; then
             cmake --build build --target tests
         else
-            # Support building a specific target like app/cnnHubbard/main
+            # Support building a specific target like app/atoms/be/groundstate/mctdhf/P_GroundMctdhf
             local cmake_target=${target//\//_}
             cmake_target=${cmake_target%.f90}
             cmake --build build --target "$cmake_target"
@@ -205,7 +205,7 @@ function cody() {
         echo "  cody build                 # Build everything"
         echo "  cody build app             # Build all apps"
         echo "  cody build test            # Build all tests"
-        echo "  cody build <path>          # Build specific target (e.g. app/cnnHubbard/main)"
+        echo "  cody build <path>          # Build specific target (e.g. app/atoms/be/groundstate/mctdhf/P_GroundMctdhf)"
         echo "  cody clean                 # Remove build directory"
         echo "  cody run test              # Run tests"
         echo "  cody run cov               # Run coverage (requires gnu/debug)"

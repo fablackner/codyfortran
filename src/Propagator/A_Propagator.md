@@ -165,7 +165,7 @@ exact part and IntegratorList(1) inside that step:
 `blanesMoan6Swap` saves one exact substep per step, worthwhile when the exact
 part is the expensive one (dense transformations of the exact field-free
 propagator); for the Be HHG runs its error equals that of `blanesMoan6`
-(app/be/README.md).
+(git history of app/be/README.md).
 
 The exact substeps carry the time; every integrator substep is centred on the
 time reached, so its midpoint evaluation of a time-dependent part (e.g. the
@@ -187,7 +187,7 @@ split h0 | mean field needs tiny time steps there; the composition and the
 integrators stay as they are. Details: A_Method.md, "Exact Field-Free Part
 on grid.fem: Cayley Step" and "Frozen Mean-Field Reference of the Cayley
 Step" (which state to build U from, restarts); measured drifts and costs:
-app/fem_molecules/README.md.
+git history of app/fem_molecules/README.md.
 
 ```json
 {
@@ -247,7 +247,7 @@ h · `exactFieldFreeCut`) should stay well below 1. On the Be HHG benchmark
 `adams` was stable only with a cut of 300 (1.6× faster, harmonics 21–60 about
 0.2 decades further off), `adamsLawson` stayed stable at cut 1000 (1.75×
 faster, 0.4 decades), and `krogstad4` cost as much as Strang at 0.25 decades
-(app/be/README.md). They are options for observables less sensitive than
+(git history of app/be/README.md). They are options for observables less sensitive than
 high harmonics, e.g. ionization yields.
 
 ```json

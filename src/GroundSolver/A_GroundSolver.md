@@ -358,8 +358,8 @@ DiagonalizerListInput(2) % ApplyPrecOnVec => GroundSolver_PreconditionAction
 ```
 
 `arpackOrb.nEvals` must equal the number of spatial orbitals per spin
-(`Orbs_nOrbsInState/2`). Example application:
-`app/ne/groundstate/mcscf9orbs/P_GroundSolverStdImpl.f90`
+(`Orbs_nOrbsInState/2`). Example application (with the `mcscf.ylmOpt`
+backend below): `app/atoms/ne/groundstate/mcscf/P_GroundMcscfYlm.f90`
 (neon MCSCF ground state with 9 spatial orbitals per spin).
 
 ### MCSCF Ylm-Optimized Implementation (mcscf.ylmOpt)

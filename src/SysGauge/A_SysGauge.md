@@ -98,7 +98,7 @@ A(t) = -(E0/ω) · sin²(π (t−t0)/T) · sin(ω (t−t0−T/2) + cep),  T = 2�
 zero outside [t0, t0+T]. A(t) vanishes identically at both pulse edges.
 
 With `"envelope": "field"` the sin² envelope sits on the electric field
-instead (the usual few-cycle convention, e.g. Lackner et al., PRA 95, 033414):
+instead (the usual few-cycle convention):
 
 ```
 E(t) = E0 · sin²(π (t−t0)/T) · cos(ω (t−t0) + cep),   A(t) = −∫_{t0}^{t} E dt'
