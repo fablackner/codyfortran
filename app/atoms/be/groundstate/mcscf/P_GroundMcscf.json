@@ -1,0 +1,144 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "mmax": 1,
+            "rmin": 0.0,
+            "rmax": 200.0,
+            "fedvr": {
+                "nElements": 50,
+                "nLocals": 20
+            }
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [
+                    1.0,
+                    1.0
+                ],
+                "fedvr": {}
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 4.0,
+                "stdImpl": {}
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "blockEq": {}
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [
+                2,
+                2
+            ],
+            "bodyStatistics": [
+                "f",
+                "f"
+            ],
+            "orbBased": {
+                "nOrbs": [
+                    5,
+                    5
+                ],
+                "mOfOrbs": [
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1
+                ],
+                "mctdhx": {}
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "load": {
+            "dir": "../hf",
+            "lmaxIn": 0,
+            "nOrbsIn": 2
+        },
+        "ylm": {
+            "hydrogenLike": {
+                "charge": 3.0,
+                "n": [
+                    2,
+                    2,
+                    2
+                ],
+                "l": [
+                    1,
+                    1,
+                    1
+                ],
+                "m": [
+                    -1,
+                    0,
+                    1
+                ]
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2
+            }
+        }
+    },
+    "coeffs": {
+        "generic": {
+            "totalM": 0
+        }
+    },
+    "coeffsInit": {
+        "unary": {}
+    },
+    "groundSolver": {
+        "mcscf": {
+            "gradient": {}
+        }
+    },
+    "diagonalizerList": {
+        "lapackCi": {
+            "nEvals": 1
+        }
+    },
+    "mixing": {
+        "diis": {
+            "nHistory": 8,
+            "startThreshold": 0.1
+        }
+    },
+    "program": {
+        "convThresh": 1e-12,
+        "gradThresh": 1e-06,
+        "maxIter": 1000
+    }
+}

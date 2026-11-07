@@ -116,6 +116,14 @@ all blocks; with a single block the result equals
 `LapackLib_DiagonalizeGeneric` bitwise. Used for orbital-space matrices with
 the blocks `Orbs_blockOfOrb` (body type and declared m): the inverse 1-RDM of
 the correlation operator and the Loewdin steps of the Be/Ne programs.
+
+`LapackLib_DiagonalizeSymStack(evals, asymmetry, a)` diagonalizes a stack of
+real matrices a(:, :, k) that are symmetric up to round-off, in place (their
+symmetric parts, DSYEVR, OpenMP over k; eigenvectors overwrite a), and
+returns the relative asymmetry max_k max|a_k − a_kᵀ| / max|a| of the input
+for the caller's check. Used for the metric-symmetrized radial blocks per l
+of Ylm grids: h0 of the exact field-free part (Method) and T̂ of
+`SysKinetic_SolveShifted` (Ylm FEDVR).
 Test: `test/componentTests/Utils/T_Utils_LapackLib.f90`.
 
 ---

@@ -157,6 +157,7 @@ Provides orbital indexing, RDM storage, and operator-application interfaces:
 | `Method_Mb_OrbBased_ApplyCorrelationOp`        | Correlation term `(dOrbs, orbs, invRdm1, rdm2, time, h2_)` |
 | `Method_Mb_OrbBased_FillSpatialRdm1` (module procedure) | Spatial 1-RDM (spin-summed for restricted) |
 | `Method_Mb_OrbBased_FillInverseRdm1` (module procedure) | Regularized spatial inverse U n/(n²+ε) U† of the 1-RDM |
+| `Method_Mb_OrbBased_ApplyCiHamiltonian` (module procedure) | dCoeffs = H coeffs with the stored `Method_Mb_OrbBased_h1`/`h2` (no refill); the CI matvec of TDCI, of every `groundSolver.mcscf` backend (`GroundSolver_Mcscf_HamiltonianAction`) and of CI start vectors in programs |
 | `Method_Mb_OrbBased_SaveRdm2Blocks` (module procedure) | Write body-type blocks `rdm2BtXX_YY.in` of a 2-RDM (read by `twoRdmInit.load`) |
 | `Method_Mb_OrbBased_H1TimeIndependentQ` (module procedure) | Whether h¹ = T̂ + V̂_ext (+ Ĥ_A if `sysGauge` is configured) is time-independent (the `*_timeIndependentQ` flags at call time); TDCI and TD-2RDM-StaticOrbs refill h¹ at every derivative otherwise |
 | `Method_Mb_OrbBased_FillOneBodyMatrix` (module procedure) | h¹(i,j) = ⟨φ_i\|hφ_j⟩ of a one-body operator from its action on the stored orbitals (equal body types, nOrbsSum layout, restricted: both spin blocks); the matrix of `FillH1` and of the mean-field reference |

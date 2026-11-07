@@ -72,6 +72,20 @@ module M_Method_Mb_OrbBased
       complex(R64), intent(in), contiguous   :: rdm1(:, :)
     end subroutine
 
+    !> CI Hamiltonian of the stored matrices Method_Mb_OrbBased_h1 and
+    !> Method_Mb_OrbBased_h2 on a coefficient vector, dCoeffs = H coeffs (no
+    !> refill: callers fill h1/h2 of their orbitals first). The matvec of CI
+    !> diagonalizers (DiagonalizerList ApplyMatOnVec signature; time unused)
+    !> and the CI part of TDCI.
+    module subroutine Method_Mb_OrbBased_ApplyCiHamiltonian(dCoeffs, coeffs, time)
+      !> Output: H coeffs (Coeffs_nCoeffs).
+      complex(R64), intent(out), contiguous, target :: dCoeffs(:)
+      !> Input: CI coefficient vector (Coeffs_nCoeffs).
+      complex(R64), intent(in), contiguous, target  :: coeffs(:)
+      !> Unused (signature of the matvec callbacks).
+      real(R64), intent(in) :: time
+    end subroutine
+
     !> Fills the matrix h1(i, j) = <orbs_i|hOrbs_j> of a one-body operator
     !> from its action hOrbs on the stored orbitals, for orbitals of equal
     !> body type (zero otherwise), in the spin-orbital layout of

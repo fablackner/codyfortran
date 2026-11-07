@@ -14,6 +14,17 @@ submodule(M_OrbsInit) S_OrbsInit
 
   implicit none
 
+  !=============================================================================
+  ! local data
+  !=============================================================================
+
+  !> Partial load (orbsInit.load.nOrbsIn): the first nOrbsIn orbitals of every
+  !> body type are loaded (loadOrb), the remaining ones come from the second
+  !> backend (fillOrb, with the orbital index counted from 1 after them).
+  integer(I32) :: nOrbsIn = -1
+  procedure(I_OrbsInit_InitializeOrb), pointer :: loadOrb => null()
+  procedure(I_OrbsInit_InitializeOrb), pointer :: fillOrb => null()
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -32,6 +43,13 @@ contains
 !> - orbsInit.ylm       → OrbsInit_Ylm_Fabricate
 !> - orbsInit.prolate   → OrbsInit_Prolate_Fabricate
 !> - orbsInit.fem       → OrbsInit_Fem_Fabricate
+!>
+!> Partial load: with orbsInit.load.nOrbsIn the first nOrbsIn orbitals of
+!> every body type are loaded and the remaining ones are initialized by the
+!> other backend present under orbsInit (any of the list above but load),
+!> whose per-orbital settings then list only the remaining orbitals (index 1
+!> is orbital nOrbsIn + 1). E.g. Hartree-Fock 1s 2s (lmaxIn 0) plus
+!> hydrogen-like 2p as the start of an MCSCF ground state.
   module subroutine OrbsInit_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -43,6 +61,8 @@ contains
     use M_OrbsInit_Prolate
     use M_OrbsInit_Fem
 
+    logical :: partialLoadQ
+
     call Say_Fabricate("orbsInit")
 
     !------------------------------------
@@ -52,8 +72,11 @@ contains
     OrbsInit_Initialize => Initialize
 
     !------------------------------------
-    ! branch based on JSON configuration
+    ! branch based on JSON configuration (a partial load skips load here and
+    ! composes it with the backend found below)
     !------------------------------------
+
+    partialLoadQ = Json_GetExistence("orbsInit.load.nOrbsIn")
 
     if (Json_GetExistence("orbsInit.linear")) then
       call OrbsInit_Linear_Fabricate
@@ -64,7 +87,7 @@ contains
     else if (Json_GetExistence("orbsInit.gridPoint")) then
       call OrbsInit_GridPoint_Fabricate
 
-    else if (Json_GetExistence("orbsInit.load")) then
+    else if (Json_GetExistence("orbsInit.load") .and. .not. partialLoadQ) then
       call OrbsInit_Load_Fabricate
 
     else if (Json_GetExistence("orbsInit.ylm")) then
@@ -76,8 +99,40 @@ contains
     else if (Json_GetExistence("orbsInit.fem")) then
       call OrbsInit_Fem_Fabricate
 
+    else if (partialLoadQ) then
+      error stop "orbsInit.load.nOrbsIn requires a second orbsInit backend for the remaining orbitals"
+
     else
       error stop "orbsInit is missing one of: linear, lattice, gridPoint, load, ylm, prolate, fem"
+    end if
+
+    !------------------------------------
+    ! partial load: the backend above fills, load reads the first orbitals
+    !------------------------------------
+
+    if (partialLoadQ) then
+      nOrbsIn = Json_Get("orbsInit.load.nOrbsIn", 0)
+      if (nOrbsIn < 0) error stop "orbsInit.load.nOrbsIn must not be negative"
+      fillOrb => OrbsInit_InitializeOrb
+      call OrbsInit_Load_Fabricate
+      loadOrb => OrbsInit_InitializeOrb
+      OrbsInit_InitializeOrb => InitializeOrbLoadThenFill
+    end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Partial load: orbital ind of body type bt_ from file if
+!> ind <= nOrbsIn, else orbital ind - nOrbsIn of the second backend.
+  subroutine InitializeOrbLoadThenFill(orb, ind, bt_)
+    complex(R64), intent(out), contiguous :: orb(:)
+    integer(I32), intent(in)              :: ind
+    integer(I32), intent(in), optional    :: bt_
+
+    if (ind <= nOrbsIn) then
+      call loadOrb(orb, ind, bt_=bt_)
+    else
+      call fillOrb(orb, ind - nOrbsIn, bt_=bt_)
     end if
 
   end subroutine

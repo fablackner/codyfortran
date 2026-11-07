@@ -35,12 +35,15 @@ contains
     call Say_Fabricate("groundSolver")
 
     ! Declared m (method.mb.orbBased.mOfOrbs): only the Ylm-optimized solvers
-    ! keep the orbitals in their m channels (radial Fock operators per l,
-    ! alignment per m block); the standard ones diagonalize on the full grid
-    ! and mix degenerate orbitals of different m
+    ! (radial Fock operators per l, alignment per m block) and the MCSCF
+    ! gradient iteration (m-conserving residual, preconditioner and update)
+    ! keep the orbitals in their m channels; the standard ones diagonalize on
+    ! the full grid and mix degenerate orbitals of different m
     if (Method_Mb_OrbBased_definiteMQ) then
-      if (.not. (Json_GetExistence("groundSolver.scf.ylmOpt") .or. Json_GetExistence("groundSolver.mcscf.ylmOpt"))) &
-        error stop "method.mb.orbBased.mOfOrbs requires groundSolver.scf.ylmOpt or groundSolver.mcscf.ylmOpt"
+      if (.not. (Json_GetExistence("groundSolver.scf.ylmOpt") .or. Json_GetExistence("groundSolver.mcscf.ylmOpt") &
+                 .or. Json_GetExistence("groundSolver.mcscf.gradient"))) &
+        error stop "method.mb.orbBased.mOfOrbs requires groundSolver.scf.ylmOpt, groundSolver.mcscf.ylmOpt &
+                   &or groundSolver.mcscf.gradient"
     end if
 
     !------------------------------------

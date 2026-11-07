@@ -43,7 +43,7 @@ The module follows the **CodyFortran fabrication pattern**:
 
 3. **Hierarchical Dispatch**: The top-level `SysKinetic_Fabricate` reads JSON and delegates to the appropriate backend (Lattice/Linear/Ylm/Prolate/Fem), which further delegates to specific implementations.
 
-4. **Optional hooks**: `SysKinetic_SolveShifted` (exact solve of (T̂ + s) x = b) is `null()` unless the backend has a fast exact inverse (Fem). `SysKinetic_Fabricate` nullifies it before it dispatches, so a backend fabricated earlier in the same process leaves no stale binding. Callers test `associated(SysKinetic_SolveShifted)` and fall back otherwise.
+4. **Optional hooks**: `SysKinetic_SolveShifted` (exact solve of (T̂ + s) x = b) is `null()` unless the backend has a fast exact inverse (Fem, Ylm FEDVR). `SysKinetic_Fabricate` nullifies it before it dispatches, so a backend fabricated earlier in the same process leaves no stale binding. Callers test `associated(SysKinetic_SolveShifted)` and fall back otherwise.
 
 ## File Structure
 
@@ -105,7 +105,7 @@ SysKinetic/
 | **Linear/Laplacian/FinDiff** | 1D uniform Cartesian | −(1/2m) d²/dx² | Dirichlet (zero ends) |
 | **Linear/Laplacian/Fourier** | 1D uniform Cartesian | −(1/2m) d²/dx² via FFT | Periodic |
 | **Ylm/Laplacian/FinDiff** | Radial uniform | −(1/2m)[∇²_r − l(l+1)/r²] | f(0)=0, f(r_max)=0 |
-| **Ylm/Laplacian/Fedvr** | Radial nonuniform | −(1/2m)[∇²_r − l(l+1)/r²] | f(0)=0, f(r_max)=0 |
+| **Ylm/Laplacian/Fedvr** | Radial nonuniform | −(1/2m)[∇²_r − l(l+1)/r²]; exact (T̂ + s)⁻¹ | f(0)=0, f(r_max)=0 |
 | **Ylm/Laplacian/FedvrEcs** | Radial nonuniform, ECS contour | −(1/2m)[∇²_z − l(l+1)/z²] on contour z(r) | f(0)=0, absorbing beyond ECS radius |
 | **Fem/Laplacian** | 3D Cartesian tensor mesh (GLL spectral elements, graded) | −(1/2m) lap, lap = −W⁻¹K3 (nodal strong form); exact (T̂ + s)⁻¹ | Dirichlet on the box surface |
 
@@ -201,7 +201,7 @@ call SysKinetic_MultiplyWithKineticOp(dOrb, orb, time, bt_)
 |---------|-----------|-------------|
 | `SysKinetic_Setup` | `subroutine()` | Initialize grid-dependent data |
 | `SysKinetic_MultiplyWithKineticOp` | `subroutine(dOrb, orb, time, bt_)` | Apply T̂·ψ → dψ |
-| `SysKinetic_SolveShifted` | `subroutine(dOrb, orb, shift, bt_)`, `complex(R64) :: shift` | Optional (default `null()`): solve (T̂ + shift) dOrb = orb exactly; only grids with a fast exact kinetic inverse bind it (Fem). Real shift: preconditioner (T̂ + σ)⁻¹; shift = 2/(i dt) = −2i/dt: Crank–Nicolson factor 1 + i dt T̂/2 = (i dt/2)(T̂ − 2i/dt) |
+| `SysKinetic_SolveShifted` | `subroutine(dOrb, orb, shift, bt_)`, `complex(R64) :: shift` | Optional (default `null()`): solve (T̂ + shift) dOrb = orb exactly; only grids with a fast exact kinetic inverse bind it (Fem, Ylm FEDVR). Real shift: preconditioner (T̂ + σ)⁻¹; shift = 2/(i dt) = −2i/dt: Crank–Nicolson factor 1 + i dt T̂/2 = (i dt/2)(T̂ − 2i/dt) |
 
 ### Fem Laplacian (M_SysKinetic_Fem_Laplacian)
 
@@ -238,6 +238,31 @@ T̂_{lm} f(r) = −(1/2m) [ d²f/dr² + (2/r) df/dr − l(l+1)/r² f ]
 ```
 
 This avoids the 2/r singularity in finite-difference stencils.
+
+### Ylm FEDVR Shifted Solve
+
+`sysKinetic.ylm.laplacian.fedvr` binds `SysKinetic_SolveShifted`. T̂ is block
+diagonal in (l, m) and independent of m. In the metric-symmetrized radial basis
+(w^{1/2} f, w = `Grid_Ylm_radialWeights`), every block of body type 1 is real
+symmetric, ts_l = U_l E_l U_l^T, so
+
+  (T̂ + s)⁻¹ f_lm = w^{-1/2} U_l (E_l m₁/m_bt + s)⁻¹ U_l^T w^{1/2} f_lm
+
+for a real or complex shift s (T̂ ∝ 1/m). The blocks are built from the radial
+operator applied to unit vectors and diagonalized (`LapackLib_DiagonalizeSymStack`) at the first call,
+so runs without a consumer pay nothing. The first call is thread-safe (OpenMP
+critical) and prints the eigenvalue range and the metric asymmetry; it stops on
+an ECS grid or an asymmetric block. Cost per call: two dense nRadial² matrix-
+vector products per (l, m) channel. Consumers on Ylm grids:
+`GroundSolver_PreconditionAction` (LOBPCG of `scf.stdImpl`, 18× fewer Fock
+matvecs in T_Ne3d_17; the orbital step of `groundSolver.mcscf.gradient`).
+Method's exact field-free part keeps its own h0 eigen-decomposition on Ylm
+grids (it tests `grid.ylm` before this hook). FinDiff and FedvrEcs do not bind
+the hook.
+
+**Test:** `test/componentTests/SysKinetic/Ylm/Laplacian/Fedvr/T_SysKinetic_Ylm_Laplacian_Fedvr_SolveShifted`
+((T̂ + s) x = f to 2e-12 for a real and a complex shift and a second body mass,
+all (l, m) channels of lmax = mmax = 2).
 
 ### Fem Spectral-Element Laplacian
 

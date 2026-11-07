@@ -355,6 +355,23 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_ApplyCiHamiltonian(dCoeffs, coeffs, time)
+    use M_Utils_UnusedVariables
+    use M_Coeffs
+
+    complex(R64), intent(out), contiguous, target :: dCoeffs(:)
+    complex(R64), intent(in), contiguous, target  :: coeffs(:)
+    real(R64), intent(in) :: time
+
+    if (.false.) call UnusedVariables_Mark(time)
+
+    dCoeffs(:) = 0.0_R64
+    call Coeffs_ApplyH1FillRdm1(coeffs, dCoeffs_=dCoeffs, h1_=Method_Mb_OrbBased_h1)
+    call Coeffs_ApplyH2FillRdm2(coeffs, dCoeffs_=dCoeffs, h2_=Method_Mb_OrbBased_h2)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_OrbBased_FillInverseRdm1(invRdm1, rdm1)
     !---------------------------------------------------------------------------
     ! Regularized inverse of the spatial 1-RDM (spin-summed for restricted):

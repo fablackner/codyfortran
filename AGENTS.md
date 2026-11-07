@@ -44,7 +44,7 @@ Module doc: `src/Grid/A_Grid.md`.
 **SysKinetic**
 Domain: Hamiltonian Operators.
 Purpose: Applies kinetic operator.
-Key interfaces/notes: `SysKinetic_MultiplyWithKineticOp(dOrb, orb, t, bt)`; supports Linear finite-difference/FFT, Lattice hopping, Ylm radial+centrifugal, Prolate, and Fem (3D lumped-mass Laplacian) forms; optional exact inverse hook `SysKinetic_SolveShifted(dOrb, orb, shift, bt_)` ((T + shift)⁻¹ with complex shift; bound by Fem) used by the LOBPCG preconditioner and the Crank–Nicolson exact part.
+Key interfaces/notes: `SysKinetic_MultiplyWithKineticOp(dOrb, orb, t, bt)`; supports Linear finite-difference/FFT, Lattice hopping, Ylm radial+centrifugal, Prolate, and Fem (3D lumped-mass Laplacian) forms; optional exact inverse hook `SysKinetic_SolveShifted(dOrb, orb, shift, bt_)` ((T + shift)⁻¹ with complex shift; bound by Fem and Ylm FEDVR (per-l eigen-decomposition, built at the first call)) used by the LOBPCG preconditioner, the MCSCF gradient step and the Crank–Nicolson exact part.
 Module doc: `src/SysKinetic/A_SysKinetic.md`.
 
 **SysPotential**
@@ -74,7 +74,7 @@ Module doc: `src/Orbs/A_Orbs.md`.
 **OrbsInit**
 Domain: Quantum State Containers.
 Purpose: Initializes orbitals for selected grid/physics model.
-Key interfaces/notes: `OrbsInit_Initialize(orbs)`; supports HO, hydrogen-like, on-site, load-from-file (`orbsInit.load`: optional `dir`; on Ylm grids `lmaxIn` embeds orbitals of a smaller lmax), grid-point, prolate LCAO, and Fem `sto` (sums of Slater-type orbitals with real solid harmonics on the grid centers) initialization; orbitals are normalized but not orthonormalized (programs orthonormalize after `Method_Setup`).
+Key interfaces/notes: `OrbsInit_Initialize(orbs)`; supports HO, hydrogen-like, on-site, load-from-file (`orbsInit.load`: optional `dir`; on Ylm grids `lmaxIn` embeds orbitals of a smaller lmax; `nOrbsIn` loads only the first orbitals per body type and initializes the rest with the other backend given next to `load`, e.g. Hartree-Fock 1s 2s + hydrogen-like 2p), grid-point, prolate LCAO, and Fem `sto` (sums of Slater-type orbitals with real solid harmonics on the grid centers) initialization; orbitals are normalized but not orthonormalized (programs orthonormalize after `Method_Setup`).
 Module doc: `src/OrbsInit/A_OrbsInit.md`.
 
 **Coeffs**
@@ -128,7 +128,7 @@ Module doc: `src/IntegratorList/A_IntegratorList.md`.
 **GroundSolver**
 Domain: Dynamics & Propagation.
 Purpose: SCF ground-state solver facade.
-Key interfaces/notes: `GroundSolver_Approach(state, t)`; supports Hartree-Fock assembly, diagonalization, gauge alignment (`Orbs_AlignOnReference`), mixing (via Mixing), and orthonormalization; orbital preconditioner `GroundSolver_PreconditionAction(dOrb, orb, shift, t)` for a LOBPCG diagonalizer of any orbital eigenproblem (SCF, MCSCF), bound by `GroundSolver_Fabricate` for every backend: (T + max(−shift, σ_min))⁻¹ via optional `SysKinetic_SolveShifted`, else identity (`groundSolver.precShiftMin`); scf.stdImpl: optional adaptively compressed exchange (`groundSolver.scf.stdImpl.aceQ`, recommended with LOBPCG: the exact exchange on grid.fem is Hermitian only up to the multipole truncation; without it an unconverged Fock solve prints a one-time hint); every backend notes an unconverged diagonalizer (`GroundSolver_NoteUnconverged`) and continues.
+Key interfaces/notes: `GroundSolver_Approach(state, t)`; supports Hartree-Fock assembly, diagonalization, gauge alignment (`Orbs_AlignOnReference`), mixing (via Mixing), and orthonormalization; orbital preconditioner `GroundSolver_PreconditionAction(dOrb, orb, shift, t)` for a LOBPCG diagonalizer of any orbital eigenproblem (SCF, MCSCF), bound by `GroundSolver_Fabricate` for every backend: (T + max(−shift, σ_min))⁻¹ via optional `SysKinetic_SolveShifted`, else identity (`groundSolver.precShiftMin`); scf.stdImpl: optional adaptively compressed exchange (`groundSolver.scf.stdImpl.aceQ`, recommended with LOBPCG: the exact exchange on grid.fem is Hermitian only up to the multipole truncation; without it an unconverged Fock solve prints a one-time hint); every backend notes an unconverged diagonalizer (`GroundSolver_NoteUnconverged`) and continues; MCSCF: one CI matvec for every backend (`GroundSolver_Mcscf_HamiltonianAction` = `Method_Mb_OrbBased_ApplyCiHamiltonian`); stdImpl/ylmOpt diagonalize a Fock operator of the 1-RDM only (not variational, hardly correlates), `mcscf.gradient` is the variational MCSCF (CI eigenvector of the current orbitals, then a preconditioned step on the MCTDHX orbital residual in the natural-orbital frame of each symmetry block; fixed point = imaginary-time MCTDHX without step bias; `GroundSolver_Mcscf_Gradient_residualNorm`, `GroundSolver_Mcscf_Gradient_energy`).
 Module doc: `src/GroundSolver/A_GroundSolver.md`.
 
 **Mixing**
@@ -164,7 +164,7 @@ Module doc: `src/Absorber/A_Absorber.md`.
 **Utils**
 Domain: Numerical Infrastructure.
 Purpose: Stateless numerical/algebra utility modules.
-Key interfaces/notes: Includes types, BLAS/LAPACK/ARPACK/FFT/GSL wrappers, optional cuBLAS GPU layer (`M_Utils_CublasLib`, CMake `CODY_USE_CUDA`), block-wise Hermitian eigen-decomposition (`LapackLib_DiagonalizeHermitianBlocks`), real regular solid harmonics (`M_Utils_SolidHarmonics`: values, polynomial coefficients, Racah normalization), the sin² laser pulse of the length-gauge couplings (`Pulse_Sin2Field`, `M_Utils_Pulse`), the HHG spectrum of a dipole time series (`M_Utils_HhgSpectrum`: `HhgSpectrum_Write`, `HhgSpectrum_WriteFromTable`), restarted flexible right-preconditioned GMRES with a caller-owned context and callbacks (`M_Utils_Gmres`: `Gmres_CreateCtx`, `Gmres_Solve`; used by the Cayley step of Method), RDM algebra utilities, derivatives/convolutions, JSON/data I/O, and logging.
+Key interfaces/notes: Includes types, BLAS/LAPACK/ARPACK/FFT/GSL wrappers, optional cuBLAS GPU layer (`M_Utils_CublasLib`, CMake `CODY_USE_CUDA`), block-wise Hermitian eigen-decomposition (`LapackLib_DiagonalizeHermitianBlocks`), in-place eigen-decomposition of a stack of symmetric matrices (`LapackLib_DiagonalizeSymStack`: the per-l radial blocks of Ylm grids), real regular solid harmonics (`M_Utils_SolidHarmonics`: values, polynomial coefficients, Racah normalization), the sin² laser pulse of the length-gauge couplings (`Pulse_Sin2Field`, `M_Utils_Pulse`), the HHG spectrum of a dipole time series (`M_Utils_HhgSpectrum`: `HhgSpectrum_Write`, `HhgSpectrum_WriteFromTable`), restarted flexible right-preconditioned GMRES with a caller-owned context and callbacks (`M_Utils_Gmres`: `Gmres_CreateCtx`, `Gmres_Solve`; used by the Cayley step of Method), RDM algebra utilities, derivatives/convolutions, JSON/data I/O, and logging.
 Module doc: `src/Utils/A_Utils.md`.
 
 ---

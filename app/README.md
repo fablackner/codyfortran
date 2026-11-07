@@ -9,8 +9,9 @@ initial state), `Laser` (laser pulse) or `Kick` (delta kick); method `Scf`,
 
 ```
 atoms/
-  be/  groundstate/mctdhf                      P_GroundMctdhf         MCTDHF, 5 orbitals
-       groundstate/hf                          P_GroundScfYlm         Hartree-Fock (1s, 2s)
+  be/  groundstate/hf                          P_GroundScfYlm         Hartree-Fock (1s, 2s)
+       groundstate/mcscf                       P_GroundMcscf          MCSCF, 5 orbitals (ground solver)
+       groundstate/mctdhf                      P_GroundMctdhf         MCTDHF, 5 orbitals (imaginary time)
        groundstate/td2rdm                      P_GroundTd2rdm         TD-2RDM initial state
        dynamics/{mctdhf,hf}/{weak4c,strong2c}  P_LaserMctdhfVelocity
        dynamics/td2rdm/{weak4c,strong2c}       P_LaserTd2rdmVelocity
@@ -55,16 +56,26 @@ pure l.
 
 ## Be: HHG with MCTDHF, Hartree-Fock and TD-2RDM
 
-Be in a z-polarized 800 nm pulse, velocity gauge. MCTDHF and TD-2RDM use 6
+Be in a z-polarized 800 nm pulse, velocity gauge. MCTDHF and TD-2RDM use 5
 restricted orbitals 1s 2s 2p₋₁ 2p₀ 2p₊₁ (full CI in the total-M = 0 sector
 for MCTDHF), Hartree-Fock the orbitals 1s 2s (SCF ground solver, E =
 −14.5730236). Ylm grid with
 lmax = 32 (mmax 1, Hartree-Fock mmax 0) on FEDVR 50 × 20 points (rmax 200),
 cos^¼ absorber from 160 a.u.
 
-Order: `groundstate/mctdhf` and `groundstate/hf`, then `groundstate/td2rdm`
-(TD-2RDM initial state from the MCTDHF ground state: field-free TD-2RDM
-propagation averaged over 40 a.u.), then any `dynamics/<method>/<pulse>`.
+Order: `groundstate/hf`, then the correlated ground state with either
+`groundstate/mcscf` (ground solver `groundSolver.mcscf.gradient`, 10
+iterations, 2 s: E = −14.6168560449) or `groundstate/mctdhf` (imaginary-time
+MCTDHF, about 15 min: E = −14.6168560112, 3.4e-8 higher from its dtau = 0.005
+step bias), then `groundstate/td2rdm` (TD-2RDM initial state from the MCTDHF
+ground state: field-free TD-2RDM propagation averaged over 40 a.u.), then any
+`dynamics/<method>/<pulse>`. Both correlated runs start from the
+Hartree-Fock 1s 2s of `../hf` plus hydrogen-like 2p (`orbsInit.load.nOrbsIn`)
+and the CI eigenvector of these orbitals (`program.ciStartQ` for imaginary
+time: from a unary CI vector it ends in a local minimum at E = −14.5956,
+where the 2p shell correlates the 1s² core), and both write the same files
+(the dynamics load `groundstate/mctdhf`; point `orbsInit.load.dir` and
+`coeffsInit.load.dir` at `groundstate/mcscf` to use the MCSCF state).
 
 Pulses: `weak4c` (0.5×10¹⁴ W/cm², 4 cycles) and `strong2c` (4×10¹⁴ W/cm²,
 2 cycles, D/Q purification for TD-2RDM). From `app/atoms/be`,

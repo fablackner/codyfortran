@@ -14,7 +14,7 @@
 !>      a. Fill external potential V̂_ext(t) and build h1/h2 in the current
 !>         orbital basis
 !>      b. Diagonalize the CI Hamiltonian via DiagonalizerList(1)
-!>         (HamiltonianAction is the matvec callback)
+!>         (GroundSolver_Mcscf_HamiltonianAction is the matvec callback)
 !>      c. Mix the phase-aligned CI ground eigenvector with the old
 !>         coefficients: c_new = (1-α)·c_old + α·evec, then normalize
 !>      d. Fill the 1-RDM from the updated coefficients and build the direct
@@ -28,8 +28,6 @@
 !>
 !> ## Working Arrays
 !>
-!> - `h1`, `h2`: One-/two-body Hamiltonian matrices in the current orbital
-!>   basis; rebuilt each `Approach` and shared with `HamiltonianAction`
 !> - `rdm1Up`: Spin-up block of the correlated 1-RDM, used by `FockAction`
 !> - `hartreePotential`: Direct potential from the correlated density
 !> - `externalPotential`: External potential V̂_ext (recomputed each Approach)
@@ -48,12 +46,6 @@ submodule(M_GroundSolver_Mcscf_StdImpl) S_GroundSolver_Mcscf_StdImpl
   !-----------------------------------------------------------------------------
   ! Module-level working arrays (allocated in Setup/Approach, used in callbacks)
   !-----------------------------------------------------------------------------
-
-  !> One-body Hamiltonian matrix in the current orbital basis, filled in Approach
-  complex(R64), allocatable :: h1(:, :)
-
-  !> Two-body Hamiltonian matrix in the current orbital basis, filled in Approach
-  complex(R64), allocatable :: h2(:, :, :, :)
 
   !> Spin-up block of the correlated 1-RDM, filled in Approach
   complex(R64), allocatable :: rdm1Up(:, :)
@@ -131,7 +123,6 @@ contains
 
     GroundSolver_Setup => Setup
     GroundSolver_Approach => Approach
-    GroundSolver_Mcscf_HamiltonianAction => HamiltonianAction
     GroundSolver_Mcscf_FockAction => FockAction
 
   end subroutine
@@ -153,29 +144,6 @@ contains
     allocate (dOrbTmp(Grid_nPoints))
     allocate (rdm1Up(nUp, nUp))
     allocate (orbsRaw(Grid_nPoints, nUp))
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> @brief Apply the CI Hamiltonian to a coefficient vector: dCoeffs = Ĥ·coeffs.
-  !>
-  !> @details
-  !> Uses the h1/h2 matrices prepared in `Approach` for the current orbitals.
-  !> This is the matvec callback for DiagonalizerList(1) over the CI space.
-  subroutine HamiltonianAction(dCoeffs, coeffs, time)
-    use M_Utils_UnusedVariables
-    use M_Coeffs
-
-    complex(R64), intent(out), contiguous, target :: dCoeffs(:)
-    complex(R64), intent(in), contiguous, target :: coeffs(:)
-    real(R64), intent(in) :: time
-
-    if (.false.) call UnusedVariables_Mark(time)
-
-    dCoeffs = 0.0_R64
-
-    call Coeffs_ApplyH1FillRdm1(coeffs, dCoeffs_=dCoeffs, h1_=h1)
-    call Coeffs_ApplyH2FillRdm2(coeffs, dCoeffs_=dCoeffs, h2_=h2)
 
   end subroutine
 
@@ -291,10 +259,10 @@ contains
 
     ! Step 1: External potential and Hamiltonian matrices in the current basis
     call SysPotential_FillExternalPotential(externalPotential, time)
-    call Method_Mb_OrbBased_FillH1(h1, orbs, time)
-    call Method_Mb_OrbBased_FillH2(h2, orbs, time)
+    call Method_Mb_OrbBased_FillH1(Method_Mb_OrbBased_h1, orbs, time)
+    call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, orbs, time)
 
-    ! Step 2: Diagonalize CI Hamiltonian (HamiltonianAction is the matvec callback)
+    ! Step 2: Diagonalize CI Hamiltonian (GroundSolver_Mcscf_HamiltonianAction is the matvec callback)
     call DiagonalizerList(1) % e % Diagonalize(time, .true.)
     call GroundSolver_NoteUnconverged(1)
 

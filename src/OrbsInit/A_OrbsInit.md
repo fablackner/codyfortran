@@ -134,7 +134,24 @@ the files hold orbitals of a grid with the same radial grid and mmax but
 lmax = lmaxIn; the channel layout is l-major, so they are embedded as a prefix
 with zero high-l channels (e.g. a ground state relaxed at small lmax). With declared
 m, round-off admixtures of other m in the files are removed by the final
-projection of `OrbsInit_Initialize` (below).
+projection of `OrbsInit_Initialize` (below). For lmaxIn = 0 the prefix is the
+(0,0) channel for every mmax, so lmax-0 orbitals load into a grid of any mmax.
+
+**Partial load** (`"nOrbsIn"`): only the first nOrbsIn orbitals of every body
+type are read from the files. The remaining ones are initialized by the other
+backend present under `orbsInit` (linear, lattice, gridPoint, ylm, prolate or
+fem; `OrbsInit_Fabricate` fabricates it before load and composes the two). Its
+per-orbital settings list only the remaining orbitals: its index 1 is orbital
+nOrbsIn + 1. Example: the Hartree-Fock 1s 2s of an lmax-0 SCF run plus
+hydrogen-like 2p as the start of the Be MCSCF ground state
+(`app/atoms/be/groundstate/mcscf`):
+
+```json
+"orbsInit": {
+  "load": { "dir": "../hf", "lmaxIn": 0, "nOrbsIn": 2 },
+  "ylm": { "hydrogenLike": { "charge": 3.0, "n": [2, 2, 2], "l": [1, 1, 1], "m": [-1, 0, 1] } }
+}
+```
 
 ### GridPoint (δ-basis)
 ```json
@@ -330,7 +347,9 @@ Tests using OrbsInit are found in:
 - `test/T_H3d_*.json` — 3D hydrogen with Ylm/HydrogenLike
 - `test/componentTests/OrbsInit/Load/` — loading with declared m: round-off
   admixtures are removed, orbitals of another m stop with an error
-  (`ctest-pass-regex` test)
+  (`ctest-pass-regex` test); partial load (`T_OrbsInit_Load_Partial`: two
+  lmax-0 s orbitals from files bitwise in the (0,0) channel, three
+  hydrogen-like 2p in their (1, m) channels to 1e-12)
 - `test/componentTests/OrbsInit/Fem/Sto/T_OrbsInit_Fem_Sto` — two-center
   mesh (N = 257594): six orbitals (1s, LCAO of two 1s, 2p_x, 3d_xy, 3s,
   4f (x² − y²)z) normalized to 8e-14 and equal to the analytic functions

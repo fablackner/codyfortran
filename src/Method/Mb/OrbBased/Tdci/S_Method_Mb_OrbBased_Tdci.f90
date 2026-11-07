@@ -74,10 +74,7 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine TimeDerivative(dCoeffs, coeffs, time)
-    use M_Utils_Timer
-    use M_Utils_UnusedVariables
     use M_Utils_Constants
-    use M_Coeffs
     use M_Method_Mb_OrbBased
     use M_SysInteraction
     use M_Orbs
@@ -97,12 +94,7 @@ contains
       call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, Orbs_orbs, time)
     end if
 
-    dCoeffs(:) = 0.0_R64
-    !call Timer_Timer("start")
-    call Coeffs_ApplyH1FillRdm1(coeffs, dCoeffs_=dCoeffs, h1_=Method_Mb_OrbBased_h1)
-    !call Timer_Timer("h1")
-    call Coeffs_ApplyH2FillRdm2(coeffs, dCoeffs_=dCoeffs, h2_=Method_Mb_OrbBased_h2)
-    !call Timer_Timer("h2")
+    call Method_Mb_OrbBased_ApplyCiHamiltonian(dCoeffs, coeffs, time)
 
     dCoeffs(:) = -IU * dCoeffs(:) ! out is the time-derivative!
 

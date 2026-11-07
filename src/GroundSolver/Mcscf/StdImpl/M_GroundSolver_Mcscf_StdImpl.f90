@@ -46,7 +46,6 @@ module M_GroundSolver_Mcscf_StdImpl
     !> Assigns the following procedure pointers:
     !>   - `GroundSolver_Setup` → local `Setup`
     !>   - `GroundSolver_Approach` → local `Approach`
-    !>   - `GroundSolver_Mcscf_HamiltonianAction` → local `HamiltonianAction`
     !>   - `GroundSolver_Mcscf_FockAction` → local `FockAction`
     !>
     !> @pre JSON key `groundSolver.mcscf.stdImpl` exists

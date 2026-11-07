@@ -431,13 +431,12 @@ contains
 
     real(R64), parameter :: tolerance = 1.0e-10_R64
 
-    integer(I32) :: nRad, nG, nOS, lmax, mmax, i, l, m, nFound, iOrb, mCap
+    integer(I32) :: nRad, nG, nOS, lmax, mmax, i, l, m, iOrb, mCap
     integer(I64) :: blockSize
     logical, allocatable :: keepQ(:, :)
     logical :: potentialQ
     real(R64) :: hScale, devM, devImag, devSym
     complex(R64), allocatable :: probe(:), hProbe(:), tmp(:), hLm(:), unitRad(:), externalPotential(:)
-    real(R64), allocatable :: hs(:, :), evals(:), evecs(:, :)
 
     call Say_Setup("method.mb.orbBased.exactFieldFree")
 
@@ -519,10 +518,8 @@ contains
     devImag = devImag / hScale
     devM = devM / hScale
 
-    devSym = 0.0_R64
-    do l = 0, lmax
-      devSym = max(devSym, maxval(abs(blockEvecs(:, :, l) - transpose(blockEvecs(:, :, l)))) / hScale)
-    end do
+    ! MRRR (DSYEVR): the QR iteration of DSYEV took most of the setup time
+    call LapackLib_DiagonalizeSymStack(blockEvals, devSym, blockEvecs)
 
     write (*, '(A,ES10.2,A,ES10.2,A,ES10.2)') " exact field-free blocks: asymmetry", devSym, &
       "  imaginary part", devImag, "  m dependence", devM
@@ -530,17 +527,6 @@ contains
     if (devImag > tolerance) error stop "method.mb.orbBased.exactFieldFreeQ: h0 is not real on this grid"
     if (devM > tolerance) error stop "method.mb.orbBased.exactFieldFreeQ: h0 depends on m"
     if (devSym > tolerance) error stop "method.mb.orbBased.exactFieldFreeQ: h0 is not Hermitian in the grid metric"
-
-    ! MRRR (DSYEVR): the QR iteration of DSYEV took most of the setup time
-    !$omp parallel do default(shared) schedule(dynamic) private(l, hs, evals, evecs, nFound)
-    do l = 0, lmax
-      hs = 0.5_R64 * (blockEvecs(:, :, l) + transpose(blockEvecs(:, :, l)))
-      call LapackLib_DiagonalizeSym(evals, evecs, nFound, hs, .true.)
-      if (nFound .ne. nRad) error stop "method.mb.orbBased.exactFieldFreeQ: incomplete diagonalization of h0"
-      blockEvals(:, l) = evals(:)
-      blockEvecs(:, :, l) = evecs(:, :)
-    end do
-    !$omp end parallel do
 
     write (*, '(A,I0,A,ES12.4,A,ES12.4)') " exact field-free blocks diagonalized for l <= ", lmax, &
       ": eigenvalues from", minval(blockEvals), " to", maxval(blockEvals)

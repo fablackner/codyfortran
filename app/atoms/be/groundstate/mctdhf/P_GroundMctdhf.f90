@@ -17,7 +17,13 @@
 !> the CI vector is normalized.
 !>
 !> Initial orbitals from orbsInit, the CI vector from coeffsInit (a run is
-!> continued from its checkpoint with orbsInit.load and coeffsInit.load). The
+!> continued from its checkpoint with orbsInit.load and coeffsInit.load).
+!> With program.ciStartQ the CI vector is then replaced by the lowest
+!> eigenvector of the CI Hamiltonian in the initial orbitals
+!> (diagonalizerList(1) over the CI space). A unary start is a trap: the
+!> unoccupied orbitals feel no correlation force, and the Be 2p shell then
+!> correlates the 1s² core (local minimum at -14.5956 instead of -14.6169).
+!> The
 !> imaginary time step is reduced (dtauFactor) whenever the energy change per
 !> check drops below dtauSwitch, which removes the O(dtau^2) splitting bias
 !> of the fixed point. The stiff non-linear part is integrated with
@@ -47,14 +53,17 @@ program P_GroundMctdhf
   use M_Method_Mb_OrbBased
   use M_IntegratorList
   use M_IntegratorList_Sil
+  use M_DiagonalizerList
 
   implicit none
 
   real(R64)    :: tau, dtau, dtauMin, dtauFactor, dtauSwitch, convThresh, energy, energyOld, dtauNonLinMax
   integer(I32) :: nStepsCheck, maxChecks, nSubStepsNonLin, iCheck, iStep, io
+  logical      :: ciStartQ
   real(R64), allocatable :: natOcc(:)
   complex(R64), allocatable :: rdm1(:, :), natOrbs(:, :)
   type(T_IntegratorList_FabricateInput) :: IntegratorListInput(2)
+  type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(1)
 
   !==========================================
   call Say_Hello
@@ -87,6 +96,13 @@ program P_GroundMctdhf
   maxChecks = Json_Get("program.maxChecks", 1000)
   nSubStepsNonLin = Json_Get("program.nSubStepsNonLin", 1)
   dtauNonLinMax = Json_Get("program.dtauNonLinMax", 0.0_R64)
+  ciStartQ = Json_Get("program.ciStartQ", .false.)
+
+  if (ciStartQ) then
+    DiagonalizerListInput(1) % ApplyMatOnVec => Method_Mb_OrbBased_ApplyCiHamiltonian
+    DiagonalizerListInput(1) % dim = Coeffs_nCoeffs
+    call DiagonalizerList_Fabricate(DiagonalizerListInput)
+  end if
 
   call Grid_Setup
   call SysKinetic_Setup
@@ -99,6 +115,7 @@ program P_GroundMctdhf
   call CoeffsInit_Setup
   call Method_Setup
   call IntegratorList_Setup
+  if (ciStartQ) call DiagonalizerList_Setup
 
   select type (sil => integratorList(1) % e)
   type is (T_IntegratorList_E_Sil)
@@ -109,6 +126,7 @@ program P_GroundMctdhf
   integratorList(1) % e % metricWeights = MetricWeights(Coeffs_nCoeffs)
 
   call Reorthonormalize
+  if (ciStartQ) call StartFromCiEigenvector
 
   !==========================================
   call Say_Section("imaginary time propagation")
@@ -209,6 +227,27 @@ contains
 
     call Method_Mb_OrbBased_OrthonormalizeKeepingState(Method_state)
     call Coeffs_Normalize(Coeffs_coeffs)
+
+  end subroutine
+
+  !> Replaces the CI vector by the lowest eigenvector of the CI Hamiltonian in
+  !> the current orthonormal orbitals (diagonalizerList(1), seeded with the
+  !> current vector). The diagonalizer works on full-length vectors, whose
+  !> eigenvectors lie in a declared total-M sector only up to round-off.
+  subroutine StartFromCiEigenvector
+
+    call Method_Mb_OrbBased_FillH1(Method_Mb_OrbBased_h1, Orbs_orbs, 0.0_R64)
+    call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, Orbs_orbs, 0.0_R64)
+
+    call DiagonalizerList(1) % e % SetStartVectors(reshape(Coeffs_coeffs, [Coeffs_nCoeffs, 1]))
+    call DiagonalizerList(1) % e % Diagonalize(0.0_R64, .true.)
+    if (.not. DiagonalizerList(1) % e % convergedQ) write (*, '(A)') " warning: CI start eigenvector not converged"
+
+    Coeffs_coeffs(:) = DiagonalizerList(1) % e % evecs(:, 1)
+    call Coeffs_ProjectOnSector(Coeffs_coeffs)
+    call Coeffs_Normalize(Coeffs_coeffs)
+
+    write (*, '(A,F22.14)') " CI start eigenvalue: ", DiagonalizerList(1) % e % evals(1)
 
   end subroutine
 

@@ -6,18 +6,20 @@
 !>
 !> @details
 !> Provides MCSCF-specific procedure pointers for the ground-state solver.
-!> The MCSCF ground state is found by alternating two diagonalizations:
+!> The MCSCF ground state is found by alternating two steps:
 !>
 !>   1. **CI step**: Diagonalize the CI Hamiltonian in the current orbital
 !>      basis (coefficient update).
-!>   2. **Orbital step**: Diagonalize an effective one-body Fock operator
-!>      built from the correlated 1-RDM (orbital update), analogous to the
-!>      SCF solver but with RDM-weighted mean-field and exchange terms.
+!>   2. **Orbital step**: stdImpl/ylmOpt diagonalize an effective one-body
+!>      Fock operator built from the correlated 1-RDM, analogous to the SCF
+!>      solver but with RDM-weighted mean-field and exchange terms; gradient
+!>      takes a preconditioned step on the MCTDHX orbital residual (the
+!>      variational MCSCF).
 !>
-!> This module declares the interface; concrete implementations (StdImpl)
-!> bind the pointers via their `_Fabricate` routines.
+!> This module declares the interface; the implementations bind the pointers
+!> via their `_Fabricate` routines.
 !>
-!> ## MCSCF Iteration
+!> ## MCSCF Iteration (stdImpl, ylmOpt)
 !>
 !> With the packed MCTDHX-style state |Ψ⟩ = (c, {φ_j}):
 !>
@@ -37,6 +39,7 @@
 !>     `GroundSolver_Mcscf_FockAction`
 !>   - `ylmOpt`: DiagonalizerList(l+2) for l = 0..lmax, `dim = Grid_Ylm_nRadial`,
 !>     l-specific callbacks wrapping `GroundSolver_Mcscf_YlmOpt_FockAction`
+!>   - `gradient`: none
 !>
 !> ## Available Implementations
 !>
@@ -44,6 +47,7 @@
 !>   Fock diagonalizer
 !> - **ylmOpt**: Spherical (Ylm) grids; full CI diagonalizer plus one radial
 !>   Fock diagonalizer per l-channel
+!> - **gradient**: Any grid; variational MCSCF (M_GroundSolver_Mcscf_Gradient)
 !>
 !> @see M_GroundSolver, M_GroundSolver_Scf, M_DiagonalizerList
 module M_GroundSolver_Mcscf
@@ -59,16 +63,15 @@ module M_GroundSolver_Mcscf
     !> @brief Bind MCSCF-specific callbacks for the ground-state solver.
     !>
     !> @details
-    !> Reads `groundSolver.mcscf.*` from JSON and dispatches to:
-    !>   - `stdImpl`: Standard implementation for general grids
+    !> Reads `groundSolver.mcscf.*` from JSON and dispatches to `stdImpl`,
+    !> `ylmOpt` or `gradient`.
     !>
-    !> Assigns `GroundSolver_Mcscf_HamiltonianAction` (CI matvec) and
-    !> `GroundSolver_Mcscf_FockAction` (orbital matvec) to the selected
-    !> backend's routines.
+    !> Assigns `GroundSolver_Mcscf_HamiltonianAction` (CI matvec,
+    !> Method_Mb_OrbBased_ApplyCiHamiltonian for every backend); the backend
+    !> binds `GroundSolver_Mcscf_FockAction` (orbital matvec) if it has one.
     !>
     !> @pre JSON configuration loaded; `groundSolver.mcscf` key exists
-    !> @post `GroundSolver_Mcscf_HamiltonianAction` and
-    !>       `GroundSolver_Mcscf_FockAction` are bound
+    !> @post `GroundSolver_Mcscf_HamiltonianAction` is bound
     module subroutine GroundSolver_Mcscf_Fabricate
     end subroutine
   end interface
@@ -86,8 +89,9 @@ module M_GroundSolver_Mcscf
     !>
     !> @details
     !> Computes dCoeffs = Ĥ·coeffs where Ĥ is represented by the one- and
-    !> two-body Hamiltonian matrices h1/h2 built from the current orbitals
-    !> (precomputed and stored by the backend's `Approach` routine).
+    !> two-body Hamiltonian matrices Method_Mb_OrbBased_h1/h2 of the current
+    !> orbitals (filled by the backend's `Approach` before its CI
+    !> diagonalization).
     !>
     !> @param[out] dCoeffs  Result of Ĥ applied to coeffs (same dimension)
     !> @param[in]  coeffs   Input CI coefficient/trial vector

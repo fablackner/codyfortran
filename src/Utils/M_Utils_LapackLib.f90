@@ -764,6 +764,44 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Eigen-decomposition of a stack of real matrices that are symmetric up to
+  !> round-off, in place: a(:, :, k) ← the eigenvectors (columns) of its
+  !> symmetric part (a_k + a_kᵀ)/2, evals(:, k) ← its eigenvalues, ascending
+  !> (MRRR, DSYEVR; OpenMP over k). Returns the relative asymmetry of the
+  !> input, max_k max|a_k − a_kᵀ| / max|a|, for the caller to check (e.g. the
+  !> metric-symmetrized radial blocks of an operator on a Ylm grid).
+  subroutine LapackLib_DiagonalizeSymStack(evals, asymmetry, a)
+    !> Output eigenvalues, ascending per matrix, size (n, nMatrices).
+    real(R64), intent(out), contiguous   :: evals(:, :)
+    !> Output relative asymmetry of the input matrices.
+    real(R64), intent(out)               :: asymmetry
+    !> In: the matrices (n, n, nMatrices); out: their eigenvectors.
+    real(R64), intent(inout), contiguous :: a(:, :, :)
+
+    real(R64), allocatable :: aSym(:, :), kEvals(:), kEvecs(:, :)
+    integer(I32) :: n, k, nFound
+
+    n = size(a, 1)
+
+    asymmetry = 0.0_R64
+    do k = 1, size(a, 3)
+      asymmetry = max(asymmetry, maxval(abs(a(:, :, k) - transpose(a(:, :, k)))))
+    end do
+    asymmetry = asymmetry / maxval(abs(a))
+
+    !$omp parallel do default(shared) schedule(dynamic) private(k, aSym, kEvals, kEvecs, nFound)
+    do k = 1, size(a, 3)
+      aSym = 0.5_R64 * (a(:, :, k) + transpose(a(:, :, k)))
+      call WrapDSYEVR(kEvals, kEvecs, nFound, aSym, .true.)
+      if (nFound .ne. n) error stop "LapackLib_DiagonalizeSymStack: incomplete diagonalization"
+      evals(:, k) = kEvals(:)
+      a(:, :, k) = kEvecs(:, :)
+    end do
+    !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine WrapZGESVD(u, s, vt, A)
     !> Output left singular vectors, size (M, min(M,N)).
     complex(R64), intent(out), allocatable :: u(:, :)

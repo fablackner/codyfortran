@@ -4,7 +4,7 @@
 !> grid and would mix degenerate orbitals of different m, so
 !> GroundSolver_Fabricate must stop with an error. The test passes only if
 !> the program stops with that error:
-!> ctest-pass-regex: mOfOrbs requires groundSolver.scf.ylmOpt or groundSolver.mcscf.ylmOpt
+!> ctest-pass-regex: mOfOrbs requires groundSolver.scf.ylmOpt, groundSolver.mcscf.ylmOpt or groundSolver.mcscf.gradient
 program T_GroundSolver_DeclaredMStdImpl
   use M_Utils_Types
   use M_Utils_Say

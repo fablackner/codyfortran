@@ -5,18 +5,19 @@
 !>   the grid metric (metricWeights = Grid_Ylm_weights) and warm-started from
 !>   the current orbitals and then from the previous eigenvectors; the
 !>   orbital preconditioner GroundSolver_PreconditionAction (bound by
-!>   GroundSolver_Fabricate for every backend) is the identity here (the Ylm
-!>   kinetic backend provides no SysKinetic_SolveShifted), so the eigensolves
-!>   of this stiff FEDVR operator take O(100) iterations (maxIter is raised
-!>   accordingly)
+!>   GroundSolver_Fabricate for every backend) is the exact (T + sigma)^-1 of
+!>   the Ylm FEDVR kinetic blocks (SysKinetic_SolveShifted): 693 Fock matvecs
+!>   in total, against 12499 with the identity preconditioner (the kinetic
+!>   backends without that hook), whose eigensolves of this stiff FEDVR
+!>   operator take O(100) iterations (maxIter stays raised for them)
 !> - the adaptively compressed exchange operator
 !>   (groundSolver.scf.stdImpl.aceQ), exact on the occupied space, so the SCF
 !>   fixed point and hence the energy are those of T_Ne3d_02.
 !> Besides the energy it asserts that every LOBPCG solve converged (no
-!> maxIter, no stagnation exit: the unpreconditioned solves have plateaus of
+!> maxIter, no stagnation exit: unpreconditioned solves have plateaus of
 !> 10-30 iterations over which the residual drops by less than 10 % but
 !> fluctuates by 40 % or more, which the stagnation test must tolerate) and
-!> that the SCF converges within MAX_SCF_ITERATIONS steps (measured: 14).
+!> that the SCF converges within MAX_SCF_ITERATIONS steps (measured: 15).
 program T_Ne3d_17_GroundSolverScfLobpcgAce
   use M_Utils_Types
   use M_Utils_Say
@@ -41,7 +42,7 @@ program T_Ne3d_17_GroundSolverScfLobpcgAce
 
   implicit none
 
-  !> Largest accepted number of SCF steps (measured: 14). The margin is needed:
+  !> Largest accepted number of SCF steps (measured: 15). The margin is needed:
   !> the stop criterion |dE| <= convThresh = 1e-12 sits at the round-off floor
   !> of eigensolves converged to tol 1e-8, so round-off (compiler flags, thread
   !> count, FMA) sets the step count (-O0 DiagonalizerList objects: 18 steps).
