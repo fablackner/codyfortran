@@ -11,9 +11,10 @@
 !> the phases e^{imφ_k} and, on grid.ylm.fedvr, the band of the assembled
 !> weak radial derivative B(i, j) = ∫ L_i L_j' dr.
 !>
-!> Transforms of one m (ChannelsToNodesM, NodesToChannelsM): one real DGEMM
-!> on the complex arrays viewed as real, (2 nRad × nL)(nL × nTheta) and
-!> back, with the sign (-1)^m of Θ_l,-m = (-1)^m Θ_lm. Channel matrices of a
+!> Transforms of one m (ChannelsToNodesM, NodesToChannelsM, with the table
+!> to use): one real DGEMM on the complex arrays viewed as real,
+!> (2 nRad × nL)(nL × nTheta) and back, with the sign (-1)^m of
+!> Θ_l,-m = (-1)^m Θ_lm. Channel matrices of a
 !> layout (orbitals, interaction source/potential) are gathered and scattered
 !> with SphericalHarmonics_ChannelIndex. Loops over m (and over φ_k) are
 !> OpenMP-parallel unless called in an active parallel region.
@@ -26,9 +27,6 @@ submodule(M_SysXc_Ylm) S_SysXc_Ylm
   !=============================================================================
   ! local data
   !=============================================================================
-
-  !> Table selectors of the transforms
-  integer(I32), parameter :: TAB_THETA = 1, TAB_DTHETA = 2
 
   !> Radial points
   integer(I32) :: nRad = 0
@@ -311,7 +309,6 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> density += Re Σ_l conj(φ_l) g_l on the xc points.
   subroutine AddDensity(density, orbs, weightedOrbs)
-    !$ use omp_lib, only: omp_in_parallel
     use M_Grid_Ylm
 
     real(R64), intent(inout), contiguous, target :: density(:)
@@ -320,7 +317,7 @@ contains
 
     complex(R64), allocatable, target :: valsA(:, :, :), valsB(:, :, :), fM(:, :), gA(:, :), gB(:, :)
     real(R64), allocatable :: densityLoc(:)
-    integer(I32) :: nT, nPh, nO, l, m, mm, iPair, nPairs, nL, nNode, p
+    integer(I32) :: nT, nPh, nO, l, m, mm, iPair, nPairs, nL, nNode
     logical :: sameQ
 
     call CheckReady("SysXc_AddDensity")
@@ -342,10 +339,10 @@ contains
         mm = abs(m)
         nL = Grid_Ylm_lmax - mm + 1
         call GatherM(fM(:, 1:nL), orbs(:, l), m, Grid_Ylm_mmax)
-        call ChannelsToNodesM(gA, fM(:, 1:nL), m, TAB_THETA)
+        call ChannelsToNodesM(gA, fM(:, 1:nL), m, thetaTab)
         if (.not. sameQ) then
           call GatherM(fM(:, 1:nL), weightedOrbs(:, l), m, Grid_Ylm_mmax)
-          call ChannelsToNodesM(gB, fM(:, 1:nL), m, TAB_THETA)
+          call ChannelsToNodesM(gB, fM(:, 1:nL), m, thetaTab)
         end if
         call AccumulateProduct(densityLoc, gA, gB, sameQ)
       end do
@@ -420,9 +417,9 @@ contains
         nL = Grid_Ylm_lmax - abs(m) + 1
         allocate (fM(nRad, nL), g(nRad, nT))
         call GatherM(fM, orb, m, Grid_Ylm_mmax)
-        call ChannelsToNodesM(g, fM, m, TAB_THETA)
+        call ChannelsToNodesM(g, fM, m, thetaTab)
         g(:, :) = pot2(:, :) * g(:, :)
-        call NodesToChannelsM(fM, g, m, TAB_THETA)
+        call NodesToChannelsM(fM, g, m, wThetaTab)
         call ScatterM(resOrb, fM, m, Grid_Ylm_mmax)
         deallocate (fM, g)
       end do
@@ -461,7 +458,7 @@ contains
       nL = Grid_Ylm_lmax - abs(m) + 1
       allocate (fM(nRad, nL))
       call GatherM(fM, orb, m, mmax)
-      call ChannelsToNodesM(gAll(:, :, m), fM, m, TAB_THETA)
+      call ChannelsToNodesM(gAll(:, :, m), fM, m, thetaTab)
       deallocate (fM)
     end do
 
@@ -480,7 +477,6 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> orb_lm = Σ_q,k (2π w_q/nPhi) Θ_lm(x_q) e^{-imφ_k} vals (general mode).
   subroutine PointsToOrbital(orb, vals)
-    !$ use omp_lib, only: omp_in_parallel
     use M_Grid_Ylm
 
     complex(R64), intent(out), contiguous :: orb(:)
@@ -497,7 +493,7 @@ contains
         uM(:, :) = uM(:, :) + vals(:, :, k) * conjg(phases(k, m))
       end do
       uM(:, :) = uM(:, :) / real(SysXc_Ylm_nPhi, kind=R64)
-      call NodesToChannelsM(fM, uM, m, TAB_THETA)
+      call NodesToChannelsM(fM, uM, m, wThetaTab)
       call ScatterM(orb, fM, m, Grid_Ylm_mmax)
       deallocate (uM, fM)
     end do
@@ -509,7 +505,6 @@ contains
   !> (m = 0 in the axial mode) of the projection onto Y_lm, times the radial
   !> metric weights (the convention of SysInteraction_FillInteractionSrc).
   subroutine FillInteractionSrc(src, density)
-    !$ use omp_lib, only: omp_in_parallel
     use M_Grid_Ylm
     use M_SysInteraction_Ylm
 
@@ -517,8 +512,8 @@ contains
     real(R64), intent(in), contiguous, target :: density(:)
 
     real(R64), contiguous, pointer :: density3(:, :, :)
-    complex(R64), allocatable :: rhoM(:, :), cM(:, :)
-    integer(I32) :: m, mMax, nL, k, iL
+    complex(R64), allocatable :: rhoAll(:, :, :), cM(:, :)
+    integer(I32) :: m, mMax, nL, iL
 
     call CheckReady("SysXc_FillInteractionSrc")
     allocate (src(SysInteraction_Ylm_nPoints))
@@ -528,20 +523,22 @@ contains
     mMax = SysXc_Ylm_mmaxSrc
     if (SysXc_Ylm_axialQ) mMax = 0
 
+    ! Fourier coefficients of the real density: rho_-m = conj(rho_m)
+    allocate (rhoAll(nRad, SysXc_Ylm_nTheta, 0:mMax))
+    call FillFourierCoefficients(rhoAll, density3, mMax)
     do m = -mMax, mMax
       nL = SysXc_Ylm_lmaxSrc - abs(m) + 1
-      allocate (rhoM(nRad, SysXc_Ylm_nTheta), cM(nRad, nL))
-      rhoM(:, :) = density3(:, :, 1) * conjg(phases(1, m))
-      do k = 2, SysXc_Ylm_nPhi
-        rhoM(:, :) = rhoM(:, :) + density3(:, :, k) * conjg(phases(k, m))
-      end do
-      rhoM(:, :) = rhoM(:, :) / real(SysXc_Ylm_nPhi, kind=R64)
-      call NodesToChannelsM(cM, rhoM, m, TAB_THETA)
+      allocate (cM(nRad, nL))
+      if (m < 0) then
+        call NodesToChannelsM(cM, conjg(rhoAll(:, :, -m)), m, wThetaTab)
+      else
+        call NodesToChannelsM(cM, rhoAll(:, :, m), m, wThetaTab)
+      end if
       do iL = 1, nL
         cM(:, iL) = cM(:, iL) * Grid_Ylm_radialMetricWeights(:)
       end do
       call ScatterM(src, cM, m, SysXc_Ylm_mmaxSrc)
-      deallocate (rhoM, cM)
+      deallocate (cM)
     end do
 
   end subroutine
@@ -570,7 +567,7 @@ contains
       nL = SysXc_Ylm_lmaxSrc - abs(m) + 1
       allocate (vM(nRad, nL))
       call GatherM(vM, interactionPotential, m, SysXc_Ylm_mmaxSrc)
-      call ChannelsToNodesM(gAll(:, :, m), vM, m, TAB_THETA)
+      call ChannelsToNodesM(gAll(:, :, m), vM, m, thetaTab)
       deallocate (vM)
     end do
 
@@ -622,8 +619,8 @@ contains
     do m = 0, mD
       nL = SysXc_Ylm_lmaxDensity - m + 1
       allocate (cM(nRad, nL))
-      call NodesToChannelsM(cM, fAll(:, :, m), m, TAB_THETA)
-      call ChannelsToNodesM(dAll(:, :, m), cM, m, TAB_DTHETA)
+      call NodesToChannelsM(cM, fAll(:, :, m), m, wThetaTab)
+      call ChannelsToNodesM(dAll(:, :, m), cM, m, dThetaTab)
       deallocate (cM)
     end do
 
@@ -699,8 +696,8 @@ contains
     do m = 0, mD
       nL = SysXc_Ylm_lmaxDensity - m + 1
       allocate (cM(nRad, nL))
-      call NodesToChannelsM(cM, thetaAll(:, :, m), m, TAB_DTHETA)
-      call ChannelsToNodesM(backAll(:, :, m), cM, m, TAB_THETA)
+      call NodesToChannelsM(cM, thetaAll(:, :, m), m, wdThetaTab)
+      call ChannelsToNodesM(backAll(:, :, m), cM, m, thetaTab)
       deallocate (cM)
     end do
 
@@ -781,15 +778,15 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> nodes(r, q) = Σ_iL fM(r, iL) T(|m| + iL - 1, q), T = Θ (TAB_THETA) or
-  !> dΘ/dθ (TAB_DTHETA) of |m|, times (-1)^m for m < 0.
-  subroutine ChannelsToNodesM(nodes, fM, m, which)
+  !> nodes(r, q) = Σ_iL fM(r, iL) tab(|m| + iL - 1, q, |m|), tab = thetaTab
+  !> (Θ) or dThetaTab (dΘ/dθ), times (-1)^m for m < 0.
+  subroutine ChannelsToNodesM(nodes, fM, m, tab)
     use M_Utils_BlasLib, only: DGEMM
 
     complex(R64), intent(out), contiguous, target :: nodes(:, :)
     complex(R64), intent(in), contiguous, target :: fM(:, :)
     integer(I32), intent(in) :: m
-    integer(I32), intent(in) :: which
+    real(R64), intent(in) :: tab(0:lmaxTab, SysXc_Ylm_nTheta, 0:*)
 
     real(R64), contiguous, pointer :: nodesR(:, :), fMR(:, :)
     real(R64) :: sgn
@@ -809,27 +806,20 @@ contains
     call c_f_pointer(c_loc(nodes), nodesR, [nRad2, nT])
     call c_f_pointer(c_loc(fM), fMR, [nRad2, nL])
 
-    select case (which)
-    case (TAB_THETA)
-      call DGEMM('N', 'N', nRad2, nT, nL, sgn, fMR, nRad2, thetaTab(mm, 1, mm), lmaxTab + 1, 0.0_R64, nodesR, nRad2)
-    case (TAB_DTHETA)
-      call DGEMM('N', 'N', nRad2, nT, nL, sgn, fMR, nRad2, dThetaTab(mm, 1, mm), lmaxTab + 1, 0.0_R64, nodesR, nRad2)
-    case default
-      error stop "sysXc.ylm: unknown angular table"
-    end select
+    call DGEMM('N', 'N', nRad2, nT, nL, sgn, fMR, nRad2, tab(mm, 1, mm), lmaxTab + 1, 0.0_R64, nodesR, nRad2)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> fM(r, iL) = Σ_q nodes(r, q) 2π w_q T(|m| + iL - 1, q), T = Θ
-  !> (TAB_THETA) or dΘ/dθ (TAB_DTHETA) of |m|, times (-1)^m for m < 0.
-  subroutine NodesToChannelsM(fM, nodes, m, which)
+  !> fM(r, iL) = Σ_q nodes(r, q) wTab(q, |m| + iL - 1, |m|), wTab = wThetaTab
+  !> (2π w_q Θ) or wdThetaTab (2π w_q dΘ/dθ), times (-1)^m for m < 0.
+  subroutine NodesToChannelsM(fM, nodes, m, wTab)
     use M_Utils_BlasLib, only: DGEMM
 
     complex(R64), intent(out), contiguous, target :: fM(:, :)
     complex(R64), intent(in), contiguous, target :: nodes(:, :)
     integer(I32), intent(in) :: m
-    integer(I32), intent(in) :: which
+    real(R64), intent(in) :: wTab(SysXc_Ylm_nTheta, 0:lmaxTab, 0:*)
 
     real(R64), contiguous, pointer :: nodesR(:, :), fMR(:, :)
     real(R64) :: sgn
@@ -846,14 +836,7 @@ contains
     call c_f_pointer(c_loc(nodes), nodesR, [nRad2, nT])
     call c_f_pointer(c_loc(fM), fMR, [nRad2, nL])
 
-    select case (which)
-    case (TAB_THETA)
-      call DGEMM('N', 'N', nRad2, nL, nT, sgn, nodesR, nRad2, wThetaTab(1, mm, mm), nT, 0.0_R64, fMR, nRad2)
-    case (TAB_DTHETA)
-      call DGEMM('N', 'N', nRad2, nL, nT, sgn, nodesR, nRad2, wdThetaTab(1, mm, mm), nT, 0.0_R64, fMR, nRad2)
-    case default
-      error stop "sysXc.ylm: unknown angular table"
-    end select
+    call DGEMM('N', 'N', nRad2, nL, nT, sgn, nodesR, nRad2, wTab(1, mm, mm), nT, 0.0_R64, fMR, nRad2)
 
   end subroutine
 

@@ -90,15 +90,15 @@
         "unary": { }
     },
     "mixing": {
-        "linear": {
-            "alpha": 1.0
+        "diis": {
+            "startThreshold": 0.0
         }
     },
     "groundSolver": {
         "precShiftMin": 0.5,
         "scf": {
             "stdImpl": {
-                "mixTarget": "potential",
+                "mixTarget": "orbitals",
                 "aceQ": true
             }
         }

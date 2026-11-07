@@ -108,8 +108,11 @@ own unwindowed Larmor spectrum.
 3. `python3 ../../analysis/absorption_spectrum.py dipole.dat --pade` gives the
    polarizability, the absorption cross section and the TRK sum.
 
-H2: R = 1.4 bohr, SCF in 5 s, 50 a.u. of TDHF in about 15 min. H2O: the SCF
-mesh is the coarse one of the kick (the accurate mesh with 1.1 M nodes,
+The ground states use DIIS on the orbitals (`mixTarget: "orbitals"`,
+`mixing.diis.startThreshold: 0`; `src/Mixing/A_Mixing.md`, "What to mix").
+H2: R = 1.4 bohr, SCF in 8 steps (4 s), 50 a.u. of TDHF in about 15 min.
+H2O: SCF in 12 steps (22 with linear Hartree-potential mixing), about
+1.5 min on two threads; the SCF mesh is the coarse one of the kick (the accurate mesh with 1.1 M nodes,
 1.7 mHa below the HF limit, is `app/fem_molecules/h2o_scf.json` in the git
 history). For the isotropic H2O spectrum run three kicks
 (`program.kickDirection` 1, 2, 3, each in its own copy of the folder) and
@@ -125,10 +128,10 @@ The same steps with a density functional (`sysXc.fem.libxc`, `src/SysXc/A_SysXc.
    orbitals and `femMesh.dat`; the functional is the `sysXc` block of its
    input (LDA `["lda_x", "lda_c_vwn"]` in the inputs; GGA `["gga_x_pbe",
    "gga_c_pbe"]`, a global hybrid such as `["hyb_gga_xc_pbeh"]` with `aceQ`).
-   H2 LDA: E = −1.1375189, HOMO −10.27 eV (18 SCF steps, 28 s on one
-   thread); PBE: −1.1667267, HOMO −10.38 eV. H2O LDA (DIIS potential
-   mixing; linear mixing oscillates): E = −75.9635786, HOMO −7.40 eV,
-   μ = 0.728 a.u. (14 steps, 3 min on two threads). That is 48.6 mHa below
+   H2 LDA: E = −1.1375189, HOMO −10.27 eV (7 SCF steps, 6 s on one
+   thread); PBE: −1.1667267, HOMO −10.38 eV. H2O LDA (linear mixing
+   oscillates): E = −75.9635786, HOMO −7.40 eV, μ = 0.728 a.u. (12 steps,
+   about 1.5 min on two threads). That is 48.6 mHa below
    the accurate mesh (nLocals 6, hMin 0.05: −75.9150234), the same offset as
    HF (49.1 mHa, the Galerkin O nucleus); the valence ε agree to 1e-3 Ha.
 2. `dynamics/tddft` (`P_KickTddftFem`) reads both from `../../groundstate/dft`

@@ -140,7 +140,7 @@ Module doc: `src/GroundSolver/A_GroundSolver.md`.
 **Mixing**
 Domain: Numerical Infrastructure.
 Purpose: Self-consistency mixers (damping/acceleration) for fixed-point iterations.
-Key interfaces/notes: `Mixing_SetupMixer(mixer, dim)`, `Mixing_Mix(mixer, x, xNew, alpha)` on generic complex vectors; Linear and DIIS (Pulay) backends; consumed by GroundSolver (orbital or Hartree-potential/density targets).
+Key interfaces/notes: one mixer per run: `Mixing_Mix(xMixed, xRaw)` on generic complex vectors (Euclidean), `Mixing_Reset()` when the fixed-point map changes (another functional; `Mixing_Fabricate` and a new vector length also start empty); Linear and DIIS (Pulay/Anderson: incremental Pulay matrix, one ZGEMV per step, start gate `startThreshold`, growth and coefficient restarts, `printLevel`) backends; consumed by GroundSolver (orbital or Hartree-potential/density targets). DIIS needs a complete iterate: the orbitals (every SCF/MCSCF Fock backend with `mixing.diis.startThreshold: 0`, no start gate; `mcscf.gradient` keeps the default gate 0.1) or the Kohn-Sham potential of a local functional, not the Hartree potential of Hartree-Fock, hybrids or MCSCF (the exchange lags it).
 Module doc: `src/Mixing/A_Mixing.md`.
 
 **Reconstruction**

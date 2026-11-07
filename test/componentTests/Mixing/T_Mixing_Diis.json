@@ -1,0 +1,9 @@
+{
+    "mixing": {
+        "diis": {
+            "nHistory": 8,
+            "startThreshold": 1e30,
+            "alpha": 1.0
+        }
+    }
+}

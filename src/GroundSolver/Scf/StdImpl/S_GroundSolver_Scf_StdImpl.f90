@@ -89,7 +89,10 @@
 !> |                |        |            | Fock action                            |
 !>
 !> The mixing *algorithm* (linear, DIIS) is configured separately under the
-!> top-level `mixing` block; see M_Mixing.
+!> top-level `mixing` block; see M_Mixing. With DIIS mix "orbitals": the
+!> mixed potential is a complete iterate only for a local Kohn-Sham
+!> potential, while the exact exchange of Hartree-Fock and hybrids is
+!> rebuilt from the orbitals and lags it (src/Mixing/A_Mixing.md).
 !>
 !> ## Working Arrays
 !>
@@ -188,8 +191,9 @@ submodule(M_GroundSolver_Scf_StdImpl) S_GroundSolver_Scf_StdImpl
   complex(R64), allocatable :: orbsTmp(:, :)
   real(R64), allocatable :: lambdaDiscarded(:)
 
-  !> Whether hartreePotentialMixed already holds an accepted (mixed) potential
-  logical :: hartreePotentialMixedInitializedQ = .false.
+  !> Whether the mixed quantity of mixTarget "potential" or "density" holds an
+  !> accepted iterate (the first one is taken as is)
+  logical :: acceptedIterateQ = .false.
 
   !-----------------------------------------------------------------------------
   ! Kohn-Sham DFT (sysXc)
@@ -290,23 +294,16 @@ contains
   !>            first Approach), applied together with Ĵ in one pass
   !>            (SysInteraction_AddMeanField)
   !>
-  !> The exchange sum runs over occupied orbitals (j = 1 to nOrbs/2 for restricted).
+  !> The exchange sum runs over the occupied spin-up orbitals (SubtractExchange).
   subroutine HartreeFockAction(dOrb, orb, time)
     use M_SysKinetic
     use M_SysPotential
     use M_SysInteraction
     use M_SysXc
-    use M_Method_Mb_OrbBased
-    use M_GroundSolver
-    use M_Orbs
 
     complex(R64), intent(out), contiguous, target :: dOrb(:)
     complex(R64), intent(in), contiguous, target :: orb(:)
     real(R64), intent(in) :: time
-
-    integer(I32) :: j, nUp
-
-    nUp = GroundSolver_NumberOfSpinUpOrbs()
 
     dOrb = 0.0_R64
 
@@ -333,17 +330,11 @@ contains
       call SysInteraction_AddMeanField(dOrb, dOrbTmp, orb, hartreePotentialMixed, aceZeta)
     else
       ! Hartree (direct) term: Ĵ·orb (hartreePotentialMixed filled in Approach)
+      ! and the exact exchange −K̂·orb (occupied spin-up orbitals; factor 2 in
+      ! Hartree)
       call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, hartreePotentialMixed, orb)
       dOrb = dOrb + dOrbTmp
-
-      ! Exchange term: −K̂·orb = −∑_j W(φ_j, orb)·φ_j
-      ! Loop over occupied orbitals (spin-up only; factor 2 in Hartree)
-      do j = 1, nUp
-        call SysInteraction_FillInteractionSrc(src, Orbs_orbs(:, j), orb(:))
-        call SysInteraction_FillInteractionPotential(interactionPotential, src, time)
-        call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, interactionPotential, Orbs_orbs(:, j))
-        dOrb = dOrb - dOrbTmp
-      end do
+      call SubtractExchange(dOrb, orb, 1.0_R64, time)
     end if
 
   end subroutine
@@ -430,29 +421,20 @@ contains
     ! Step 1: Fill external potential for current time
     call SysPotential_FillExternalPotential(externalPotential, time)
 
-    ! Step 2: Build raw Hartree potential from occupied orbitals with ONE
-    ! solve of the total source (the potential is linear in the source).
-    ! Factor 2 accounts for spin degeneracy (restricted: spin-up = spin-down).
-    ! Kohn-Sham: the local potential v_KS = J + v_xc of that density instead
+    ! Step 2: the local mean field of the occupied orbitals, mixed for
+    ! mixTarget="potential" (gauge-invariant): Kohn-Sham v_KS = J + v_xc, else
+    ! the Hartree potential from ONE solve of the total source (the potential
+    ! is linear in the source; factor 2 for the spin degeneracy, restricted:
+    ! spin-up = spin-down)
     if (kohnShamQ) then
       call FillKohnShamPotential(orbs(:, 1:nUp), time)
     else
       call SysInteraction_FillDirectPotential(hartreePotentialRaw, orbs(:, 1:nUp), orbs(:, 1:nUp), time, factor_=2.0_R64)
-    end if
-
-    if (kohnShamQ) then
-      ! v_KS was filled (and mixed for mixTarget="potential") above
-    else if (mixTarget .eq. "potential") then
-      ! Damping acts on the (gauge-invariant) Hartree potential: mix the raw
-      ! potential into the accepted one; the very first potential is taken as is
-      if (hartreePotentialMixedInitializedQ) then
-        call Mixing_Mix(hartreePotentialMixed, hartreePotentialRaw)
+      if (mixTarget .eq. "potential") then
+        call MixPotential(hartreePotentialMixed, hartreePotentialRaw)
       else
         hartreePotentialMixed = hartreePotentialRaw
-        hartreePotentialMixedInitializedQ = .true.
       end if
-    else
-      hartreePotentialMixed = hartreePotentialRaw
     end if
 
     ! Exchange via ACE: compress K̂ of the current orbitals once per iteration
@@ -495,12 +477,12 @@ contains
       orbsRawFlat(1:nG * nUp) => orbsRaw
       call Mixing_Mix(state(1:nG * nUp), orbsRawFlat)
     else if (mixTarget .eq. "density") then
-      if (hartreePotentialMixedInitializedQ) then
+      if (acceptedIterateQ) then
         call Orbs_MixOccupiedSpace(orbs(:, 1:nUp), orbsRaw, alphaDensity, orbsTmp, lambdaDiscarded)
         orbs(:, 1:nUp) = orbsTmp
       else
         orbs(:, 1:nUp) = orbsRaw
-        hartreePotentialMixedInitializedQ = .true.
+        acceptedIterateQ = .true.
       end if
     else
       ! mixTarget="potential": pure replacement, damping happened in Step 2
@@ -522,6 +504,24 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> mixTarget="potential": mix raw into the accepted potential (Mixing_Mix);
+  !> the first potential is taken as is.
+  subroutine MixPotential(mixed, raw)
+    use M_Mixing
+
+    complex(R64), intent(inout), allocatable :: mixed(:)
+    complex(R64), intent(in), contiguous :: raw(:)
+
+    if (acceptedIterateQ) then
+      call Mixing_Mix(mixed, raw)
+    else
+      mixed = raw
+      acceptedIterateQ = .true.
+    end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Kohn-Sham work arrays (the xc points of SysXc).
   subroutine SetupKohnSham
     use M_SysXc
@@ -538,7 +538,6 @@ contains
   !> occupied orbitals (unpolarized functional); for mixTarget="potential"
   !> mixed into the accepted potential (the first one taken as is).
   subroutine FillKohnShamPotential(occupiedOrbs, time)
-    use M_Mixing
     use M_SysXc
 
     complex(R64), intent(in), contiguous :: occupiedOrbs(:, :)
@@ -553,14 +552,12 @@ contains
     density(:, :) = 2.0_R64 * density(:, :)
     call SysXc_FillKohnShamPotential(potRaw, hartreeEnergy, xcEnergy, density, time)
 
-    if (mixTarget .eq. "potential" .and. hartreePotentialMixedInitializedQ) then
+    if (mixTarget .eq. "potential") then
       kohnShamPotentialRaw(:) = cmplx(potRaw(:, 1), 0.0_R64, kind=R64)
-      call Mixing_Mix(kohnShamPotentialMixed, kohnShamPotentialRaw)
+      call MixPotential(kohnShamPotentialMixed, kohnShamPotentialRaw)
       kohnShamPotential(:) = real(kohnShamPotentialMixed(:), kind=R64)
     else
       kohnShamPotential(:) = potRaw(:, 1)
-      kohnShamPotentialMixed(:) = cmplx(potRaw(:, 1), 0.0_R64, kind=R64)
-      if (mixTarget .eq. "potential") hartreePotentialMixedInitializedQ = .true.
     end if
 
   end subroutine

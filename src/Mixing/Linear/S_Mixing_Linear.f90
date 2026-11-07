@@ -31,6 +31,7 @@ contains
     !------------------------------------
 
     Mixing_Mix => Mix
+    Mixing_Reset => ResetMixer
 
   end subroutine
 
@@ -42,6 +43,11 @@ contains
 
     xMixed = (1.0_R64 - alpha) * xMixed + alpha * xRaw
 
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> @brief Stateless: nothing to reset.
+  subroutine ResetMixer
   end subroutine
 
 end submodule

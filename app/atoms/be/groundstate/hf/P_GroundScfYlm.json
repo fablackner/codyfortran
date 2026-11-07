@@ -119,13 +119,13 @@
     "groundSolver": {
         "scf": {
             "ylmOpt": {
-                "mixTarget": "potential"
+                "mixTarget": "orbitals"
             }
         }
     },
     "mixing": {
-        "linear": {
-            "alpha": 0.85
+        "diis": {
+            "startThreshold": 0.0
         }
     },
     "program": {

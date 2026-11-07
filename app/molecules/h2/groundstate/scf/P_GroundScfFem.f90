@@ -7,9 +7,11 @@
 !> with restricted orbitals (orbs.restrictedQ, nOrbs = nBodies = number of
 !> doubly occupied orbitals per spin), groundSolver.scf.stdImpl (Hartree
 !> potential of the total density, adaptively compressed exchange with aceQ,
-!> mixing of the Hartree potential) and the eigensolver diagonalizerList.lobpcg
-!> in the FEM metric (metricWeights = Grid_Fem_weights), preconditioned by the
-!> exact FDM solve (T + max(−θ, σ_min))⁻¹ (GroundSolver_PreconditionAction).
+!> DIIS on the orbitals: mixTarget "orbitals", mixing.diis with startThreshold
+!> 0; the exchange would lag a mixed Hartree potential, src/Mixing/A_Mixing.md)
+!> and the eigensolver diagonalizerList.lobpcg in the FEM metric
+!> (metricWeights = Grid_Fem_weights), preconditioned by the exact FDM solve
+!> (T + max(−θ, σ_min))⁻¹ (GroundSolver_PreconditionAction).
 !> The start orbitals of orbsInit (orbsInit.fem.sto, or orbsInit.load to
 !> continue an earlier run on the same mesh) are orthonormalized first.
 !>

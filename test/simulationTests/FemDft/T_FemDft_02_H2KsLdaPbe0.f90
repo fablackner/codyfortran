@@ -3,7 +3,10 @@
 !> with LDA (Slater + VWN5) and with the global hybrid PBE0 (a = 1/4 exact
 !> exchange of SysInteraction, applied by ACE and by the exact exchange: both
 !> must give the same energy and orbital energy); writes the LDA orbital
-!> orb01_01.in for the TDDFT test T_FemDft_03.
+!> orb01_01.in for the TDDFT test T_FemDft_03. DIIS on the orbitals
+!> (mixing.diis without start gate, startThreshold 0: the complete iterate also for the hybrid,
+!> whose exact exchange would lag a mixed potential), reset between the
+!> three SCFs (Mixing_Reset: each has its own fixed-point map).
 program T_FemDft_02_H2KsLdaPbe0
   use M_Utils_Types
   use M_Utils_Say
@@ -12,6 +15,7 @@ program T_FemDft_02_H2KsLdaPbe0
   use M_SysXc
   use M_SysPotential_Fem_Coulomb, only: SysPotential_Fem_Coulomb_nuclearRepulsion
   use M_Orbs
+  use M_Mixing
   use M_GroundSolver
   use M_Method_Mb_OrbBased_Tdks
   use testdrive, only: check, error_type
@@ -43,6 +47,7 @@ program T_FemDft_02_H2KsLdaPbe0
   call jsonFile % add("sysXc.fem.libxc.functionals", ["hyb_gga_xc_pbeh"])
   call SysXc_Fabricate
   call SysXc_Setup
+  call Mixing_Reset
   energyAce = energyLda
   epsAce = epsLda
   call RunScf(nScf, maxWarm, convergedQ, energyAce, epsAce, "PBE0, ACE", maxScfIterations, convThresh, epsThresh, &
@@ -55,6 +60,7 @@ program T_FemDft_02_H2KsLdaPbe0
   call jsonFile % update("groundSolver.scf.stdImpl.aceQ", .false., foundQ)
   if (.not. foundQ) error stop "T_FemDft_02_H2KsLdaPbe0: groundSolver.scf.stdImpl.aceQ not found"
   call GroundSolver_Fabricate
+  call Mixing_Reset
   energyExact = energyAce
   epsExact = epsAce
   call RunScf(nScf, maxWarm, convergedQ, energyExact, epsExact, "PBE0, exact exchange", maxScfIterations, &

@@ -91,15 +91,14 @@
     },
     "mixing": {
         "diis": {
-            "nHistory": 8,
-            "alpha": 0.3
+            "startThreshold": 0.0
         }
     },
     "groundSolver": {
         "precShiftMin": 0.5,
         "scf": {
             "stdImpl": {
-                "mixTarget": "potential",
+                "mixTarget": "orbitals",
                 "aceQ": true
             }
         }

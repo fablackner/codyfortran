@@ -108,8 +108,10 @@ F̂_KS = T̂ + V̂_ext + v_KS − a K̂,   v_KS = J + v_xc of ρ = 2 Σ_j |φ_j|
 With an empty functional list and `exactExchangeFraction: 1` the iteration is
 Hartree–Fock (T_He3d_03: the HF limit of He). Linear potential mixing needs a
 smaller α than Hartree–Fock (the self-interaction of the 1s density is not
-compensated by exchange: Ne with α = 0.8 oscillates for 60 steps); DIIS with
-α = 0.3 converges Ne in 13 steps.
+compensated by exchange: Ne with α = 0.8 oscillates for 60 steps); DIIS on
+v_KS with α = 0.3 converges Ne in 13 steps, DIIS on the orbitals (no start
+gate) in 11 (src/Mixing/A_Mixing.md, "What to mix"; for a hybrid only the
+orbitals are a complete iterate).
 
 | Test | System (grid) | Result |
 |------|---------------|--------|
@@ -241,6 +243,7 @@ call GroundSolver_PreconditionAction(dOrb, orb, shift, time)
 
 ! One-line note if DiagonalizerList(iDiag) did not converge (backends call it)
 call GroundSolver_NoteUnconverged(iDiag)
+
 ```
 
 ### Parameters
@@ -412,7 +415,8 @@ trajectory and energy (to 1e-13); with ACE: 189 products, 5.5 s. On the coarse
 H2O mesh of T_Fem_04 the leading error mode of the plain SCF (α = 1)
 oscillates with a factor ≈ −0.46, which Hartree-potential mixing with α ≈ 0.7
 removes (23 → 22 SCF steps; slower modes remain); DIIS on the Hartree
-potential is erratic there.
+potential is erratic there (51 steps: the exchange lags the mixed potential),
+DIIS on the orbitals converges in 12 steps (12 s instead of 19 s).
 
 On the first Approach a diagonalizer without previous eigenvectors gets the
 current occupied orbitals as start vectors (`SetStartVectors`, a binding of
@@ -713,15 +717,24 @@ mixed:
 - `"density"`: purify the mixed 1-RDM (1−α)·D_old + α·D_new to its top
   natural orbitals (`Orbs_MixOccupiedSpace`, α from `mixing.linear.alpha`)
 
-Rule of thumb: `potential` + `linear` with α ≈ 0.5–0.9 is a strong default;
-add DIIS for systems where linear mixing stalls. Avoid DIIS with very small α
-(the exchange operator lags the mixed potential; see A_Mixing.md).
+Rule of thumb (measurements and the reasons in src/Mixing/A_Mixing.md,
+"What to mix" and "Recommended settings"):
+
+- DIIS: `"orbitals"` with `"mixing": { "diis": { "startThreshold": 0.0 } }`
+  for every SCF and the MCSCF Fock solvers. H2O Hartree–Fock on grid.fem
+  takes 12 instead of 22 SCF steps. DIIS on the Hartree potential of
+  Hartree–Fock, a hybrid or MCSCF is slower than linear mixing: the exchange
+  lags the mixed potential.
+- `mcscf.gradient`: DIIS with the default start gate (0.1).
+- Linear mixing: `"potential"` with α ≈ 0.5–0.9.
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Slow/no convergence | Try `mixTarget: "potential"`; reduce α (e.g., 0.3–0.5); try `mixing.diis` |
+| Slow/no convergence | `mixTarget: "orbitals"` with `mixing.diis` (`startThreshold` 0); linear mixing: `mixTarget: "potential"`, reduce α (e.g., 0.3–0.5) |
+| DIIS slower than linear mixing | DIIS on `mixTarget: "potential"` with an exact exchange or MCSCF: mix `"orbitals"` |
+| A program runs several SCFs (another functional, from the converged orbitals) | `call Mixing_Reset` before each further SCF: the DIIS history belongs to the previous map |
 | ARPACK convergence failure | Increase `nKry`, check `nEvals` ≤ dim/2 |
 | ARPACK hopeless on a huge grid (stiff Fock operator) | Use `lobpcg` with `GroundSolver_PreconditionAction`, `metricWeights` (the grid weights) and `aceQ` |
 | LOBPCG hits maxIter | Without `SysKinetic_SolveShifted` the preconditioner is the identity: raise `maxIter` / relax `tol` |

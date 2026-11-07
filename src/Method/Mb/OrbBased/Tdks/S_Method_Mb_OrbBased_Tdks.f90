@@ -24,13 +24,12 @@ submodule(M_Method_Mb_OrbBased_Tdks) S_Method_Mb_OrbBased_Tdks
   !> Static CI coefficients (the occupations of the determinant)
   complex(R64), allocatable, target :: staticComponents(:)
 
-  !> Spin blocks: stored-orbital ranges, density column, 1-RDM ranges of the
-  !> density weights (one or two spin blocks of rdm1, summed) and of the
-  !> exchange weights
+  !> Spin blocks: stored-orbital ranges, density column and the 1-RDM blocks
+  !> rdm1(r0:, r0:), r0 = rdmStart(k, b), k ≤ nRdmBlocks(b), whose sum weights
+  !> the density (restricted: R↑ + R↓); the first one weights the exchange
   integer(I32) :: nBlocks = 0
   integer(I32), allocatable :: blockStart(:), blockEnd(:), blockSpin(:)
-  integer(I32), allocatable :: densityRdmStart(:, :), exchangeRdmStart(:)
-  integer(I32), allocatable :: nDensityRdmBlocks(:)
+  integer(I32), allocatable :: rdmStart(:, :), nRdmBlocks(:)
 
   !> Energy multiplicity of the exchange of a block (2: restricted storage)
   real(R64) :: exchangeMultiplicity = 1.0_R64
@@ -125,8 +124,7 @@ contains
     integer(I32) :: nOS, bt
 
     nOS = Orbs_nOrbsInState
-    if (allocated(blockStart)) deallocate (blockStart, blockEnd, blockSpin, densityRdmStart, exchangeRdmStart, &
-                                           nDensityRdmBlocks)
+    if (allocated(blockStart)) deallocate (blockStart, blockEnd, blockSpin, rdmStart, nRdmBlocks)
 
     if (Orbs_restrictedQ) then
       if (Method_Mb_nBodyTypes .ne. 2) error stop "method.mb.orbBased.tdks: restricted orbitals need two body types (spins)"
@@ -135,26 +133,23 @@ contains
       Method_Mb_OrbBased_Tdks_nSpin = 1
       nBlocks = 1
       exchangeMultiplicity = 2.0_R64
-      allocate (blockStart(1), blockEnd(1), blockSpin(1), densityRdmStart(2, 1), exchangeRdmStart(1), nDensityRdmBlocks(1))
+      allocate (blockStart(1), blockEnd(1), blockSpin(1), rdmStart(2, 1), nRdmBlocks(1))
       blockStart(1) = 1
       blockEnd(1) = nOS
       blockSpin(1) = 1
-      nDensityRdmBlocks(1) = 2
-      densityRdmStart(:, 1) = [1, nOS + 1]
-      exchangeRdmStart(1) = 1
+      nRdmBlocks(1) = 2
+      rdmStart(:, 1) = [1, nOS + 1]
     else
       Method_Mb_OrbBased_Tdks_nSpin = 2
       nBlocks = Method_Mb_nBodyTypes
       exchangeMultiplicity = 1.0_R64
-      allocate (blockStart(nBlocks), blockEnd(nBlocks), blockSpin(nBlocks), densityRdmStart(2, nBlocks), &
-                exchangeRdmStart(nBlocks), nDensityRdmBlocks(nBlocks))
+      allocate (blockStart(nBlocks), blockEnd(nBlocks), blockSpin(nBlocks), rdmStart(2, nBlocks), nRdmBlocks(nBlocks))
       do bt = 1, nBlocks
         blockStart(bt) = Method_Mb_OrbBased_nOrbsStart(bt)
         blockEnd(bt) = Method_Mb_OrbBased_nOrbsEnd(bt)
         blockSpin(bt) = bt
-        nDensityRdmBlocks(bt) = 1
-        densityRdmStart(:, bt) = blockStart(bt)
-        exchangeRdmStart(bt) = blockStart(bt)
+        nRdmBlocks(bt) = 1
+        rdmStart(:, bt) = blockStart(bt)
       end do
     end if
 
@@ -349,7 +344,7 @@ contains
 
     oneBody = 0.0_R64
     do b = 1, nBlocks
-      call FillDensityWeights(gD, Orbs_orbs, Method_Mb_OrbBased_rdm1, b)
+      call FillBlockWeights(gD, Orbs_orbs, Method_Mb_OrbBased_rdm1, b, nRdmBlocks(b))
       do i = blockStart(b), blockEnd(b)
         oneBody = oneBody + real(Grid_InnerProduct(gD(:, i - blockStart(b) + 1), hOrbs(:, i)), kind=R64)
       end do
@@ -376,26 +371,12 @@ contains
     real(R64), intent(in) :: time
     complex(R64), intent(inout), contiguous, optional :: dOrbs_(:, :)
 
-    real(R64), allocatable :: density(:, :), kohnShamPot(:, :)
+    real(R64), allocatable :: kohnShamPot(:, :)
     complex(R64), allocatable :: g(:, :), kOrbs(:, :), orbTmp(:)
     real(R64) :: hartreeEnergy, xcEnergy, exchangeEnergy, a
-    integer(I32) :: nSpin, b, i, iS, iE
+    integer(I32) :: b, i, iS, iE
 
-    if (nBlocks .eq. 0) error stop "method.mb.orbBased.tdks: Method_Setup was not called"
-    nSpin = Method_Mb_OrbBased_Tdks_nSpin
-
-    !------------------------------------
-    ! densities and local Kohn-Sham potentials
-    !------------------------------------
-
-    allocate (density(SysXc_nPoints, nSpin), kohnShamPot(SysXc_nPoints, nSpin))
-    density(:, :) = 0.0_R64
-    do b = 1, nBlocks
-      call FillDensityWeights(g, orbs, rdm1, b)
-      call SysXc_AddDensity(density(:, blockSpin(b)), orbs(:, blockStart(b):blockEnd(b)), g)
-    end do
-
-    call SysXc_FillKohnShamPotential(kohnShamPot, hartreeEnergy, xcEnergy, density, time)
+    call FillSpinKohnShamPotentials(kohnShamPot, hartreeEnergy, xcEnergy, orbs, rdm1, time)
 
     if (present(dOrbs_)) then
       allocate (orbTmp(Grid_nPoints))
@@ -417,7 +398,7 @@ contains
       do b = 1, nBlocks
         iS = blockStart(b)
         iE = blockEnd(b)
-        call FillExchangeWeights(g, orbs, rdm1, b)
+        call FillBlockWeights(g, orbs, rdm1, b, 1)
         allocate (kOrbs(Grid_nPoints, iE - iS + 1))
         call ApplyExchange(kOrbs, orbs(:, iS:iE), g, time)
         do i = 1, iE - iS + 1
@@ -438,7 +419,6 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_OrbBased_Tdks_FillKohnShamPotential(kohnShamPot, spinOfBodyType, orbs, rdm1, time)
     use M_Method_Mb
-    use M_SysXc
 
     real(R64), intent(out), allocatable :: kohnShamPot(:, :)
     integer(I32), intent(out), allocatable :: spinOfBodyType(:)
@@ -446,21 +426,10 @@ contains
     complex(R64), intent(in), contiguous :: rdm1(:, :)
     real(R64), intent(in) :: time
 
-    real(R64), allocatable :: density(:, :)
-    complex(R64), allocatable :: g(:, :)
     real(R64) :: hartreeEnergy, xcEnergy
-    integer(I32) :: b, bt
+    integer(I32) :: bt
 
-    if (nBlocks .eq. 0) error stop "method.mb.orbBased.tdks: Method_Setup was not called"
-
-    allocate (density(SysXc_nPoints, Method_Mb_OrbBased_Tdks_nSpin), &
-              kohnShamPot(SysXc_nPoints, Method_Mb_OrbBased_Tdks_nSpin))
-    density(:, :) = 0.0_R64
-    do b = 1, nBlocks
-      call FillDensityWeights(g, orbs, rdm1, b)
-      call SysXc_AddDensity(density(:, blockSpin(b)), orbs(:, blockStart(b):blockEnd(b)), g)
-    end do
-    call SysXc_FillKohnShamPotential(kohnShamPot, hartreeEnergy, xcEnergy, density, time)
+    call FillSpinKohnShamPotentials(kohnShamPot, hartreeEnergy, xcEnergy, orbs, rdm1, time)
 
     ! Column of every body type: restricted storage uses the total density
     ! (one column) for both spins
@@ -472,12 +441,44 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> g = φ_b R_density of block b (restricted: R↑ + R↓).
-  subroutine FillDensityWeights(g, orbs, rdm1, b)
+  !> Spin densities of the blocks and their local Kohn-Sham potentials
+  !> v_KS,s (SysXc_nPoints, nSpin) with the Hartree and xc energies.
+  subroutine FillSpinKohnShamPotentials(kohnShamPot, hartreeEnergy, xcEnergy, orbs, rdm1, time)
+    use M_SysXc
+
+    real(R64), intent(out), allocatable :: kohnShamPot(:, :)
+    real(R64), intent(out) :: hartreeEnergy
+    real(R64), intent(out) :: xcEnergy
+    complex(R64), intent(in), contiguous :: orbs(:, :)
+    complex(R64), intent(in), contiguous :: rdm1(:, :)
+    real(R64), intent(in) :: time
+
+    real(R64), allocatable :: density(:, :)
+    complex(R64), allocatable :: g(:, :)
+    integer(I32) :: b
+
+    if (nBlocks .eq. 0) error stop "method.mb.orbBased.tdks: Method_Setup was not called"
+
+    allocate (density(SysXc_nPoints, Method_Mb_OrbBased_Tdks_nSpin), &
+              kohnShamPot(SysXc_nPoints, Method_Mb_OrbBased_Tdks_nSpin))
+    density(:, :) = 0.0_R64
+    do b = 1, nBlocks
+      call FillBlockWeights(g, orbs, rdm1, b, nRdmBlocks(b))
+      call SysXc_AddDensity(density(:, blockSpin(b)), orbs(:, blockStart(b):blockEnd(b)), g)
+    end do
+    call SysXc_FillKohnShamPotential(kohnShamPot, hartreeEnergy, xcEnergy, density, time)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> g = φ_b R of block b, R the sum of its first nRdm 1-RDM blocks (the
+  !> density: nRdmBlocks(b), restricted R↑ + R↓; the exchange: 1, R_s).
+  subroutine FillBlockWeights(g, orbs, rdm1, b, nRdm)
     complex(R64), intent(out), allocatable :: g(:, :)
     complex(R64), intent(in), contiguous :: orbs(:, :)
     complex(R64), intent(in), contiguous :: rdm1(:, :)
     integer(I32), intent(in) :: b
+    integer(I32), intent(in) :: nRdm
 
     complex(R64), allocatable :: weights(:, :)
     integer(I32) :: n, k, r0
@@ -485,27 +486,11 @@ contains
     n = blockEnd(b) - blockStart(b) + 1
     allocate (weights(n, n))
     weights(:, :) = 0.0_R64
-    do k = 1, nDensityRdmBlocks(b)
-      r0 = densityRdmStart(k, b)
+    do k = 1, nRdm
+      r0 = rdmStart(k, b)
       weights(:, :) = weights(:, :) + rdm1(r0:r0 + n - 1, r0:r0 + n - 1)
     end do
     g = matmul(orbs(:, blockStart(b):blockEnd(b)), weights)
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> g = φ_b R_s of the exchange of block b (restricted: R↑).
-  subroutine FillExchangeWeights(g, orbs, rdm1, b)
-    complex(R64), intent(out), allocatable :: g(:, :)
-    complex(R64), intent(in), contiguous :: orbs(:, :)
-    complex(R64), intent(in), contiguous :: rdm1(:, :)
-    integer(I32), intent(in) :: b
-
-    integer(I32) :: n, r0
-
-    n = blockEnd(b) - blockStart(b) + 1
-    r0 = exchangeRdmStart(b)
-    g = matmul(orbs(:, blockStart(b):blockEnd(b)), rdm1(r0:r0 + n - 1, r0:r0 + n - 1))
 
   end subroutine
 

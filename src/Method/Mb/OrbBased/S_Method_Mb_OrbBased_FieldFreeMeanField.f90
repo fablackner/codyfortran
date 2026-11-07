@@ -94,13 +94,9 @@ contains
     end if
     setupQ = .true.
 
-    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ .and. Method_Mb_OrbBased_kohnShamQ) then
-      write (*, '(A)') " exact field-free part: h0 + U with the frozen Kohn-Sham reference U = v_KS - a K0 &
-                       &(exactFieldFreeMeanFieldQ), built from the state at the first propagation unless built before"
-    else if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) then
-      write (*, '(A)') " exact field-free part: h0 + U with the frozen mean-field reference U = J0 - K0 &
-                       &(exactFieldFreeMeanFieldQ), built from the state at the first propagation unless built before"
-    end if
+    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) &
+      write (*, '(3A)') " exact field-free part: h0 + U with the ", ReferenceName(), &
+      " (exactFieldFreeMeanFieldQ), built from the state at the first propagation unless built before"
 
   end subroutine
 
@@ -206,15 +202,9 @@ contains
 
     call system_clock(count1)
     seconds = real(count1 - count0, kind=R64) / real(countRate, kind=R64)
-    if (Method_Mb_OrbBased_kohnShamQ) then
-      write (*, '(A,F10.4,A,F14.10,A,I0,A,F8.2,A)') " exact field-free part: frozen Kohn-Sham reference U = v_KS - a K0 &
-        &built at t =", time, " from the 1-RDM of the state (N =", real(SumDiagonal(rdmSpatial), kind=R64), "): 1 + ", &
-        nPairSolves, " potential solves,", seconds, " s"
-    else
-      write (*, '(A,F10.4,A,F14.10,A,I0,A,F8.2,A)') " exact field-free part: frozen mean-field reference U = J0 - K0 &
-        &built at t =", time, " from the 1-RDM of the state (N =", real(SumDiagonal(rdmSpatial), kind=R64), "): 1 + ", &
-        nPairSolves, " potential solves,", seconds, " s"
-    end if
+    write (*, '(3A,F10.4,A,F14.10,A,I0,A,F8.2,A)') " exact field-free part: ", ReferenceName(), " built at t =", time, &
+      " from the 1-RDM of the state (N =", real(SumDiagonal(rdmSpatial), kind=R64), "): 1 + ", nPairSolves, &
+      " potential solves,", seconds, " s"
 
   end subroutine
 
@@ -324,6 +314,19 @@ contains
     if (allocated(meanFieldZetaEnd)) deallocate (meanFieldZetaEnd)
 
   end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Name of the reference in the log lines.
+  function ReferenceName() result(res)
+    character(len=:), allocatable :: res
+
+    if (Method_Mb_OrbBased_kohnShamQ) then
+      res = "frozen Kohn-Sham reference U = v_KS - a K0"
+    else
+      res = "frozen mean-field reference U = J0 - K0"
+    end if
+
+  end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Sum of the diagonal of a square matrix.

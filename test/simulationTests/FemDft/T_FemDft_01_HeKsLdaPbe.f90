@@ -15,6 +15,7 @@ program T_FemDft_01_HeKsLdaPbe
   use M_Grid
   use M_SysXc
   use M_Orbs
+  use M_Mixing
   use M_Method_Mb_OrbBased_Tdks
   use testdrive, only: check, error_type
 
@@ -46,6 +47,7 @@ program T_FemDft_01_HeKsLdaPbe
   call jsonFile % add("sysXc.fem.libxc.functionals", ["gga_x_pbe", "gga_c_pbe"])
   call SysXc_Fabricate
   call SysXc_Setup
+  call Mixing_Reset
   energyPbe = energyLda
   epsPbe = epsLda
   call RunScf(nScfPbe, maxWarmPbe, convergedPbe, energyPbe, epsPbe, "PBE", maxScfIterations, convThresh, epsThresh, &

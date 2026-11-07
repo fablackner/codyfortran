@@ -9,11 +9,13 @@
 !> sysXc.fem.libxc (LDA, GGA or a global hybrid, e.g. ["lda_x", "lda_c_vwn"],
 !> ["gga_x_pbe", "gga_c_pbe"], ["hyb_gga_xc_pbeh"]), groundSolver.scf.stdImpl
 !> with the Kohn–Sham mean field (local potential v_KS = J + v_xc of the
-!> total density, mixed with mixTarget "potential"; the exact exchange of a
-!> hybrid by ACE with aceQ) and the eigensolver diagonalizerList.lobpcg in the
-!> FEM metric (metricWeights = Grid_Fem_weights), preconditioned by the exact
-!> FDM solve (T + max(−θ, σ_min))⁻¹ (GroundSolver_PreconditionAction). The
-!> start orbitals of orbsInit (orbsInit.fem.sto, or orbsInit.load to continue
+!> total density; the exact exchange of a hybrid by ACE with aceQ; DIIS on the
+!> orbitals, mixTarget "orbitals" with mixing.diis.startThreshold 0, a complete
+!> iterate for every functional: src/Mixing/A_Mixing.md) and the eigensolver
+!> diagonalizerList.lobpcg in the FEM metric (metricWeights =
+!> Grid_Fem_weights), preconditioned by the exact FDM solve
+!> (T + max(−θ, σ_min))⁻¹ (GroundSolver_PreconditionAction). The start
+!> orbitals of orbsInit (orbsInit.fem.sto, or orbsInit.load to continue
 !> an earlier run on the same mesh, e.g. the Hartree–Fock orbitals of
 !> ../scf) are orthonormalized first.
 !>

@@ -20,7 +20,9 @@
 !> steps, 804 Fock products at tol 1e-8); its leading error mode oscillates
 !> with a factor ≈ −0.46, which α ≈ 1/1.46 removes (22 steps, 736 products;
 !> slower modes remain). DIIS on the Hartree potential is erratic here (51
-!> steps).
+!> steps: the exchange lags the mixed potential); DIIS on the orbitals
+!> (mixTarget "orbitals", mixing.diis.startThreshold 0) converges in 12 steps
+!> (src/Mixing/A_Mixing.md, "What to mix").
 !>
 !> Mesh (identical to the numpy prototype of the FEM design): box ±8, nLocals
 !> 4, hMin 0.1 at O and 0.3 at the H atoms, growth 1.8, hMax 3.0, multipole
