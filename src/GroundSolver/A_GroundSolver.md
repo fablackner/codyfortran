@@ -244,6 +244,9 @@ call GroundSolver_PreconditionAction(dOrb, orb, shift, time)
 ! One-line note if DiagonalizerList(iDiag) did not converge (backends call it)
 call GroundSolver_NoteUnconverged(iDiag)
 
+! mixTarget "potential": accept the next potential (backends call it)
+call GroundSolver_MixPotential(mixed, raw)
+
 ```
 
 ### Parameters
@@ -713,7 +716,10 @@ mixed:
   orbitals, then orthonormalize
 - `"potential"`: mix the Hartree potential (≡ density mixing) and replace the
   orbitals outright — often converges in far fewer iterations, since the
-  potential is gauge-invariant and the map is smooth in it
+  potential is gauge-invariant and the map is smooth in it. Every backend
+  goes through `GroundSolver_MixPotential`: the potential of the initial
+  orbitals is the start iterate (taken as is; a zero start costs up to two
+  SCF steps), every later raw potential is mixed into the accepted one
 - `"density"`: purify the mixed 1-RDM (1−α)·D_old + α·D_new to its top
   natural orbitals (`Orbs_MixOccupiedSpace`, α from `mixing.linear.alpha`)
 

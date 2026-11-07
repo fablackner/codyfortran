@@ -92,9 +92,6 @@ submodule(M_GroundSolver_Mcscf_StdImpl) S_GroundSolver_Mcscf_StdImpl
   !> What quantity the mixer acts on: "orbitals" or "potential"
   character(len=:), allocatable :: mixTarget
 
-  !> Whether hartreePotentialMixed already holds an accepted (mixed) potential
-  logical :: hartreePotentialMixedInitializedQ = .false.
-
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -301,12 +298,7 @@ contains
     weightedSrc = 0.0_R64
 
     if (mixTarget .eq. "potential") then
-      if (hartreePotentialMixedInitializedQ) then
-        call Mixing_Mix(hartreePotentialMixed, hartreePotentialRaw)
-      else
-        hartreePotentialMixed = hartreePotentialRaw
-        hartreePotentialMixedInitializedQ = .true.
-      end if
+      call GroundSolver_MixPotential(hartreePotentialMixed, hartreePotentialRaw)
     else
       hartreePotentialMixed = hartreePotentialRaw
     end if

@@ -191,10 +191,6 @@ submodule(M_GroundSolver_Scf_StdImpl) S_GroundSolver_Scf_StdImpl
   complex(R64), allocatable :: orbsTmp(:, :)
   real(R64), allocatable :: lambdaDiscarded(:)
 
-  !> Whether the mixed quantity of mixTarget "potential" or "density" holds an
-  !> accepted iterate (the first one is taken as is)
-  logical :: acceptedIterateQ = .false.
-
   !-----------------------------------------------------------------------------
   ! Kohn-Sham DFT (sysXc)
   !-----------------------------------------------------------------------------
@@ -207,7 +203,8 @@ submodule(M_GroundSolver_Scf_StdImpl) S_GroundSolver_Scf_StdImpl
   !> mixTarget="potential"
   real(R64), allocatable :: kohnShamPotential(:)
 
-  !> Complex copies of the accepted and raw v_KS for the mixer
+  !> Complex copies of the accepted and raw v_KS for the mixer (accepted:
+  !> allocated by the first GroundSolver_MixPotential)
   complex(R64), allocatable :: kohnShamPotentialMixed(:), kohnShamPotentialRaw(:)
 
 contains
@@ -431,7 +428,7 @@ contains
     else
       call SysInteraction_FillDirectPotential(hartreePotentialRaw, orbs(:, 1:nUp), orbs(:, 1:nUp), time, factor_=2.0_R64)
       if (mixTarget .eq. "potential") then
-        call MixPotential(hartreePotentialMixed, hartreePotentialRaw)
+        call GroundSolver_MixPotential(hartreePotentialMixed, hartreePotentialRaw)
       else
         hartreePotentialMixed = hartreePotentialRaw
       end if
@@ -477,13 +474,8 @@ contains
       orbsRawFlat(1:nG * nUp) => orbsRaw
       call Mixing_Mix(state(1:nG * nUp), orbsRawFlat)
     else if (mixTarget .eq. "density") then
-      if (acceptedIterateQ) then
-        call Orbs_MixOccupiedSpace(orbs(:, 1:nUp), orbsRaw, alphaDensity, orbsTmp, lambdaDiscarded)
-        orbs(:, 1:nUp) = orbsTmp
-      else
-        orbs(:, 1:nUp) = orbsRaw
-        acceptedIterateQ = .true.
-      end if
+      call Orbs_MixOccupiedSpace(orbs(:, 1:nUp), orbsRaw, alphaDensity, orbsTmp, lambdaDiscarded)
+      orbs(:, 1:nUp) = orbsTmp
     else
       ! mixTarget="potential": pure replacement, damping happened in Step 2
       do j = 1, nUp
@@ -504,31 +496,13 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> mixTarget="potential": mix raw into the accepted potential (Mixing_Mix);
-  !> the first potential is taken as is.
-  subroutine MixPotential(mixed, raw)
-    use M_Mixing
-
-    complex(R64), intent(inout), allocatable :: mixed(:)
-    complex(R64), intent(in), contiguous :: raw(:)
-
-    if (acceptedIterateQ) then
-      call Mixing_Mix(mixed, raw)
-    else
-      mixed = raw
-      acceptedIterateQ = .true.
-    end if
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Kohn-Sham work arrays (the xc points of SysXc).
   subroutine SetupKohnSham
     use M_SysXc
 
     if (SysXc_nPoints .le. 0) error stop "groundSolver.scf.stdImpl: call SysXc_Fabricate and SysXc_Setup first"
     allocate (kohnShamPotential(SysXc_nPoints))
-    allocate (kohnShamPotentialMixed(SysXc_nPoints), kohnShamPotentialRaw(SysXc_nPoints))
+    allocate (kohnShamPotentialRaw(SysXc_nPoints))
     kohnShamPotential(:) = 0.0_R64
 
   end subroutine
@@ -536,9 +510,10 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> v_KS = J + v_xc of the closed-shell density 2 Σ_j |φ_j|² of the
   !> occupied orbitals (unpolarized functional); for mixTarget="potential"
-  !> mixed into the accepted potential (the first one taken as is).
+  !> mixed into the accepted potential (GroundSolver_MixPotential).
   subroutine FillKohnShamPotential(occupiedOrbs, time)
     use M_SysXc
+    use M_GroundSolver
 
     complex(R64), intent(in), contiguous :: occupiedOrbs(:, :)
     real(R64), intent(in) :: time
@@ -554,7 +529,7 @@ contains
 
     if (mixTarget .eq. "potential") then
       kohnShamPotentialRaw(:) = cmplx(potRaw(:, 1), 0.0_R64, kind=R64)
-      call MixPotential(kohnShamPotentialMixed, kohnShamPotentialRaw)
+      call GroundSolver_MixPotential(kohnShamPotentialMixed, kohnShamPotentialRaw)
       kohnShamPotential(:) = real(kohnShamPotentialMixed(:), kind=R64)
     else
       kohnShamPotential(:) = potRaw(:, 1)

@@ -82,9 +82,6 @@ submodule(M_GroundSolver_Scf_YlmOpt) S_GroundSolver_Scf_YlmOpt
   !> What quantity the mixer acts on: "orbitals" or "potential"
   character(len=:), allocatable :: mixTarget
 
-  !> Whether hartreePotentialMixed already holds an accepted (mixed) potential
-  logical :: hartreePotentialMixedInitializedQ = .false.
-
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -140,7 +137,6 @@ contains
     allocate (interactionPotential(potSize))
     allocate (dOrbLmTmp(Grid_Ylm_nRadial))
     allocate (potLm(Grid_Ylm_nRadial))
-    allocate (hartreePotentialMixed(Grid_Ylm_nRadial))
     allocate (hartreePotentialRaw(Grid_Ylm_nRadial))
     allocate (srcLm(Grid_Ylm_nRadial))
     allocate (orb(Grid_nPoints))
@@ -266,12 +262,7 @@ contains
     call SysInteraction_Ylm_FillInteractionPotentialRadial(hartreePotentialRaw, srcLm, 0, 0, time)
 
     if (mixTarget .eq. "potential") then
-      if (hartreePotentialMixedInitializedQ) then
-        call Mixing_Mix(hartreePotentialMixed, hartreePotentialRaw)
-      else
-        hartreePotentialMixed = hartreePotentialRaw
-        hartreePotentialMixedInitializedQ = .true.
-      end if
+      call GroundSolver_MixPotential(hartreePotentialMixed, hartreePotentialRaw)
     else
       hartreePotentialMixed = hartreePotentialRaw
     end if

@@ -105,6 +105,22 @@ module M_GroundSolver
     end function
   end interface
 
+  interface GroundSolver_MixPotential
+    !> @brief Accept the next mean-field potential of mixTarget "potential".
+    !>
+    !> @details
+    !> raw is the potential of the current orbitals. The first call (mixed
+    !> not allocated) takes it as is: the initial orbitals are not the
+    !> eigenvectors of any accepted potential, so their potential is the start
+    !> iterate, not a fixed-point step (a zero start costs up to two SCF
+    !> steps and puts a pair of no map into the DIIS history). Every later
+    !> call mixes raw, the image of mixed, into mixed (`Mixing_Mix`).
+    module subroutine GroundSolver_MixPotential(mixed, raw)
+      complex(R64), intent(inout), allocatable :: mixed(:)
+      complex(R64), intent(in), contiguous :: raw(:)
+    end subroutine
+  end interface
+
   !=============================================================================
   ! module data
   !=============================================================================

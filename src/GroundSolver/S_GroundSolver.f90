@@ -107,6 +107,21 @@ contains
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine GroundSolver_MixPotential(mixed, raw)
+    use M_Mixing
+
+    complex(R64), intent(inout), allocatable :: mixed(:)
+    complex(R64), intent(in), contiguous :: raw(:)
+
+    if (allocated(mixed)) then
+      call Mixing_Mix(mixed, raw)
+    else
+      mixed = raw
+    end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> @brief Orbital preconditioner: dOrb ≈ (F̂ − shift)⁻¹·orb.
   !>
   !> @details
