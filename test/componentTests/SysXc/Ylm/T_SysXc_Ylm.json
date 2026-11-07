@@ -1,0 +1,28 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 3,
+            "mmax": 2,
+            "rmax": 12.0,
+            "fedvr": {
+                "nElements": 6,
+                "nLocals": 12
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "blockEq": { }
+            }
+        }
+    },
+    "sysXc": {
+        "ylm": {
+            "libxc": {
+                "functionals": [ "lda_x", "lda_c_pw" ]
+            }
+        }
+    }
+}

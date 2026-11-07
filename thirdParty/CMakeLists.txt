@@ -158,6 +158,31 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/sources/arpack")
 endif()
 
 #============================================================================
+# Libxc: only the C library is built (CodyFortran binds the C API itself,
+# M_Utils_XcLib, so no Fortran modules of a matching compiler are needed);
+# the third and fourth functional derivatives (kxc, lxc) are not used and
+# disabling them shortens the long compilation considerably
+if(EXISTS "${CMAKE_SOURCE_DIR}/sources/libxc")
+    ExternalProject_Add(
+        libxc
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/sources/libxc"
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+            -DCMAKE_INSTALL_LIBDIR=lib
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            -DBUILD_SHARED_LIBS=ON
+            -DBUILD_TESTING=OFF
+            -DENABLE_FORTRAN=OFF
+            -DENABLE_PYTHON=OFF
+            -DDISABLE_KXC=ON
+            -DDISABLE_LXC=ON
+        INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
+        BUILD_ALWAYS OFF
+    )
+endif()
+
+#============================================================================
 if(EXISTS "${CMAKE_SOURCE_DIR}/sources/gsl")
     ExternalProject_Add(
         gsl

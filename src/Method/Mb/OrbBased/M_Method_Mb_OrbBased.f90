@@ -513,16 +513,24 @@ module M_Method_Mb_OrbBased
   !> spectral cut, no imaginary time).
   logical :: Method_Mb_OrbBased_exactFieldFreeQ = .false.
 
-  !> If true (method.mb.orbBased.exactFieldFreeMeanFieldQ; Cayley exact part
-  !> and MCTDHX only), the exact part propagates h0 + U with a frozen
-  !> mean-field reference U = J0 - K0 (static, Hermitian; built once from the
-  !> state, Method_Mb_OrbBased_BuildFieldFreeMeanField), and the nonlinear
-  !> split-step part propagates the interaction minus U (orbitals
-  !> -i Q (W - U) phi, CI coefficients (H2 - U^) C). The equations of motion
-  !> are unchanged; the split is that of the Fock operator of the reference
-  !> and a remainder that is small near it (A_Method.md, "Frozen mean-field
+  !> If true (method.mb.orbBased.exactFieldFreeMeanFieldQ; Cayley exact part,
+  !> MCTDHX and TDKS), the exact part propagates h0 + U with a frozen
+  !> mean-field reference U (static, Hermitian; built once from the state,
+  !> Method_Mb_OrbBased_BuildFieldFreeMeanField): U = J0 - K0 for MCTDHX,
+  !> U = v_KS[rho0] - a K0 for TDKS (Method_Mb_OrbBased_kohnShamQ). The
+  !> nonlinear split-step part propagates the mean field minus U (MCTDHX:
+  !> orbitals -i Q (W - U) phi, CI coefficients (H2 - U^) C; TDKS: orbitals
+  !> -i (v_KS - a K - U) phi). The equations of motion are unchanged; the
+  !> split is that of the Fock (Kohn-Sham) operator of the reference and a
+  !> remainder that is small near it (A_Method.md, "Frozen mean-field
   !> reference").
   logical :: Method_Mb_OrbBased_exactFieldFreeMeanFieldQ = .false.
+
+  !> Whether the mean field of the method is the Kohn-Sham potential of a
+  !> density functional (method.mb.orbBased.tdks; set by its fabricate,
+  !> reset by Method_Mb_OrbBased_Fabricate): the frozen mean-field reference
+  !> is then U = v_KS[rho0] - a K0 (Method_Mb_OrbBased_Tdks_FillKohnShamPotential).
+  logical :: Method_Mb_OrbBased_kohnShamQ = .false.
 
   !> Pointer to the setup of the exact field-free part (called by
   !> Method_Mb_OrbBased_Setup if the method binds Method_PropagateExactPart):
@@ -586,8 +594,9 @@ module M_Method_Mb_OrbBased
   !> orbitals are restricted to the h0 eigenvectors with energy below this
   !> value. The exact part drops the eigenvectors above it, and the linear and
   !> nonlinear orbital derivatives are projected with
-  !> `Method_Mb_OrbBased_ApplySpectralCut`, so the unphysical high-energy
-  !> FEDVR states are never populated.
+  !> `Method_Mb_OrbBased_ApplySpectralCut` (MCTDHX, TDKS), so the unphysical
+  !> high-energy FEDVR states are never populated. For TDKS with a GGA it is
+  !> the stability condition of the split step: Ec * dt < pi.
   real(R64) :: Method_Mb_OrbBased_exactFieldFreeCut = 0.0_R64
 
   !> Pointer to the projection of orbital derivatives onto the h0 eigenvectors

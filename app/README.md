@@ -4,7 +4,7 @@ Production runs built on the CodyFortran library. Every leaf folder holds one
 program `P_X.f90` and its input `P_X.json` (and `P_X.exe` after the build).
 Programs are named `P_<Stage><Method><Variant>`: stage `Ground` (ground or
 initial state), `Laser` (laser pulse) or `Kick` (delta kick); method `Scf`,
-`Mcscf`, `Mctdhf`, `Td2rdm` or `Tdhf`; variant the gauge (`Velocity`,
+`Mcscf`, `Mctdhf`, `Td2rdm`, `Tdhf`, `Ks` (Kohn–Sham DFT) or `Tddft`; variant the gauge (`Velocity`,
 `Length`) or the grid (`Ylm`, `Fem`) where several exist.
 
 ```
@@ -23,7 +23,9 @@ atoms/
        dynamics/mctdhfLengthGauge              P_LaserMctdhfLength    from mcscf
 molecules/
   h2/, h2o/  groundstate/scf                   P_GroundScfFem
+             groundstate/dft                   P_GroundKsFem          Kohn-Sham DFT (sysXc, Libxc)
              dynamics/tdhf                     P_KickTdhfFem          absorption spectrum
+             dynamics/tddft                    P_KickTddftFem         absorption spectrum, real-time TDDFT
              analysis/absorption_spectrum.py
 ```
 
@@ -114,6 +116,35 @@ history). For the isotropic H2O spectrum run three kicks
 pass all three `dipole.dat` files to the script. Restarts use
 `program.saveStep` and `program.startTime` with `orbsInit.load` reading the
 checkpoint of the run directory (no `dir`); keep `meanFieldReference.dat`.
+
+## H2 and H2O: Kohn–Sham DFT and TDDFT kick spectra on grid.fem
+
+The same steps with a density functional (`sysXc.fem.libxc`, `src/SysXc/A_SysXc.md`):
+
+1. `groundstate/dft` (`P_GroundKsFem`, method `tdks`) writes the Kohn–Sham
+   orbitals and `femMesh.dat`; the functional is the `sysXc` block of its
+   input (LDA `["lda_x", "lda_c_vwn"]` in the inputs; GGA `["gga_x_pbe",
+   "gga_c_pbe"]`, a global hybrid such as `["hyb_gga_xc_pbeh"]` with `aceQ`).
+   H2 LDA: E = −1.1375189, HOMO −10.27 eV (18 SCF steps, 28 s on one
+   thread); PBE: −1.1667267, HOMO −10.38 eV. H2O LDA (DIIS potential
+   mixing; linear mixing oscillates): E = −75.9635786, HOMO −7.40 eV,
+   μ = 0.728 a.u. (14 steps, 3 min on two threads). That is 48.6 mHa below
+   the accurate mesh (nLocals 6, hMin 0.05: −75.9150234), the same offset as
+   HF (49.1 mHa, the Galerkin O nucleus); the valence ε agree to 1e-3 Ha.
+2. `dynamics/tddft` (`P_KickTddftFem`) reads both from `../../groundstate/dft`
+   (same mesh, checked; use the same `sysXc` block), builds the frozen
+   Kohn–Sham reference U = v_KS[ρ0] − a K0 of the ground state, kicks every
+   orbital with e^{iκ r_a} and propagates with real-time TDDFT. It writes
+   `dipole.dat` and `observables.dat` in the format of `dynamics/tdhf`.
+3. The spectrum as above.
+
+The time steps of the inputs (H2 0.05, H2O 0.1, as for TDHF) hold for LDA.
+With a GGA the split step is stable only if every propagated h0 mode has
+E Δt < π, because the kernel of a GGA grows like k², and the stiff nodes at
+the nuclei reach E ~ 10³ a.u. H2 PBE is stable at Δt 0.005 but diverges at
+0.02 and 0.05 (src/Method/A_Method.md, "Time step with a GGA"). A PBE ground
+state is fine at any setting; for PBE dynamics, reduce the time step by
+about 10× (more for H2O, whose O core has hMin 0.1).
 
 Background on the methods: `src/Method/A_Method.md` (exact field-free part,
 Cayley step, frozen mean-field reference) and `src/Propagator/A_Propagator.md`.

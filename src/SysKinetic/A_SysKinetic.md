@@ -252,8 +252,12 @@ for a real or complex shift s (T̂ ∝ 1/m). The blocks are built from the radia
 operator applied to unit vectors and diagonalized (`LapackLib_DiagonalizeSymStack`) at the first call,
 so runs without a consumer pay nothing. The first call is thread-safe (OpenMP
 critical) and prints the eigenvalue range and the metric asymmetry; it stops on
-an ECS grid or an asymmetric block. Cost per call: two dense nRadial² matrix-
-vector products per (l, m) channel. Consumers on Ylm grids:
+an ECS grid or an asymmetric block. Cost per call: two real DGEMMs per l on
+all channels m of that l at once (the channels as the rows of a complex matrix
+viewed as real, (2 nm × nRadial)(nRadial × nRadial)), i.e. two nRadial²
+matrix-vector products per (l, m) channel at BLAS speed (Ne, nRadial 570,
+lmax 1: 2.5 ms instead of 9.7 ms with the former per-channel matmul).
+Consumers on Ylm grids:
 `GroundSolver_PreconditionAction` (LOBPCG of `scf.stdImpl`, 18× fewer Fock
 matvecs in T_Ne3d_17; the orbital step of `groundSolver.mcscf.gradient`).
 Method's exact field-free part keeps its own h0 eigen-decomposition on Ylm

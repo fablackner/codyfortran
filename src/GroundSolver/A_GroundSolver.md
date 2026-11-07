@@ -5,7 +5,7 @@
 The GroundSolver module implements **self-consistent field (SCF) ground-state solvers** for quantum many-body systems. It finds the ground state of a Hamiltonian by iteratively diagonalizing effective operators until convergence.
 
 Available methods are **SCF** (Hartree–Fock mean field, one Fock diagonalization
-per iteration) and **MCSCF** (multiconfiguration self-consistent field, one CI
+per iteration; with a `sysXc` block the Kohn–Sham DFT mean field) and **MCSCF** (multiconfiguration self-consistent field, one CI
 diagonalization plus one orbital update per iteration: a Fock diagonalization
 in stdImpl/ylmOpt, a preconditioned step on the MCTDHX orbital residual in the
 variational `gradient` backend).
@@ -80,6 +80,49 @@ Each `GroundSolver_Approach` call performs one SCF cycle:
 4. **Orthonormalize** via Gram–Schmidt
 
 The caller controls the convergence loop (checking energy change).
+
+### Kohn–Sham DFT (scf.stdImpl with `sysXc`)
+
+With a `sysXc` block (an exchange-correlation functional, `src/SysXc/A_SysXc.md`)
+the same iteration solves the restricted Kohn–Sham equations; it requires
+`method.mb.orbBased.tdks`, whose `Method_GetEnergy` is the Kohn–Sham energy,
+and is refused for every other backend (`GroundSolver_Fabricate`):
+
+```
+F̂_KS = T̂ + V̂_ext + v_KS − a K̂,   v_KS = J + v_xc of ρ = 2 Σ_j |φ_j|²,
+```
+
+- step 1 builds the local Kohn–Sham potential of the closed-shell density on
+  the xc points (`SysXc_AddDensity`, `SysXc_FillKohnShamPotential`, unpolarized
+  functional); with `mixTarget: "potential"` the mixer acts on v_KS (the
+  Hartree and xc potentials together, the standard Kohn–Sham potential
+  mixing); `"orbitals"` and `"density"` work unchanged;
+- `GroundSolver_Scf_HartreeFockAction` applies T̂ + V̂_ext + v_KS
+  (`SysXc_MultiplyWithPotential`) and, for a hybrid (a =
+  `SysXc_exactExchangeFraction` > 0), −a K̂: the ACE operator of the
+  occupied orbitals with `aceQ` (built only if a > 0), else the exact
+  exchange;
+- the preconditioner, start vectors, alignment and orthonormalization are
+  those of Hartree–Fock.
+
+With an empty functional list and `exactExchangeFraction: 1` the iteration is
+Hartree–Fock (T_He3d_03: the HF limit of He). Linear potential mixing needs a
+smaller α than Hartree–Fock (the self-interaction of the 1s density is not
+compensated by exchange: Ne with α = 0.8 oscillates for 60 steps); DIIS with
+α = 0.3 converges Ne in 13 steps.
+
+| Test | System (grid) | Result |
+|------|---------------|--------|
+| `T_He3d_01_GroundSolverKsLda` | He LDA (Ylm FEDVR) | −2.8348356 (NIST −2.834836), ε −0.5704248 |
+| `T_He3d_02_GroundSolverKsPbe` | He PBE (Ylm) | −2.8929349 (−2.892935) |
+| `T_He3d_03_GroundSolverKsExactExchange` | He, exact exchange only | −2.8616800 (HF limit), ε −0.9179556 |
+| `T_Ne3d_18_GroundSolverKsLda` | Ne LDA (Ylm, general φ mode) | −128.2334813 (NIST −128.233481), ε to 2e-6, 13 steps, 2.8 s |
+| `T_FemDft_01_HeKsLdaPbe` | He LDA and PBE (grid.fem) | mesh error −1.8e-5; E_PBE − E_LDA = radial value to 8e-7 |
+| `T_FemDft_02_H2KsLdaPbe0` | H2 LDA and PBE0 (grid.fem) | ACE and exact exchange agree to 1e-13 |
+
+The atom tests share `test/simulationTests/KsScfYlm.inc`, the grid.fem tests
+`test/simulationTests/Fem/FemScf.inc` (which fabricates SysXc when a `sysXc`
+block exists).
 
 ### MCSCF Iteration
 

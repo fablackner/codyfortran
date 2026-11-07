@@ -46,6 +46,11 @@ contains
                    &or groundSolver.mcscf.gradient"
     end if
 
+    ! Kohn-Sham DFT (sysXc): the mean field v_KS - a K of scf.stdImpl; the
+    ! other backends build Hartree-Fock or correlated mean fields
+    if (Json_GetExistence("sysXc") .and. .not. Json_GetExistence("groundSolver.scf.stdImpl")) &
+      error stop "sysXc (Kohn-Sham DFT) requires groundSolver.scf.stdImpl"
+
     !------------------------------------
     ! orbital preconditioner (all backends)
     !------------------------------------

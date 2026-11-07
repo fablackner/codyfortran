@@ -36,6 +36,15 @@ submodule(M_Grid_Fem) S_Grid_Fem_Laplacian
     !> element).
     real(R64), allocatable :: lowerBoundaryColumn(:)
     real(R64), allocatable :: upperBoundaryColumn(:)
+    !> Banded nodal first derivative W^-1 B (Grid_Fem_ApplyGradient):
+    !> derivativeBand(d, i) = (W^-1 B)(i, i + d) with the assembled weak
+    !> derivative B(i, j) = int L_i L_j' dx (GLL quadrature: the derivative of
+    !> the element interpolants at node i, averaged over the elements sharing
+    !> it with their weights); the box values are zero (Dirichlet).
+    real(R64), allocatable :: derivativeBand(:, :)
+    !> Banded adjoint of the derivative in the W metric, W^-1 B^T:
+    !> derivativeAdjointBand(d, i) = B(i + d, i) / w_i.
+    real(R64), allocatable :: derivativeAdjointBand(:, :)
   end type
 
   !> Operator tables of the x, y and z axes (Grid_Fem_SetupAxes).
@@ -88,7 +97,7 @@ contains
 
     type(T_Fedvr_Ctx) :: fedvrCtx
     type(T_DerivativeFedvr_Ctx) :: derivativeCtx
-    real(R64), allocatable :: stiffnessRef(:, :), stiffness(:, :), a(:, :), q(:, :)
+    real(R64), allocatable :: stiffnessRef(:, :), stiffness(:, :), a(:, :), q(:, :), weakDerivative(:, :)
     real(R64) :: smallestElement
     integer(I32) :: p, n, nFull, iE, i0, i, j, d
 
@@ -131,6 +140,28 @@ contains
     do i = 1, n
       do d = max(-p, 1 - i), min(p, n - i)
         ops % laplacianBand(d, i) = stiffness(i + 1, i + d + 1) / axis % weights(i)
+      end do
+    end do
+
+    ! Assembled weak first derivative B(i, j) = int L_i L_j' dx on all nodes:
+    ! the reference matrix wRef(i) dL_j/dxi(xi_i) is independent of the
+    ! element size (wRef h times dL/dxi / h)
+    allocate (weakDerivative(nFull, nFull))
+    weakDerivative = 0.0_R64
+    do iE = 1, axis % nElements
+      i0 = fedvrCtx % elements(iE) % iStart - 1
+      weakDerivative(i0 + 1:i0 + nLocals, i0 + 1:i0 + nLocals) = &
+        weakDerivative(i0 + 1:i0 + nLocals, i0 + 1:i0 + nLocals) + derivativeCtx % firstOrderMatrixWeak
+    end do
+
+    ! Banded W^-1 B_II and its W-adjoint W^-1 B_II^T on the interior nodes
+    allocate (ops % derivativeBand(-p:p, n), ops % derivativeAdjointBand(-p:p, n))
+    ops % derivativeBand = 0.0_R64
+    ops % derivativeAdjointBand = 0.0_R64
+    do i = 1, n
+      do d = max(-p, 1 - i), min(p, n - i)
+        ops % derivativeBand(d, i) = weakDerivative(i + 1, i + d + 1) / axis % weights(i)
+        ops % derivativeAdjointBand(d, i) = weakDerivative(i + d + 1, i + 1) / axis % weights(i)
       end do
     end do
 
@@ -219,6 +250,112 @@ contains
       end do
     end do
     !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Grid_Fem_ApplyGradient(gradF, f)
+    !$ use omp_lib, only: omp_in_parallel
+
+    real(R64), intent(out), contiguous, target :: gradF(:, :)
+    real(R64), intent(in), contiguous, target  :: f(:)
+
+    real(R64), contiguous, pointer :: f3(:, :, :), g3(:, :, :, :)
+    integer(I32) :: nx, ny, nz, p, ix, iy, iz, d, dLo, dHi
+    real(R64) :: acc
+
+    call CheckFieldSize(size(f), "Grid_Fem_ApplyGradient")
+    call CheckFieldSize(size(gradF, 1), "Grid_Fem_ApplyGradient")
+    if (size(gradF, 2) .ne. 3) error stop "Grid_Fem_ApplyGradient: gradF must have 3 columns"
+
+    nx = Grid_Fem_nx
+    ny = Grid_Fem_ny
+    nz = Grid_Fem_nz
+    p = Grid_Fem_nLocals - 1
+    f3(1:nx, 1:ny, 1:nz) => f
+    g3(1:nx, 1:ny, 1:nz, 1:3) => gradF
+
+    associate (bandX => axisOperators(1) % derivativeBand, bandY => axisOperators(2) % derivativeBand, &
+               bandZ => axisOperators(3) % derivativeBand)
+      !$omp parallel do default(shared) private(ix, iy, iz, d, dLo, dHi, acc) schedule(static) if (.not. omp_in_parallel())
+      do iz = 1, nz
+        do iy = 1, ny
+          do ix = 1, nx
+            call BandRange(dLo, dHi, ix, nx, p)
+            acc = 0.0_R64
+            do d = dLo, dHi
+              acc = acc + bandX(d, ix) * f3(ix + d, iy, iz)
+            end do
+            g3(ix, iy, iz, 1) = acc
+          end do
+
+          g3(:, iy, iz, 2) = 0.0_R64
+          call BandRange(dLo, dHi, iy, ny, p)
+          do d = dLo, dHi
+            g3(:, iy, iz, 2) = g3(:, iy, iz, 2) + bandY(d, iy) * f3(:, iy + d, iz)
+          end do
+
+          g3(:, iy, iz, 3) = 0.0_R64
+          call BandRange(dLo, dHi, iz, nz, p)
+          do d = dLo, dHi
+            g3(:, iy, iz, 3) = g3(:, iy, iz, 3) + bandZ(d, iz) * f3(:, iy, iz + d)
+          end do
+        end do
+      end do
+      !$omp end parallel do
+    end associate
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Grid_Fem_AddGradientAdjoint(f, gradF)
+    !$ use omp_lib, only: omp_in_parallel
+
+    real(R64), intent(inout), contiguous, target :: f(:)
+    real(R64), intent(in), contiguous, target    :: gradF(:, :)
+
+    real(R64), contiguous, pointer :: f3(:, :, :), g3(:, :, :, :)
+    integer(I32) :: nx, ny, nz, p, ix, iy, iz, d, dLo, dHi
+    real(R64) :: acc
+
+    call CheckFieldSize(size(f), "Grid_Fem_AddGradientAdjoint")
+    call CheckFieldSize(size(gradF, 1), "Grid_Fem_AddGradientAdjoint")
+    if (size(gradF, 2) .ne. 3) error stop "Grid_Fem_AddGradientAdjoint: gradF must have 3 columns"
+
+    nx = Grid_Fem_nx
+    ny = Grid_Fem_ny
+    nz = Grid_Fem_nz
+    p = Grid_Fem_nLocals - 1
+    f3(1:nx, 1:ny, 1:nz) => f
+    g3(1:nx, 1:ny, 1:nz, 1:3) => gradF
+
+    associate (bandX => axisOperators(1) % derivativeAdjointBand, bandY => axisOperators(2) % derivativeAdjointBand, &
+               bandZ => axisOperators(3) % derivativeAdjointBand)
+      !$omp parallel do default(shared) private(ix, iy, iz, d, dLo, dHi, acc) schedule(static) if (.not. omp_in_parallel())
+      do iz = 1, nz
+        do iy = 1, ny
+          do ix = 1, nx
+            call BandRange(dLo, dHi, ix, nx, p)
+            acc = 0.0_R64
+            do d = dLo, dHi
+              acc = acc + bandX(d, ix) * g3(ix + d, iy, iz, 1)
+            end do
+            f3(ix, iy, iz) = f3(ix, iy, iz) + acc
+          end do
+
+          call BandRange(dLo, dHi, iy, ny, p)
+          do d = dLo, dHi
+            f3(:, iy, iz) = f3(:, iy, iz) + bandY(d, iy) * g3(:, iy + d, iz, 2)
+          end do
+
+          call BandRange(dLo, dHi, iz, nz, p)
+          do d = dLo, dHi
+            f3(:, iy, iz) = f3(:, iy, iz) + bandZ(d, iz) * g3(:, iy, iz + d, 3)
+          end do
+        end do
+      end do
+      !$omp end parallel do
+    end associate
 
   end subroutine
 

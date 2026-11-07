@@ -32,6 +32,15 @@ else()
     list(FILTER sources EXCLUDE REGEX ".*/S_Utils_CublasLib_Cuda\\.f90$")
 endif()
 
+# Libxc exchange-correlation functionals (M_Utils_XcLib, sysXc: DFT and
+# TDDFT): compile exactly one implementation submodule of M_Utils_XcLib
+option(CODY_USE_LIBXC "Build with the Libxc exchange-correlation functionals (sysXc)" ON)
+if(CODY_USE_LIBXC)
+    list(FILTER sources EXCLUDE REGEX ".*/S_Utils_XcLib_Stub\\.f90$")
+else()
+    list(FILTER sources EXCLUDE REGEX ".*/S_Utils_XcLib_Libxc\\.f90$")
+endif()
+
 # Main library target
 add_library(CodyFortran ${sources})
 
@@ -79,6 +88,10 @@ target_link_libraries(CodyFortran PRIVATE
 if(CODY_USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     target_link_libraries(CodyFortran PRIVATE CUDA::cublas CUDA::cudart)
+endif()
+
+if(CODY_USE_LIBXC)
+    target_link_libraries(CodyFortran PRIVATE xc)
 endif()
 
 # Conditionally link compiler-specific libraries
@@ -138,6 +151,15 @@ function(add_fortran_test file)
     # Get the source directory for working directory
     get_filename_component(src_dir "${file}" DIRECTORY)
 
+    # A test that needs an optional library declares it in a line
+    # "!> ctest-requires: libxc" of its source; without the library it is
+    # not registered (it still compiles against the stub)
+    file(STRINGS "${file}" requires_libxc REGEX "^!> ctest-requires: libxc")
+    if(requires_libxc AND NOT CODY_USE_LIBXC)
+        message(STATUS "Skipped test ${file} (needs CODY_USE_LIBXC)")
+        return()
+    endif()
+
     add_test(NAME "${test_name}"
              COMMAND "${target_name}"
              WORKING_DIRECTORY "${src_dir}")
@@ -163,11 +185,11 @@ function(add_fortran_test file)
         set_tests_properties("${test_name}" PROPERTIES DEPENDS "${prev_test}")
     endif()
     set(last_test_in_${dir_key} "${test_name}" PARENT_SCOPE)
+    message(STATUS "Added test ${file}")
 endfunction()
 
 file(GLOB_RECURSE test_sources CONFIGURE_DEPENDS "test/*.f90")
 list(SORT test_sources)
 foreach(test_file ${test_sources})
     add_fortran_test("${test_file}")
-    message(STATUS "Added test ${test_file}")
 endforeach()

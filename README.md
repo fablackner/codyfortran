@@ -54,6 +54,7 @@ CodyFortran depends on several specialized libraries:
 - **JSON-Fortran**: JSON parsing capabilities for Fortran
 - **gsl**: GNU Scientific Library (optional, for additional numerical methods)
 - **arpack**: ARPACK library for large-scale eigenvalue problems
+- **Libxc**: exchange-correlation functionals for DFT and TDDFT (`sysXc`; only the C library is needed, CodyFortran binds its C API itself; build without it with `cmake -DCODY_USE_LIBXC=OFF`)
 
 These dependencies can be provided in two ways:
 
@@ -77,6 +78,7 @@ DOWNLOAD_TEST_DRIVE="true"
 DOWNLOAD_JSON_FORTRAN="true"
 DOWNLOAD_GSL="true"
 DOWNLOAD_ARPACK="true"
+DOWNLOAD_LIBXC="true"
 # these are not needed when building with intel compilers and MKL
 DOWNLOAD_FFTW3="true"
 DOWNLOAD_OPENBLAS="true"
@@ -224,6 +226,9 @@ These examples serve as excellent starting points for understanding how to set u
     -   Kinetic: different hopping schemes for lattices; laplacian for continuous.
     -   External potentials: Many presets (Coulomb, harmonic) and easy to extend.
     -   Interactions: Many presets (lattice on-site, Coulomb) and easy to extend.
+    -   Exchange-correlation functionals of Libxc (`sysXc`): LDA, GGA and global hybrids (PBE0, B3LYP, ...) on
+        `grid.fem` (molecules), Ylm grids (atoms) and 1D grids, spin-unpolarized and -polarized; the Kohn–Sham
+        potential is the exact derivative of the discrete xc energy (see `src/SysXc/A_SysXc.md`).
 -   **Time Evolution and Solvers**
     -   Real-time and imaginary-time propagation.
     -   Various Runge–Kutta/Crank-Nicholson integrators and interface to gsl odeiv2.
@@ -233,7 +238,10 @@ These examples serve as excellent starting points for understanding how to set u
         state for molecules with heavy atoms (`exactFieldFreeMeanFieldQ`; H2O TDHF kick spectra in
         `app/molecules/`).
     -   Ground-state search via ED, imaginary time propagation or iterative scf methods (dense, ARPACK or
-        preconditioned block LOBPCG eigensolvers; adaptively compressed exchange for large grids).
+        preconditioned block LOBPCG eigensolvers; adaptively compressed exchange for large grids), including
+        Kohn–Sham DFT (`groundSolver.scf.stdImpl` with `sysXc`; He/Ne LDA reproduce the NIST reference energies).
+    -   Real-time TDDFT (`method.mb.orbBased.tdks`) with the split-step propagator, the exact field-free part and,
+        on `grid.fem`, a frozen Kohn–Sham reference that keeps the ground state stationary.
 -   **I/O, Analysis, and Utilities**
     -   JSON-driven configuration mirroring the code architecture.
     -   Data output for densities, observables, spectra, and RDMs
@@ -251,6 +259,7 @@ CodyFortran is built to support a wide array of simulation methods, each has a d
 | **Orbital-Based Many-Body** | **TDCI** (Time-Dependent CI) | `CI Coefficients (Dynamic)` + `Orbitals (Fixed)` | `"orbBased": {"tdci": {}}` |
 | | **MCTDHX** | `CI Coefficients (Dynamic)` + `Orbitals (Dynamic)` | `"orbBased": {"mctdhx": {}}` |
 | | **TDHX** (Time-Dependent Hartree-Fock) | Single Slater determinant (\`Orbitals are Dynamic\`). | \`"orbBased": {"tdhx": {}}\` |
+| | **TDKS** (Time-Dependent Kohn–Sham, TDDFT) | Kohn–Sham determinant (`Orbitals are Dynamic`) with a `sysXc` functional. | `"orbBased": {"tdks": {}}` |
 
 
 ## The CodyFortran Architecture: A Deep Dive into Modularity
@@ -471,6 +480,8 @@ The codebase and JSON configuration use a number of recurring abbreviations. Thi
 | `orbBased` | **Orbital-Based Expansion**. Many-body method where the wavefunction is expanded using single-particle orbitals. |
 | `tdci` | **Time-Dependent Configuration Interaction**. Orbital-based method where CI coefficients evolve in time while orbitals remain fixed. |
 | `mctdhx` | **Multi-Configuration Time-Dependent Hartree-Fock for Bosons, Fermions, and mixtures.**. Orbital-based method where both CI coefficients and orbitals evolve in time. |
+| `tdks` | **Time-Dependent Kohn–Sham**. Real-time TDDFT: Kohn–Sham orbitals propagated with the Kohn–Sham potential of an exchange-correlation functional (`sysXc`); with `groundSolver.scf.stdImpl` the Kohn–Sham DFT ground state. |
+| `xc` | **Exchange-correlation**. The density functional of the electron-electron interaction (`sysXc`, Libxc). |
 | `tdhx` | **Time-Dependent Hartree-Fock for Bosons, Fermions, and mixtures**. Mean-field approximation where the wavefunction is a single Slater determinant (or permanent) with time-evolving orbitals. |
 | `ci` | **Configuration Interaction**. Expansion of the many-body wavefunction in a basis of Slater determinants or permanents. |
 | `rdm` | **Reduced Density Matrix**. Matrices representing the quantum state of a subsystem (1-body, 2-body, etc.) by tracing out other degrees of freedom. |

@@ -142,6 +142,31 @@ Used by the exact field-free propagation (`method.mb.orbBased.exactFieldFreeGpuQ
 
 ---
 
+## Exchange-Correlation Functionals: `M_Utils_XcLib`
+
+`bind(C)` layer of the Libxc C API (`src/Utils/XcLib/`, version 5 or later;
+`thirdParty/getSources.sh` fetches 7.0.0). `T_XcLib_Functional` holds the
+opaque `xc_func_type *` of `xc_func_alloc` and the properties of the
+functional (id, nSpin, family, kind, flags, number of external parameters,
+description), so nothing depends on Libxc's struct layout and no Fortran
+modules of Libxc (or a matching compiler) are needed. Procedures:
+`XcLib_AvailableQ`, `XcLib_Version`, `XcLib_FunctionalId` (Libxc name, case-
+insensitive, optional `xc_`; −1 if unknown), `XcLib_Init(func, id, nSpin)`,
+`XcLib_End`, `XcLib_SetDensityThreshold`, `XcLib_SetExtParams`,
+`XcLib_FillExtParamsDefault`, `XcLib_ExactExchangeFraction` (global hybrids),
+`XcLib_EvaluateLda(zk, vrho, func, rho)` and
+`XcLib_EvaluateGga(zk, vrho, vsigma, func, rho, sigma)` on point arrays in
+Libxc's interleaved spin layout; the constants `XCLIB_FAMILY_*`,
+`XCLIB_FLAGS_*` and the spin and kind constants of `xc.h`. The evaluation only
+reads the handle, so it may run concurrently from OpenMP threads on disjoint
+chunks. CMake compiles one implementation submodule: `S_Utils_XcLib_Libxc`
+with `-DCODY_USE_LIBXC=ON` (the default, links `xc`), otherwise
+`S_Utils_XcLib_Stub` (`AvailableQ` false, every evaluation stops; tests with
+`!> ctest-requires: libxc` are not registered). Used by `sysXc`
+(`src/SysXc/A_SysXc.md`). Test: `test/componentTests/Utils/T_Utils_XcLib`.
+
+---
+
 ## Spherical Harmonics: `M_Utils_SphericalHarmonics`
 
 Gaunt coefficients (direct via GSL Wigner-3j, or from the table built by

@@ -33,6 +33,15 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_FieldFreeMeanField
   ! Lifetime: every setup of the Cayley part ends with
   ! Method_Mb_OrbBased_SetupFieldFreeMeanField, which releases U; the next
   ! propagation builds it again unless a program does.
+  !
+  ! Kohn-Sham reference (Method_Mb_OrbBased_kohnShamQ, method.mb.orbBased.tdks):
+  ! U = v_KS,s[rho0] - a K0 with the local Kohn-Sham potential of the state on
+  ! the xc points of SysXc (one column per spin channel,
+  ! Method_Mb_OrbBased_Tdks_FillKohnShamPotential), applied by
+  ! SysXc_MultiplyWithPotential, and the ACE vectors of K0 scaled by
+  ! sqrt(a) (a = SysXc_exactExchangeFraction; none for a = 0), so that
+  ! sum_k zeta_k <zeta_k|v> = a K0 v on the span of the orbitals. The TDKS
+  ! nonlinear part subtracts U: at the Kohn-Sham ground state it vanishes.
   !-----------------------------------------------------------------------------
 
   implicit none
@@ -56,6 +65,13 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_FieldFreeMeanField
   integer(I32), allocatable :: meanFieldZetaStart(:)
   integer(I32), allocatable :: meanFieldZetaEnd(:)
 
+  !> Kohn-Sham reference: the local potential v_KS,s[rho0] on the xc points
+  !> (SysXc_nPoints, nSpin), the column of every body type, and whether ACE
+  !> vectors (a K0, a > 0) exist.
+  real(R64), allocatable :: meanFieldKohnSham(:, :)
+  integer(I32), allocatable :: meanFieldSpinOfBodyType(:)
+  logical :: meanFieldExchangeQ = .true.
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -67,19 +83,24 @@ contains
     ! Method_Mb_OrbBased_SetupFieldFreeCayley, so its line follows the GMRES
     ! line there.
     !---------------------------------------------------------------------------
+    use M_Utils_Json
     use M_SysInteraction
 
     call ReleaseMeanField
-    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) then
+    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ .and. Json_GetExistence("sysInteraction")) then
       if (.not. SysInteraction_bodyTypeIndependentQ) &
         error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ requires a body-type-independent interaction &
                    &(sysInteraction)"
     end if
     setupQ = .true.
 
-    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) &
+    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ .and. Method_Mb_OrbBased_kohnShamQ) then
+      write (*, '(A)') " exact field-free part: h0 + U with the frozen Kohn-Sham reference U = v_KS - a K0 &
+                       &(exactFieldFreeMeanFieldQ), built from the state at the first propagation unless built before"
+    else if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) then
       write (*, '(A)') " exact field-free part: h0 + U with the frozen mean-field reference U = J0 - K0 &
                        &(exactFieldFreeMeanFieldQ), built from the state at the first propagation unless built before"
+    end if
 
   end subroutine
 
@@ -105,13 +126,15 @@ contains
     use M_Orbs
     use M_Method_Mb
     use M_SysInteraction
+    use M_SysXc
+    use M_Method_Mb_OrbBased_Tdks
 
     complex(R64), intent(in), contiguous :: orbs(:, :)
     complex(R64), intent(in), contiguous :: rdm1(:, :)
     real(R64), intent(in) :: time
 
     complex(R64), allocatable :: rdmSpatial(:, :), weightedOrbs(:, :)
-    real(R64) :: seconds
+    real(R64) :: seconds, exchangeFraction
     integer(I64) :: count0, count1, countRate
     integer(I32) :: nOS, nPairSolves, bt, iStart, iEnd, n
     logical :: positiveDefiniteQ
@@ -126,11 +149,20 @@ contains
 
     call system_clock(count0, countRate)
     call ReleaseMeanField
-
-    ! J0: one potential of the total source sum_l conjg(phi_l) (phi rhoS)_l
     call Method_Mb_OrbBased_FillSpatialRdm1(rdmSpatial, rdm1)
-    weightedOrbs = matmul(orbs, rdmSpatial)
-    call SysInteraction_FillDirectPotential(meanFieldHartree, orbs, weightedOrbs, time, bt1_=-1, bt2_=-1)
+
+    if (Method_Mb_OrbBased_kohnShamQ) then
+      ! Kohn-Sham: the local v_KS,s of the state on the xc points; exchange
+      ! only with the exact-exchange fraction of a hybrid
+      call Method_Mb_OrbBased_Tdks_FillKohnShamPotential(meanFieldKohnSham, meanFieldSpinOfBodyType, orbs, rdm1, time)
+      exchangeFraction = SysXc_exactExchangeFraction
+    else
+      ! J0: one potential of the total source sum_l conjg(phi_l) (phi rhoS)_l
+      weightedOrbs = matmul(orbs, rdmSpatial)
+      call SysInteraction_FillDirectPotential(meanFieldHartree, orbs, weightedOrbs, time, bt1_=-1, bt2_=-1)
+      exchangeFraction = 1.0_R64
+    end if
+    meanFieldExchangeQ = abs(exchangeFraction) > 0.0_R64
 
     ! K0: ACE vectors per body type of the stored orbitals
     allocate (meanFieldZeta(Grid_nPoints, nOS))
@@ -150,7 +182,7 @@ contains
       ! Restricted: one block (spin-up rdm1) for the shared orbitals
       if (Orbs_restrictedQ .and. bt > 1) cycle
       n = iEnd - iStart + 1
-      if (n < 1) cycle
+      if (n < 1 .or. .not. meanFieldExchangeQ) cycle
       weightedOrbs = matmul(orbs(:, iStart:iEnd), rdm1(iStart:iEnd, iStart:iEnd))
       call SysInteraction_FillExchangeAce(meanFieldZeta(:, iStart:iEnd), positiveDefiniteQ, orbs(:, iStart:iEnd), &
                                           weightedOrbs, time, bt1_=-1, bt2_=-1)
@@ -164,13 +196,25 @@ contains
       end if
     end do
 
+    ! Kohn-Sham: the ACE vectors carry the exchange fraction, a K0 = sum zeta zeta^H
+    if (Method_Mb_OrbBased_kohnShamQ .and. meanFieldExchangeQ) then
+      if (exchangeFraction < 0.0_R64) error stop "exactFieldFreeMeanFieldQ: negative exact-exchange fraction"
+      meanFieldZeta(:, :) = sqrt(exchangeFraction) * meanFieldZeta(:, :)
+    end if
+
     meanFieldBuiltQ = .true.
 
     call system_clock(count1)
     seconds = real(count1 - count0, kind=R64) / real(countRate, kind=R64)
-    write (*, '(A,F10.4,A,F14.10,A,I0,A,F8.2,A)') " exact field-free part: frozen mean-field reference U = J0 - K0 built at t =", &
-      time, " from the 1-RDM of the state (N =", real(SumDiagonal(rdmSpatial), kind=R64), "): 1 + ", nPairSolves, &
-      " potential solves,", seconds, " s"
+    if (Method_Mb_OrbBased_kohnShamQ) then
+      write (*, '(A,F10.4,A,F14.10,A,I0,A,F8.2,A)') " exact field-free part: frozen Kohn-Sham reference U = v_KS - a K0 &
+        &built at t =", time, " from the 1-RDM of the state (N =", real(SumDiagonal(rdmSpatial), kind=R64), "): 1 + ", &
+        nPairSolves, " potential solves,", seconds, " s"
+    else
+      write (*, '(A,F10.4,A,F14.10,A,I0,A,F8.2,A)') " exact field-free part: frozen mean-field reference U = J0 - K0 &
+        &built at t =", time, " from the 1-RDM of the state (N =", real(SumDiagonal(rdmSpatial), kind=R64), "): 1 + ", &
+        nPairSolves, " potential solves,", seconds, " s"
+    end if
 
   end subroutine
 
@@ -237,15 +281,32 @@ contains
   !> J0 z). Reentrant; its passes are parallel when called outside a parallel
   !> region.
   subroutine AddMeanField(w, scratch, z, bt)
+    use M_Grid
     use M_SysInteraction
+    use M_SysXc
 
     complex(R64), intent(inout), contiguous :: w(:)
     complex(R64), intent(inout), contiguous :: scratch(:)
     complex(R64), intent(in), contiguous :: z(:)
     integer(I32), intent(in) :: bt
 
-    call SysInteraction_AddMeanField(w, scratch, z, meanFieldHartree, &
-                                     meanFieldZeta(:, meanFieldZetaStart(bt):meanFieldZetaEnd(bt)))
+    complex(R64) :: overlap
+    integer(I32) :: k
+
+    if (.not. allocated(meanFieldKohnSham)) then
+      call SysInteraction_AddMeanField(w, scratch, z, meanFieldHartree, &
+                                       meanFieldZeta(:, meanFieldZetaStart(bt):meanFieldZetaEnd(bt)))
+      return
+    end if
+
+    ! Kohn-Sham: w += v_KS,s z - sum_k zeta_k <zeta_k|z> (zeta scaled by sqrt(a))
+    call SysXc_MultiplyWithPotential(scratch, meanFieldKohnSham(:, meanFieldSpinOfBodyType(bt)), z)
+    call Axpy(w, (1.0_R64, 0.0_R64), scratch)
+    if (.not. meanFieldExchangeQ) return
+    do k = meanFieldZetaStart(bt), meanFieldZetaEnd(bt)
+      overlap = Grid_InnerProduct(meanFieldZeta(:, k), z)
+      call Axpy(w, -overlap, meanFieldZeta(:, k))
+    end do
 
   end subroutine
 
@@ -254,6 +315,9 @@ contains
   subroutine ReleaseMeanField
 
     meanFieldBuiltQ = .false.
+    meanFieldExchangeQ = .true.
+    if (allocated(meanFieldKohnSham)) deallocate (meanFieldKohnSham)
+    if (allocated(meanFieldSpinOfBodyType)) deallocate (meanFieldSpinOfBodyType)
     if (allocated(meanFieldHartree)) deallocate (meanFieldHartree)
     if (allocated(meanFieldZeta)) deallocate (meanFieldZeta)
     if (allocated(meanFieldZetaStart)) deallocate (meanFieldZetaStart)

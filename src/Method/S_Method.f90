@@ -47,6 +47,10 @@ contains
     ! branch: single-body vs many-body
     !------------------------------------
 
+    ! A density functional (sysXc) is only used by method.mb.orbBased.tdks
+    if (Json_GetExistence("sysXc") .and. .not. Json_GetExistence("method.mb.orbBased")) &
+      error stop "sysXc (an exchange-correlation functional) is only used by method.mb.orbBased.tdks"
+
     if (Json_GetExistence("method.sb")) then
       call Method_Sb_Fabricate
 

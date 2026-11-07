@@ -126,6 +126,38 @@ module M_Grid_Fem
     !> Coefficients in the eigenbasis of -lap: c = S3^T W3 f, so that
     !> f = S3 c and -lap f = S3 (D c) with D(i, j, k) = lx(i) + ly(j) + lz(k)
     !> (the flattened eigenvalue index follows the node layout, x fastest).
+    !> @brief Nodal gradient of a real field: gradF(:, a) = (W_a^-1 B_a) f
+    !> along axis a = x, y, z.
+    !>
+    !> @details
+    !> B_a(i, j) = ∫ L_i L_j' dx is the assembled weak 1D derivative (GLL
+    !> quadrature), so (W_a^-1 B_a f)_i is the derivative of the element
+    !> interpolants at node i, averaged with their weights over the elements
+    !> sharing the node (the lumped-mass L2 projection of the piecewise
+    !> derivative); zero box values (Dirichlet). Exact for polynomials of
+    !> degree nLocals - 1 per element (continuous across elements). Banded,
+    !> OpenMP over z unless called in a parallel region. Used for the density
+    !> gradients of gradient functionals (sysXc.fem).
+    module subroutine Grid_Fem_ApplyGradient(gradF, f)
+      !> Gradient components, (Grid_nPoints, 3)
+      real(R64), intent(out), contiguous, target :: gradF(:, :)
+      !> Nodal field (Grid_nPoints)
+      real(R64), intent(in), contiguous, target  :: f(:)
+    end subroutine
+
+    !> @brief Adds the W-adjoint of the gradient: f += Σ_a W_a^-1 B_a^T gradF(:, a).
+    !>
+    !> @details
+    !> The adjoint of Grid_Fem_ApplyGradient in the metric W = Grid_Fem_weights
+    !> (Σ w u (G f) = Σ w f (G^† u) for all f, u), i.e. minus the weak
+    !> divergence divided by the lumped mass.
+    module subroutine Grid_Fem_AddGradientAdjoint(f, gradF)
+      !> Nodal field (Grid_nPoints), accumulated
+      real(R64), intent(inout), contiguous, target :: f(:)
+      !> Vector field, (Grid_nPoints, 3)
+      real(R64), intent(in), contiguous, target    :: gradF(:, :)
+    end subroutine
+
     module subroutine Grid_Fem_ToEigenbasis(c, f)
       complex(R64), intent(out), contiguous :: c(:)
       complex(R64), intent(in), contiguous  :: f(:)

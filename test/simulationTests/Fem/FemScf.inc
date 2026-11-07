@@ -14,8 +14,9 @@
 !> and the preconditioner GroundSolver_PreconditionAction ((T + max(-theta,
 !> sigma_min))^-1 by the exact FDM solve), and works in the FEM metric
 !> (metricWeights = Grid_Fem_weights: diagonal mass, BLAS-3 Gram matrices).
-!> The start orbitals are orthonormalized at the end (OrbsInit only
-!> normalizes).
+!> With a sysXc block (Kohn-Sham DFT, method.mb.orbBased.tdks) SysXc is
+!> fabricated and set up after SysInteraction. The start orbitals are
+!> orthonormalized at the end (OrbsInit only normalizes).
 subroutine SetupFemScf(jsonFileName)
   use M_Utils_Json
   use M_Grid
@@ -23,6 +24,7 @@ subroutine SetupFemScf(jsonFileName)
   use M_SysKinetic
   use M_SysPotential
   use M_SysInteraction
+  use M_SysXc
   use M_Orbs
   use M_OrbsInit
   use M_ConfigList
@@ -37,13 +39,16 @@ subroutine SetupFemScf(jsonFileName)
   character(len=*), intent(in) :: jsonFileName
 
   type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(1)
+  logical :: kohnShamQ
 
   call Json_LoadJsonFile(manualFileName_=jsonFileName, relativeToProjectDirQ_=.true.)
+  kohnShamQ = Json_GetExistence("sysXc")
 
   call Grid_Fabricate
   call SysKinetic_Fabricate
   call SysPotential_Fabricate
   call SysInteraction_Fabricate
+  if (kohnShamQ) call SysXc_Fabricate
   call Method_Fabricate
   call Orbs_Fabricate
   call OrbsInit_Fabricate
@@ -61,6 +66,7 @@ subroutine SetupFemScf(jsonFileName)
   call SysKinetic_Setup
   call SysPotential_Setup
   call SysInteraction_Setup
+  if (kohnShamQ) call SysXc_Setup
   call Orbs_Setup
   call OrbsInit_Setup
   call ConfigList_Setup

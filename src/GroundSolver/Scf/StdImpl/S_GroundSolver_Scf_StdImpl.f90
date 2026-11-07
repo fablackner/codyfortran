@@ -103,6 +103,22 @@
 !> @note Without `aceQ` the exchange term K̂ is computed on-the-fly in
 !>       `HartreeFockAction` since it depends on which orbital is being acted
 !>       upon.
+!>
+!> ## Kohn-Sham DFT (a `sysXc` block exists)
+!>
+!> The same iteration solves the restricted Kohn-Sham equations of
+!> `method.mb.orbBased.tdks` (required; its Method_GetEnergy is the
+!> Kohn-Sham energy): the mean field is the local Kohn-Sham potential
+!> v_KS = J + v_xc of the closed-shell density 2 Σ_j |φ_j|² on the xc points
+!> (SysXc_FillKohnShamPotential, unpolarized functional) plus the fraction
+!> a = SysXc_exactExchangeFraction of the exact exchange of a hybrid
+!> (−a K̂, exact or with `aceQ` the ACE operator; skipped for a = 0):
+!>
+!>   F̂_KS = T̂ + V̂_ext + v_KS − a K̂,
+!>
+!> applied by `HartreeFockAction` (SysXc_MultiplyWithPotential). With
+!> `mixTarget="potential"` the mixer acts on v_KS (the density functional of
+!> the Hartree and xc potentials), the standard Kohn-Sham potential mixing.
 submodule(M_GroundSolver_Scf_StdImpl) S_GroundSolver_Scf_StdImpl
 
   implicit none
@@ -175,6 +191,21 @@ submodule(M_GroundSolver_Scf_StdImpl) S_GroundSolver_Scf_StdImpl
   !> Whether hartreePotentialMixed already holds an accepted (mixed) potential
   logical :: hartreePotentialMixedInitializedQ = .false.
 
+  !-----------------------------------------------------------------------------
+  ! Kohn-Sham DFT (sysXc)
+  !-----------------------------------------------------------------------------
+
+  !> Kohn-Sham mode: the mean field is v_KS = J + v_xc - a K (sysXc exists)
+  logical :: kohnShamQ = .false.
+
+  !> Accepted Kohn-Sham potential v_KS on the xc points (SysXc_nPoints),
+  !> applied by HartreeFockAction; mixed across iterations for
+  !> mixTarget="potential"
+  real(R64), allocatable :: kohnShamPotential(:)
+
+  !> Complex copies of the accepted and raw v_KS for the mixer
+  complex(R64), allocatable :: kohnShamPotentialMixed(:), kohnShamPotentialRaw(:)
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -200,6 +231,11 @@ contains
     end if
 
     aceQ = Json_Get("aceQ", .false., path_="groundSolver.scf.stdImpl")
+
+    ! Kohn-Sham DFT: the energy functional is that of method.mb.orbBased.tdks
+    kohnShamQ = Json_GetExistence("sysXc")
+    if (kohnShamQ .and. .not. Json_GetExistence("method.mb.orbBased.tdks")) &
+      error stop "groundSolver.scf.stdImpl with sysXc (Kohn-Sham DFT) requires method.mb.orbBased.tdks"
 
     !------------------------------------
     ! set values and procedure pointers
@@ -235,6 +271,7 @@ contains
     allocate (orbsTmp(Grid_nPoints, nUp))
     allocate (lambdaDiscarded(nUp))
     if (aceQ) allocate (aceZeta(Grid_nPoints, nUp))
+    if (kohnShamQ) call SetupKohnSham
 
   end subroutine
 
@@ -258,6 +295,7 @@ contains
     use M_SysKinetic
     use M_SysPotential
     use M_SysInteraction
+    use M_SysXc
     use M_Method_Mb_OrbBased
     use M_GroundSolver
     use M_Orbs
@@ -280,7 +318,15 @@ contains
     call SysPotential_MultiplyWithExternalPotential(dOrbTmp, externalPotential, orb)
     dOrb = dOrb + dOrbTmp
 
-    if (aceQ .and. aceBuiltQ) then
+    if (kohnShamQ) then
+      ! Kohn-Sham: local v_KS = J + v_xc (filled in Approach) and the exact
+      ! exchange fraction of a hybrid
+      call SysXc_MultiplyWithPotential(dOrbTmp, kohnShamPotential, orb)
+      dOrb = dOrb + dOrbTmp
+      if (abs(SysXc_exactExchangeFraction) > 0.0_R64) &
+        call SubtractExchange(dOrb, orb, SysXc_exactExchangeFraction, time)
+
+    else if (aceQ .and. aceBuiltQ) then
       ! Hartree (direct) term and exchange via ACE in one pass:
       ! (Ĵ − K̂_ACE)·orb = Ĵ·orb − ∑_k ζ_k ⟨ζ_k|orb⟩ (hartreePotentialMixed
       ! and aceZeta of the last Approach; exact on its occupied space)
@@ -366,6 +412,7 @@ contains
     use M_Orbs
     use M_SysPotential
     use M_SysInteraction
+    use M_SysXc
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(inout), contiguous, target :: state(:)
@@ -385,10 +432,17 @@ contains
 
     ! Step 2: Build raw Hartree potential from occupied orbitals with ONE
     ! solve of the total source (the potential is linear in the source).
-    ! Factor 2 accounts for spin degeneracy (restricted: spin-up = spin-down)
-    call SysInteraction_FillDirectPotential(hartreePotentialRaw, orbs(:, 1:nUp), orbs(:, 1:nUp), time, factor_=2.0_R64)
+    ! Factor 2 accounts for spin degeneracy (restricted: spin-up = spin-down).
+    ! Kohn-Sham: the local potential v_KS = J + v_xc of that density instead
+    if (kohnShamQ) then
+      call FillKohnShamPotential(orbs(:, 1:nUp), time)
+    else
+      call SysInteraction_FillDirectPotential(hartreePotentialRaw, orbs(:, 1:nUp), orbs(:, 1:nUp), time, factor_=2.0_R64)
+    end if
 
-    if (mixTarget .eq. "potential") then
+    if (kohnShamQ) then
+      ! v_KS was filled (and mixed for mixTarget="potential") above
+    else if (mixTarget .eq. "potential") then
       ! Damping acts on the (gauge-invariant) Hartree potential: mix the raw
       ! potential into the accepted one; the very first potential is taken as is
       if (hartreePotentialMixedInitializedQ) then
@@ -402,7 +456,8 @@ contains
     end if
 
     ! Exchange via ACE: compress K̂ of the current orbitals once per iteration
-    if (aceQ) call BuildAce(orbs(:, 1:nUp), time)
+    ! (Kohn-Sham: only for the exact exchange of a hybrid)
+    if (aceQ .and. (.not. kohnShamQ .or. abs(SysXc_exactExchangeFraction) > 0.0_R64)) call BuildAce(orbs(:, 1:nUp), time)
 
     ! Step 3: Diagonalize Fock operator (HartreeFockAction is the matvec callback).
     ! A diagonalizer without previous eigenvectors gets the current occupied
@@ -463,6 +518,85 @@ contains
 
     ! Step 6: Gram–Schmidt orthonormalize
     call Orbs_Orthonormalize(orbs)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Kohn-Sham work arrays (the xc points of SysXc).
+  subroutine SetupKohnSham
+    use M_SysXc
+
+    if (SysXc_nPoints .le. 0) error stop "groundSolver.scf.stdImpl: call SysXc_Fabricate and SysXc_Setup first"
+    allocate (kohnShamPotential(SysXc_nPoints))
+    allocate (kohnShamPotentialMixed(SysXc_nPoints), kohnShamPotentialRaw(SysXc_nPoints))
+    kohnShamPotential(:) = 0.0_R64
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> v_KS = J + v_xc of the closed-shell density 2 Σ_j |φ_j|² of the
+  !> occupied orbitals (unpolarized functional); for mixTarget="potential"
+  !> mixed into the accepted potential (the first one taken as is).
+  subroutine FillKohnShamPotential(occupiedOrbs, time)
+    use M_Mixing
+    use M_SysXc
+
+    complex(R64), intent(in), contiguous :: occupiedOrbs(:, :)
+    real(R64), intent(in) :: time
+
+    real(R64), allocatable :: density(:, :), potRaw(:, :)
+    real(R64) :: hartreeEnergy, xcEnergy
+
+    allocate (density(SysXc_nPoints, 1), potRaw(SysXc_nPoints, 1))
+    density(:, :) = 0.0_R64
+    call SysXc_AddDensity(density(:, 1), occupiedOrbs, occupiedOrbs)
+    density(:, :) = 2.0_R64 * density(:, :)
+    call SysXc_FillKohnShamPotential(potRaw, hartreeEnergy, xcEnergy, density, time)
+
+    if (mixTarget .eq. "potential" .and. hartreePotentialMixedInitializedQ) then
+      kohnShamPotentialRaw(:) = cmplx(potRaw(:, 1), 0.0_R64, kind=R64)
+      call Mixing_Mix(kohnShamPotentialMixed, kohnShamPotentialRaw)
+      kohnShamPotential(:) = real(kohnShamPotentialMixed(:), kind=R64)
+    else
+      kohnShamPotential(:) = potRaw(:, 1)
+      kohnShamPotentialMixed(:) = cmplx(potRaw(:, 1), 0.0_R64, kind=R64)
+      if (mixTarget .eq. "potential") hartreePotentialMixedInitializedQ = .true.
+    end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> dOrb -= factor K̂ orb: the ACE operator Σ_k ζ_k ⟨ζ_k|orb⟩ of the last
+  !> Approach with aceQ, else the exact exchange of the occupied orbitals.
+  subroutine SubtractExchange(dOrb, orb, factor, time)
+    use M_Grid
+    use M_SysInteraction
+    use M_GroundSolver
+    use M_Orbs
+
+    complex(R64), intent(inout), contiguous :: dOrb(:)
+    complex(R64), intent(in), contiguous :: orb(:)
+    real(R64), intent(in) :: factor
+    real(R64), intent(in) :: time
+
+    complex(R64) :: overlap
+    integer(I32) :: j, nUp
+
+    nUp = GroundSolver_NumberOfSpinUpOrbs()
+
+    if (aceQ .and. aceBuiltQ) then
+      do j = 1, size(aceZeta, 2)
+        overlap = Grid_InnerProduct(aceZeta(:, j), orb)
+        dOrb(:) = dOrb(:) - (factor * overlap) * aceZeta(:, j)
+      end do
+    else
+      do j = 1, nUp
+        call SysInteraction_FillInteractionSrc(src, Orbs_orbs(:, j), orb(:))
+        call SysInteraction_FillInteractionPotential(interactionPotential, src, time)
+        call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, interactionPotential, Orbs_orbs(:, j))
+        dOrb(:) = dOrb(:) - factor * dOrbTmp(:)
+      end do
+    end if
 
   end subroutine
 

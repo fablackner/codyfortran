@@ -9,6 +9,9 @@ DOWNLOAD_TEST_DRIVE="true"
 DOWNLOAD_JSON_FORTRAN="true"
 DOWNLOAD_GSL="true"
 DOWNLOAD_ARPACK="true"
+# exchange-correlation functionals of DFT/TDDFT (sysXc); CodyFortran builds
+# without it with cmake -DCODY_USE_LIBXC=OFF
+DOWNLOAD_LIBXC="true"
 # these are not needed when building with intel compilers and MKL
 DOWNLOAD_FFTW3="true"
 DOWNLOAD_OPENBLAS="true"
@@ -84,6 +87,15 @@ if [ "$DOWNLOAD_GSL" = "true" ] && [ ! -d "gsl" ]; then
     mkdir -p gsl
     tar -xzf gsl.tar.gz --strip-components=1 -C gsl
     rm -f gsl.tar.gz
+fi
+
+# Libxc (library of exchange-correlation functionals, C API)
+if [ "$DOWNLOAD_LIBXC" = "true" ] && [ ! -d "libxc" ]; then
+    echo "Downloading Libxc..."
+    curl -L -o libxc.tar.gz https://gitlab.com/libxc/libxc/-/archive/7.0.0/libxc-7.0.0.tar.gz
+    mkdir -p libxc
+    tar -xzf libxc.tar.gz --strip-components=1 -C libxc
+    rm -f libxc.tar.gz
 fi
 
 # FTorch

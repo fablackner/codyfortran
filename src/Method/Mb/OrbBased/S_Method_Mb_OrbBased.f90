@@ -72,7 +72,8 @@ contains
     !   - method.mb.orbBased.exactFieldFreeGpuQ:    cuBLAS variant of the exact
     !                                               propagation (default false; Ylm)
     !   - method.mb.orbBased.exactFieldFreeCut:     Spectral cut energy of h0
-    !                                               (default 0 = off; mctdhx, Ylm only)
+    !                                               (default 0 = off; mctdhx and tdks,
+    !                                               Ylm only)
     !   - method.mb.orbBased.exactFieldFreeTol, exactFieldFreeKrylovDim,
     !     exactFieldFreeMaxRestarts:                GMRES controls of the Cayley step
     !                                               (read at setup; 1e-12, 30, 20)
@@ -96,6 +97,7 @@ contains
     use M_Method_Mb_OrbBased_Mctdhx
     use M_Method_Mb_OrbBased_Td2rdm
     use M_Method_Mb_OrbBased_Td2rdmStaticOrbs
+    use M_Method_Mb_OrbBased_Tdks
 
     integer(I32) :: i, ibt, index, counter
 
@@ -218,19 +220,20 @@ contains
       if (.not. associated(Method_Mb_OrbBased_PropagateFieldFree, Method_Mb_OrbBased_PropagateFieldFreeCayley)) &
         error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ is only available for the Cayley exact part &
                    &(non-Ylm grids, e.g. grid.fem); Ylm grids propagate h0 by its eigen-decomposition"
-      if (.not. Json_GetExistence("method.mb.orbBased.mctdhx")) &
-        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ is only implemented for method.mb.orbBased.mctdhx"
-      if (.not. Json_GetExistence("sysInteraction")) &
-        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ requires sysInteraction (without an interaction &
-                   &the mean field vanishes)"
+      if (.not. (Json_GetExistence("method.mb.orbBased.mctdhx") .or. Json_GetExistence("method.mb.orbBased.tdks"))) &
+        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ is only implemented for method.mb.orbBased.mctdhx &
+                   &and method.mb.orbBased.tdks"
+      if (.not. (Json_GetExistence("sysInteraction") .or. Json_GetExistence("sysXc"))) &
+        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ requires sysInteraction or sysXc (without an &
+                   &interaction the mean field vanishes)"
       if (any(Method_Mb_bodyStatistics .ne. 'f')) &
         error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ requires fermions (the reference is the &
-                   &Hartree-Fock mean field J - K of the 1-RDM)"
+                   &Hartree-Fock or Kohn-Sham mean field of the 1-RDM)"
     end if
 
     ! Spectral cut of h0 (needs the eigenvectors of the exact part, i.e. the
     ! projection bound by BindExactFieldFree); the orbital derivatives of
-    ! MCTDHX are projected onto the kept eigenvectors
+    ! MCTDHX and TDKS are projected onto the kept eigenvectors
     Method_Mb_OrbBased_exactFieldFreeCut = Json_Get("method.mb.orbBased.exactFieldFreeCut", 0.0_R64)
     if (.not. (abs(Method_Mb_OrbBased_exactFieldFreeCut) <= 0.0_R64)) then
       if (.not. Method_Mb_OrbBased_exactFieldFreeQ) &
@@ -238,14 +241,23 @@ contains
       if (.not. associated(Method_Mb_OrbBased_ProjectBelowFieldFreeCut)) &
         error stop "method.mb.orbBased.exactFieldFreeCut is only available on Ylm grids &
                    &(the Cayley exact part of other grids, e.g. grid.fem, has no h0 eigenvectors)"
-      if (.not. Json_GetExistence("method.mb.orbBased.mctdhx")) &
-        error stop "method.mb.orbBased.exactFieldFreeCut is only implemented for method.mb.orbBased.mctdhx"
+      if (.not. (Json_GetExistence("method.mb.orbBased.mctdhx") .or. Json_GetExistence("method.mb.orbBased.tdks"))) &
+        error stop "method.mb.orbBased.exactFieldFreeCut is only implemented for method.mb.orbBased.mctdhx and .tdks"
       if (Method_Mb_OrbBased_exactFieldFreeCut < 0.0_R64) &
         error stop "method.mb.orbBased.exactFieldFreeCut must be positive"
       Method_Mb_OrbBased_ApplySpectralCut => Method_Mb_OrbBased_ProjectBelowFieldFreeCut
     else
       Method_Mb_OrbBased_ApplySpectralCut => NoOpProcedures_ApplyAbsorber
     end if
+
+    ! A density functional (sysXc) replaces the exchange and correlation of
+    ! the interaction: only the Kohn-Sham method uses it (with a correlated
+    ! wavefunction it would count correlation twice)
+    if (Json_GetExistence("sysXc") .and. .not. Json_GetExistence("method.mb.orbBased.tdks")) &
+      error stop "sysXc (an exchange-correlation functional) is only used by method.mb.orbBased.tdks"
+
+    ! Set by the Kohn-Sham method only (no binding of an earlier fabricate survives)
+    Method_Mb_OrbBased_kohnShamQ = .false.
 
     !------------------------------------
     ! branch: method selection
@@ -266,8 +278,11 @@ contains
     else if (Json_GetExistence("method.mb.orbBased.td2rdmStaticOrbs")) then
       call Method_Mb_OrbBased_Td2rdmStaticOrbs_Fabricate
 
+    else if (Json_GetExistence("method.mb.orbBased.tdks")) then
+      call Method_Mb_OrbBased_Tdks_Fabricate
+
     else
-      error stop "method.mb.orbBased is missing one of: tdci, tdhx, mctdhx, td2rdm, td2rdmStaticOrbs"
+      error stop "method.mb.orbBased is missing one of: tdci, tdhx, mctdhx, td2rdm, td2rdmStaticOrbs, tdks"
     end if
 
   end subroutine

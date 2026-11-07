@@ -1,0 +1,112 @@
+{
+    "grid": {
+        "linear": {
+            "xmin": -25,
+            "xmax": 25,
+            "const": {
+                "nPoints": 251
+            }
+        }
+    },
+    "sysKinetic": {
+        "linear": {
+            "laplacian": {
+                "bodyMass": [ 1.0, 1.0 ],
+                "finDiff": { }
+            }
+        }
+    },
+    "sysPotential": {
+        "linear": {
+            "softYukawa": {
+                "position": [ 0.0 ],
+                "charge": [ 2.0 ],
+                "softening1": [ 1.0 ],
+                "softening2": [ 0.0 ],
+                "dampening": [ 0.0 ],
+                "stdImpl": { }
+            }
+        }
+    },
+    "sysInteraction": {
+        "linear": {
+            "softYukawa": {
+                "strength": 1.0,
+                "softening1": 1.0,
+                "softening2": 0.0,
+                "dampening": 0.0,
+                "fftw": { }
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 1, 1 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 1, 1 ],
+                "tdks": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "linear": {
+            "harmonic": { }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 1
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "program": {
+        "convThresh": 1e-12
+    },
+    "sysXc": {
+        "linear": {
+            "libxc": {
+                "functionals": [ "lda_x_1d_soft", "lda_c_1d_csc" ],
+                "extParams": {
+                    "lda_x_1d_soft": [ 1.0 ],
+                    "lda_c_1d_csc": [ 1, 1.0 ]
+                }
+            }
+        }
+    },
+    "diagonalizerList": {
+        "lapack": {
+            "nEvals": 1
+        }
+    },
+    "groundSolver": {
+        "scf": {
+            "stdImpl": {
+                "mixTarget": "potential"
+            }
+        }
+    },
+    "mixing": {
+        "linear": {
+            "alpha": 0.5
+        }
+    }
+}

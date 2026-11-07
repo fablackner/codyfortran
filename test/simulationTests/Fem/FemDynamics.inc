@@ -14,8 +14,10 @@
 !> Fabricates and sets up the run of jsonFileName in the order of the other
 !> real-time tests (Ne3dMctdhxLaser.inc): split-step propagator with the
 !> linear part (gauge coupling only, h0 exact) in integrator 1 and the
-!> interaction part in integrator 2. The loaded orbitals are orthonormalized
-!> after Method_Setup (OrbsInit never does).
+!> interaction part in integrator 2. With a sysXc block (TDDFT,
+!> method.mb.orbBased.tdks) SysXc is fabricated and set up after
+!> SysInteraction. The loaded orbitals are orthonormalized after Method_Setup
+!> (OrbsInit never does).
 subroutine SetupFemDynamics(jsonFileName)
   use M_Utils_Json
   use M_Grid
@@ -23,6 +25,7 @@ subroutine SetupFemDynamics(jsonFileName)
   use M_SysPotential
   use M_SysGauge
   use M_SysInteraction
+  use M_SysXc
   use M_Orbs
   use M_OrbsInit
   use M_ConfigList
@@ -36,16 +39,18 @@ subroutine SetupFemDynamics(jsonFileName)
   character(len=*), intent(in) :: jsonFileName
 
   type(T_IntegratorList_FabricateInput) :: IntegratorListInput(2)
-  logical :: gaugeQ
+  logical :: gaugeQ, kohnShamQ
 
   call Json_LoadJsonFile(manualFileName_=jsonFileName, relativeToProjectDirQ_=.true.)
   gaugeQ = Json_GetExistence("sysGauge")
+  kohnShamQ = Json_GetExistence("sysXc")
 
   call Grid_Fabricate
   call SysKinetic_Fabricate
   call SysPotential_Fabricate
   if (gaugeQ) call SysGauge_Fabricate
   call SysInteraction_Fabricate
+  if (kohnShamQ) call SysXc_Fabricate
   call Method_Fabricate
   call Orbs_Fabricate
   call OrbsInit_Fabricate
@@ -62,6 +67,7 @@ subroutine SetupFemDynamics(jsonFileName)
   call SysPotential_Setup
   if (gaugeQ) call SysGauge_Setup
   call SysInteraction_Setup
+  if (kohnShamQ) call SysXc_Setup
   call Orbs_Setup
   call OrbsInit_Setup
   call ConfigList_Setup

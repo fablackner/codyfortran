@@ -1,0 +1,125 @@
+{
+    "grid": {
+        "fem": {
+            "nLocals": 7,
+            "xmin": -8.0,
+            "xmax": 8.0,
+            "ymin": -8.0,
+            "ymax": 8.0,
+            "zmin": -8.0,
+            "zmax": 8.0,
+            "centers": {
+                "x": [ 0.0 ],
+                "y": [ 0.0 ],
+                "z": [ 0.0 ],
+                "hMin": [ 0.2 ]
+            },
+            "growth": 1.6,
+            "hMax": 2.0,
+            "multipoleLmax": 6
+        }
+    },
+    "sysKinetic": {
+        "fem": {
+            "laplacian": {
+                "bodyMass": [ 1.0, 1.0 ]
+            }
+        }
+    },
+    "sysPotential": {
+        "fem": {
+            "coulomb": {
+                "charges": [ 2.0 ],
+                "smearing": [ 0.0 ]
+            }
+        }
+    },
+    "sysInteraction": {
+        "fem": {
+            "coulomb": {
+                "strength": 1.0
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 1, 1 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 1, 1 ],
+                "tdks": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "fem": {
+            "sto": {
+                "orbital": [ 1 ],
+                "center": [ 1 ],
+                "n": [ 1 ],
+                "l": [ 0 ],
+                "m": [ 0 ],
+                "zeta": [ 1.69 ],
+                "coeff": [ 1.0 ]
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 1
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "mixing": {
+        "linear": {
+            "alpha": 0.7
+        }
+    },
+    "groundSolver": {
+        "precShiftMin": 0.5,
+        "scf": {
+            "stdImpl": {
+                "mixTarget": "potential"
+            }
+        }
+    },
+    "diagonalizerList": {
+        "lobpcg": {
+            "nEvals": 1,
+            "nGuard": 2,
+            "maxIter": 100,
+            "tol": 1e-08,
+            "printLevel": 0
+        }
+    },
+    "program": {
+        "convThresh": 1e-11,
+        "epsThresh": 1e-07,
+        "maxScfIterations": 40
+    },
+    "sysXc": {
+        "fem": {
+            "libxc": {
+                "functionals": [ "lda_x", "lda_c_vwn" ]
+            }
+        }
+    }
+}

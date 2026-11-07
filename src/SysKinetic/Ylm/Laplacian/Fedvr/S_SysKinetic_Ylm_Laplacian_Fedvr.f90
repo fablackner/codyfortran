@@ -134,6 +134,8 @@ contains
   !> first call. T̂ + shift must be invertible: for a real shift,
   !> shift > −(smallest eigenvalue of T̂) (> 0 always works).
   subroutine SolveShifted(dOrb, orb, shift, bt_)
+    use, intrinsic :: iso_c_binding, only: c_loc, c_f_pointer
+    use M_Utils_BlasLib, only: DGEMM
     use M_Grid_Ylm
     use M_SysKinetic_Ylm_Laplacian
 
@@ -143,8 +145,10 @@ contains
     integer(I32), intent(in), optional    :: bt_
 
     complex(R64), allocatable :: fLm(:), denominators(:)
+    complex(R64), allocatable, target :: rows(:, :), coeffs(:, :)
+    real(R64), contiguous, pointer :: rowsR(:, :), coeffsR(:, :)
     real(R64) :: massRatio
-    integer(I32) :: bt, l, m
+    integer(I32) :: bt, l, m, mm, im, nm, nRad, j
     logical :: readyQ
 
     bt = 1
@@ -160,20 +164,38 @@ contains
 
     massRatio = SysKinetic_Ylm_Laplacian_bodyMass(1) / SysKinetic_Ylm_Laplacian_bodyMass(bt)
 
-    allocate (fLm(Grid_Ylm_nRadial), denominators(Grid_Ylm_nRadial))
+    nRad = Grid_Ylm_nRadial
+    allocate (fLm(nRad), denominators(nRad))
     dOrb(:) = (0.0_R64, 0.0_R64)
 
+    ! All channels m of one l at once, as the rows of a complex matrix (real
+    ! GEMMs on the complex rows viewed as real): w^{1/2} f -> U^T (the row
+    ! product f^T U) -> /(E + shift) -> U (the row product c^T U^T) -> w^{-1/2}
     do l = 0, Grid_Ylm_lmax
+      mm = min(l, Grid_Ylm_mmax)
+      nm = 2 * mm + 1
       denominators(:) = 1.0_R64 / (massRatio * kineticEvals(:, l) + shift)
-      do m = -min(l, Grid_Ylm_mmax), min(l, Grid_Ylm_mmax)
+      allocate (rows(nm, nRad), coeffs(nm, nRad))
+      do im = 1, nm
+        m = im - mm - 1
         call Grid_Ylm_GetLmComponent(fLm, l, m, orb)
-        ! w^{1/2} f -> U^T (as the row vector product f^T U) -> /(E + shift)
-        ! -> U -> w^{-1/2}
-        fLm(:) = sqrtWeights(:) * fLm(:)
-        fLm(:) = denominators(:) * matmul(fLm, kineticEvecs(:, :, l))
-        fLm(:) = matmul(kineticEvecs(:, :, l), fLm) / sqrtWeights(:)
+        rows(im, :) = sqrtWeights(:) * fLm(:)
+      end do
+      call c_f_pointer(c_loc(rows), rowsR, [2 * nm, nRad])
+      call c_f_pointer(c_loc(coeffs), coeffsR, [2 * nm, nRad])
+      call DGEMM('N', 'N', 2 * nm, nRad, nRad, 1.0_R64, rowsR, 2 * nm, kineticEvecs(1, 1, l), nRad, &
+                 0.0_R64, coeffsR, 2 * nm)
+      do j = 1, nRad
+        coeffs(:, j) = denominators(j) * coeffs(:, j)
+      end do
+      call DGEMM('N', 'T', 2 * nm, nRad, nRad, 1.0_R64, coeffsR, 2 * nm, kineticEvecs(1, 1, l), nRad, &
+                 0.0_R64, rowsR, 2 * nm)
+      do im = 1, nm
+        m = im - mm - 1
+        fLm(:) = rows(im, :) / sqrtWeights(:)
         call Grid_Ylm_SetLmComponent(dOrb, l, m, fLm)
       end do
+      deallocate (rows, coeffs)
     end do
 
   end subroutine

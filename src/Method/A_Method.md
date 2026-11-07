@@ -34,12 +34,12 @@ the framework to evolve arbitrary quantum states through time.
                    │  expansion) │                    │  product)   │  │  expansion) │
                    └─────────────┘                    └─────────────┘  └─────────────┘
                           │
-       ┌──────────┬───────┴───────┬────────────┬─────────────────┐
-       ▼          ▼               ▼            ▼                 ▼
-    ┌──────┐  ┌──────┐       ┌────────┐   ┌────────┐    ┌─────────────────┐
-    │ TDCI │  │ TDHX │       │ MCTDHX │   │TD-2RDM │    │TD-2RDM-Static   │
-    │      │  │      │       │        │   │        │    │     Orbs        │
-    └──────┘  └──────┘       └────────┘   └────────┘    └─────────────────┘
+       ┌──────────┬───────┴───────┬────────────┬─────────────────┬──────────┐
+       ▼          ▼               ▼            ▼                 ▼          ▼
+    ┌──────┐  ┌──────┐       ┌────────┐   ┌────────┐    ┌─────────────────┐ ┌──────┐
+    │ TDCI │  │ TDHX │       │ MCTDHX │   │TD-2RDM │    │TD-2RDM-Static   │ │ TDKS │
+    │      │  │      │       │        │   │        │    │     Orbs        │ │(DFT) │
+    └──────┘  └──────┘       └────────┘   └────────┘    └─────────────────┘ └──────┘
 ```
 
 ---
@@ -59,6 +59,7 @@ The internal layout is method-specific:
 | MCTDHX              | Orbitals φ_i(r) ⊕ CI coefficients c_I             |
 | TD-2RDM             | Orbitals φ_i(r) ⊕ 2-RDM D²_{ijkl}                 |
 | TD-2RDM-StaticOrbs  | 2-RDM D²_{ijkl} only (fixed orbitals)             |
+| TDKS                | Kohn–Sham orbitals φ_i(r) only (single determinant) |
 | GridBased/Full      | Full many-body wavefunction Ψ(r₁,r₂,...) on grid  |
 
 ### 2. Procedure Pointer Binding (Fabrication Pattern)
@@ -177,6 +178,7 @@ Provides orbital indexing, RDM storage, and operator-application interfaces:
 | **MCTDHX**       | Dynamic    | Dynamic      | Multiconfiguration; Dirac–Frenkel VP       |
 | **TD-2RDM**      | Dynamic    | 2-RDM        | Propagates 2-RDM with adaptive orbitals    |
 | **TD-2RDM-Static**| Static    | 2-RDM        | Propagates 2-RDM only; fixed basis (h1 refilled as for TDCI) |
+| **TDKS**         | Dynamic    | Implicit     | Time-dependent Kohn–Sham (real-time TDDFT) with a functional of `sysXc`; see below |
 
 T_Method_Tdci_LengthGaugeFem and T_Method_Td2rdmStaticOrbs_LengthGaugeFem
 check the h1 refill with the length-gauge laser of grid.fem: after a time
@@ -245,14 +247,15 @@ stay on the device, each call gathers all blocks on the host, sends them once,
 applies the phases on the host between the two transformations and returns
 them. Results agree with the CPU path to round-off.
 
-**Spectral cut.** `"exactFieldFreeCut": Ec` (MCTDHX only, default 0 = off)
+**Spectral cut.** `"exactFieldFreeCut": Ec` (MCTDHX and TDKS, default 0 = off)
 restricts the orbitals to the h0 eigenvectors with E < Ec, P = Σ_{E<Ec} |u⟩⟨u|.
 The highest FEDVR eigenvalues (~10⁵ a.u., from the dense Lobatto points at
 the element boundaries) are unphysical, but they make the Strang composition
 of h0 and the gauge coupling inaccurate. With the cut the exact part
 transforms with the kept eigenvectors only (it projects onto P), and
 `Method_Mb_OrbBased_ApplySpectralCut` applies P to the linear and nonlinear
-orbital derivatives of MCTDHX, so P is invariant under the whole step. The pointer is
+orbital derivatives of MCTDHX and TDKS (and to the full TDKS derivative), so
+P is invariant under the whole step. The pointer is
 bound in `Method_Mb_OrbBased_Fabricate` to
 `Method_Mb_OrbBased_ProjectBelowFieldFreeCut` (two GEMMs with the few dropped
 eigenvectors, P = 1 − U_H U_Hᵀ) or to a no-op. The cut changes the model:
@@ -524,10 +527,28 @@ continuation).
 
 **Restrictions** (clear error stops): requires `exactFieldFreeQ`, a non-Ylm
 grid (the Cayley part; Ylm grids propagate h0 by its eigen-decomposition),
-`method.mb.orbBased.mctdhx`, `sysInteraction`, fermions (fabricate) and a
-body-type-independent interaction (setup); imaginary time stops in the
-Cayley step as without the reference. T_Method_FieldFreeMeanFieldTd2rdmFem
-checks the refusal for TD-2RDM, whose nonlinear part does not subtract U.
+`method.mb.orbBased.mctdhx` or `method.mb.orbBased.tdks`, `sysInteraction`
+or `sysXc`, fermions (fabricate) and a body-type-independent interaction
+(setup, if `sysInteraction` exists); imaginary time stops in the Cayley step
+as without the reference. T_Method_FieldFreeMeanFieldTd2rdmFem checks the
+refusal for TD-2RDM, whose nonlinear part does not subtract U.
+
+**Kohn–Sham reference (TDKS).** With `method.mb.orbBased.tdks`
+(`Method_Mb_OrbBased_kohnShamQ`, set by its fabricate) U is the Kohn–Sham
+mean field of the reference state, U = v_KS,s[ρ0] − a K0: the local
+potential per spin channel on the xc points of SysXc
+(`Method_Mb_OrbBased_Tdks_FillKohnShamPotential`, applied by
+`SysXc_MultiplyWithPotential`) and, for a hybrid, the ACE vectors of K0 scaled
+by √a (none for a = 0: the build costs one Poisson solve and one functional
+evaluation). The TDKS nonlinear part is −i (v_KS − a K − U) φ, which vanishes
+at the Kohn–Sham ground state. A phase kick leaves the density unchanged, so
+for semilocal functionals the default reference of the kicked state is the
+ground-state one. H2 LDA (T_FemDft_03, Δt = 0.02): the ground state is
+stationary to 3e-11 over 1 a.u. (5e-6 with the plain split h0 | v_KS, whose
+secular energy error is not monotonic in Δt: 4.9e-6, 4e-7 and 3.5e-6 per a.u.
+at Δt = 0.04, 0.02, 0.01), and after a kick the Kohn–Sham energy is conserved
+to 2e-11 over 0.6 a.u. with the dipole of the plain split at Δt = 0.005 to
+5e-6 of the response.
 
 **Lifetime, restarts, absorber.** Every `Method_Mb_OrbBased_SetupFieldFree`
 (Method_Setup; the Cayley setup ends with
@@ -551,6 +572,88 @@ exact), and both parts keep the orbitals orthonormal (A unitary, B
 orthogonal to the orbital space). H2 with `absorber.fem.cosinus` and
 `keepOrthonormalQ` at Δt = 0.05: N and the dipole agree with the plain split
 to 1e-11 and 4e-6 (relative) over 1 a.u.
+
+### Time-Dependent Kohn–Sham (TDKS, real-time TDDFT)
+
+`method.mb.orbBased.tdks` (`M_Method_Mb_OrbBased_Tdks`) propagates Kohn–Sham
+orbitals (fermions; occupations from the static CI vector of
+`coeffsInit.unary`, as TDHX) with a functional of `sysXc`
+(`src/SysXc/A_SysXc.md`):
+
+```
+i ∂φ_i/∂t = (h + v_KS,s[ρ↑, ρ↓] − a K_s) φ_i,   v_KS,s = J + v_xc,s,
+```
+
+h = T + V_ext (+ the SysGauge laser), the adiabatic local Kohn–Sham potential
+of the instantaneous spin densities and the fraction a =
+`SysXc_exactExchangeFraction` of exact exchange of a hybrid within spin s
+(K_s φ_i = Σ_l V[φ_l* φ_i] g_l, g = φ R_s, over unordered pairs). The
+equations are unprojected: v_KS − a K is Hermitian, so the orbitals stay
+orthonormal.
+
+**Spin channels.** Restricted orbitals (`orbs.restrictedQ`) must be closed
+shell (equal spin blocks of the 1-RDM, checked at setup): one density (R↑ +
+R↓), the unpolarized functional, the exchange of R↑ for both spins.
+Unrestricted orbitals: the polarized functional with ρ↑, ρ↓ of body types 1
+and 2 (one body type: ρ↓ = 0); `Method_Mb_OrbBased_Tdks_nSpin`.
+
+**Energy.** `Method_GetEnergy` is the Kohn–Sham energy
+E = Σ_i ⟨g_i|hφ_i⟩ + E_H + E_xc − a E_x (E_x = ½ Σ_s Σ_i ⟨g_i|K_s φ_i⟩), its
+parts in `Method_Mb_OrbBased_Tdks_oneBodyEnergy`, `_hartreeEnergy`,
+`_xcEnergy`, `_exactExchangeEnergy`. The orbital equations are its
+Hamiltonian flow (v_xc is the exact derivative of the discrete E_xc), so it
+is conserved without a laser; the Kohn–Sham SCF (`groundSolver.scf.stdImpl`
+with `sysXc`) minimizes it.
+
+**Propagation.** `Method_TimeDerivative` (all terms; imaginary time with
+`Actions_ImagTimeDerivative` and re-orthonormalization by the program), and
+the split-step pair of MCTDHX: `Method_Mb_OrbBased_TimeDerivativeOrbsLin`
+(−i h φ, or only the gauge coupling with `exactFieldFreeQ`) and
+`Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin` (−i (v_KS − a K) φ).
+With `exactFieldFreeQ` TDKS binds `Method_PropagateExactPart` (Ylm:
+eigen-decomposition, also `Method_ApplyExactPartPhi` for the exponential
+integrators; grid.fem: Cayley step), and with `exactFieldFreeMeanFieldQ`
+(grid.fem) the frozen Kohn–Sham reference (above): strongly recommended, it
+removes the splitting error of the ground state.
+
+**Time step with a GGA.** A GGA potential depends on ∇ρ, so its kernel
+δv_xc/δρ acts like a second-order differential operator (∼ 4|v_σ|ρ k²; up to
+0.05 k² for H2 PBE), while the LDA, Hartree and exchange kernels stay bounded
+at large k. In the split step the exact part rotates a mode of h0 energy E by
+E Δt and the nonlinear part shears it in proportion to Δt times the kernel, so
+the composition resonates near E Δt = nπ. Because the GGA kernel grows with E,
+those instability bands widen, and a GGA run is stable only if every
+propagated h0 mode has E Δt < π. The FEDVR and FEM spectra reach 10³–10⁵ a.u.
+at the dense nodes (nuclei, element boundaries). This is a property of the
+splitting: an adaptive integrator for the nonlinear part (`gslOdeiv2` rkf45)
+diverges the same way, and the frozen reference does not help, since it
+removes the potential, not the kernel. LDA runs at the TDHF steps: H2 at
+Δt 0.02 (T_FemDft_03, energy conserved to 2e-11) and H2O at Δt 0.1, whose
+O core has hMin 0.1 (E − E(0+) 7e-8 after the kick, drifting by 2e-9 per
+0.5 a.u. over 3 a.u., no growth).
+
+- Ylm: set `exactFieldFreeCut` = Ec with Ec Δt < π. He PBE at Δt 0.05:
+  Ec 30 and 60 stable (|E − E0| < 2e-6 over 8 a.u.), Ec 120 not (2e-2),
+  no cut ~0.1. At Ec 40 the cut raises the PBE ground-state energy by
+  1.6e-5 Ha (T_He3d_04).
+- grid.fem: the Cayley step has no eigenvectors (no cut), and its rotation
+  angles 2 atan(E Δt / 2) crowd towards π for the stiff nodes, so reduce
+  Δt instead. H2 PBE (hMin 0.3, nLocals 5): Δt 0.005 is stable (|E − E0|
+  1.5e-9 over 3 a.u., from the GMRES tolerance), Δt 0.02 and 0.05 grow
+  exponentially (1e-5 at t = 3 for 0.05).
+
+**Refusals.** `sysXc` with any other method (a density functional would count
+correlation twice with a correlated wavefunction; `method.sb` and the grid-
+and geminal-based branches would ignore it), TDKS without `sysXc`, bosons,
+more than two body types, open-shell restricted orbitals.
+
+**Tests.** `test/simulationTests/FemDft/T_FemDft_03_H2KickTdks` (kick: N κ²/2,
+TRK slope, energy and particle number),
+`test/simulationTests/He3d/T_He3d_04_TimePropagationTdksPbeCut` (PBE at
+Δt 0.05 with the spectral cut: energy conservation, no weight above the
+cut), and the ground states of
+`test/simulationTests/He3d`, `Ne3d/T_Ne3d_18` and `FemDft` (SCF with the TDKS
+energy).
 
 ### TD-2RDM Active/Weak Natural-Orbital Split
 
@@ -874,6 +977,7 @@ i ∂D²/∂t = [h¹, D²] + [Ŵ, D³]   (D³ approximated via reconstruction)
 | `Mb/OrbBased/Mctdhx/*`                | Multiconfiguration TDHX                   |
 | `Mb/OrbBased/Td2rdm/*`                | TD-2RDM with dynamic orbitals             |
 | `Mb/OrbBased/Td2rdmStaticOrbs/*`      | TD-2RDM with static orbitals              |
+| `Mb/OrbBased/Tdks/*`                  | Time-dependent Kohn–Sham (TDDFT, sysXc)   |
 | `Mb/GridBased/M_Method_Mb_GridBased.f90` | Grid-based interfaces                  |
 | `Mb/GridBased/S_Method_Mb_GridBased.f90` | Grid-based operator implementations    |
 | `Mb/GridBased/Full/*`                 | Full tensor-product grid method           |

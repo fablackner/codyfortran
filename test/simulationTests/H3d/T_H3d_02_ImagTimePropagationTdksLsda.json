@@ -1,0 +1,95 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 0,
+            "rmax": 30.0,
+            "fedvr": {
+                "nElements": 12,
+                "nLocals": 12
+            }
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [ 1.0 ],
+                "fedvr": { }
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 1.0,
+                "stdImpl": { }
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "blockEq": { }
+            }
+        }
+    },
+    "sysXc": {
+        "ylm": {
+            "libxc": {
+                "functionals": [ "lda_x", "lda_c_vwn" ]
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 1,
+            "nBodies": [ 1 ],
+            "bodyStatistics": [ "f" ],
+            "orbBased": {
+                "nOrbs": [ 1 ],
+                "tdks": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": false
+    },
+    "orbsInit": {
+        "ylm": {
+            "hydrogenLike": {
+                "charge": 1.0,
+                "n": [ 1 ],
+                "l": [ 0 ],
+                "m": [ 0 ]
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 1
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "integratorList": {
+        "rk": {
+            "o4Expl": { }
+        }
+    },
+    "propagator": {
+        "single": { }
+    },
+    "program": {
+        "convThresh": 1e-11,
+        "timeStep": 0.002,
+        "outputStep": 0.5,
+        "maxOutputs": 200
+    }
+}

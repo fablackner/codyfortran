@@ -1,0 +1,113 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "mmax": 1,
+            "rmax": 20.0,
+            "fedvr": {
+                "nElements": 20,
+                "nLocals": 24
+            }
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [ 1.0, 1.0 ],
+                "fedvr": { }
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 10.0,
+                "stdImpl": { }
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "blockEq": { }
+            }
+        }
+    },
+    "sysXc": {
+        "ylm": {
+            "libxc": {
+                "functionals": [ "lda_x", "lda_c_vwn" ]
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 5, 5 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 5, 5 ],
+                "tdks": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "ylm": {
+            "hydrogenLike": {
+                "charge": 10.0,
+                "n": [ 1, 2, 2, 2, 2 ],
+                "l": [ 0, 0, 1, 1, 1 ],
+                "m": [ 0, 0, -1, 0, 1 ]
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 1
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "diagonalizerList": {
+        "lobpcg": {
+            "nEvals": 5,
+            "nGuard": 2,
+            "maxIter": 500,
+            "tol": 1e-10,
+            "printLevel": 0
+        }
+    },
+    "groundSolver": {
+        "scf": {
+            "stdImpl": {
+                "mixTarget": "potential"
+            }
+        }
+    },
+    "mixing": {
+        "diis": {
+            "nHistory": 8,
+            "alpha": 0.3
+        }
+    },
+    "program": {
+        "convThresh": 1e-11
+    }
+}
