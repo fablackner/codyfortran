@@ -115,7 +115,7 @@ Use [printer routine template](./templates/printer-routine-template.f90) as a st
 ## Validation Commands
 
 ```bash
-source setBuildVars.sh -c gnu -t release
+source setCodyVars.sh -c gnu -t release
 cmake -B build && cmake --build build && cmake --install build
 cd build && ctest -R T_
 ```

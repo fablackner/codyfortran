@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script: setBuildVars.sh
+# Script: setCodyVars.sh
 # Purpose: Sets environment variables for CMake-based Fortran build
 
 # If you don't want pretty printed output from CODY, set this to OFF
@@ -9,13 +9,13 @@ export CODY_PRETTY_PRINT="ON"
 # Detect if the script is being sourced
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "Error: This script must be sourced, not executed."
-    echo "Usage: source setBuildVars.sh [-c compiler] [-t type]"
+    echo "Usage: source setCodyVars.sh [-c compiler] [-t type]"
     exit 1
 fi
 
 # Function to show help
 show_help() {
-    echo "Usage: source setBuildVars.sh [-c compiler] [-t type]"
+    echo "Usage: source setCodyVars.sh [-c compiler] [-t type]"
     echo "Options:"
     echo "    -c compiler  Set the compiler family (gnu/intel, default: gnu)"
     echo "    -t type      Set build type (debug/release, default: release)"
@@ -186,7 +186,7 @@ function cody() {
         elif [[ "$target" == "cov" ]]; then
             if [[ "$COMPILER" != "gnu" || "$BUILD_TYPE" != "debug" ]]; then
                 echo "Warning: Coverage requires gnu compiler and debug build."
-                echo "Please run: source setBuildVars.sh -c gnu -t debug"
+                echo "Please run: source setCodyVars.sh -c gnu -t debug"
             else
                 cmake -B build && \
                 cmake --build build && \

@@ -99,7 +99,7 @@ Do not use only `"test/T_...json"` for newly created nested tests.
 6. Build and run tests.
 
 ```bash
-source setBuildVars.sh -c gnu -t release
+source setCodyVars.sh -c gnu -t release
 cmake -B build && cmake --build build && cmake --install build
 cd build && ctest -R T_
 ```

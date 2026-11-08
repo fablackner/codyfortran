@@ -32,14 +32,14 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: thirdParty/installation
-          key: thirdparty-${{ runner.os }}-gfortran${{ steps.gfortran.outputs.version }}-${{ hashFiles('thirdParty/CMakeLists.txt', 'thirdParty/getSources.sh', 'thirdParty/setBuildVars.sh') }}
+          key: thirdparty-${{ runner.os }}-gfortran${{ steps.gfortran.outputs.version }}-${{ hashFiles('thirdParty/CMakeLists.txt', 'thirdParty/getSources.sh', 'thirdParty/setLibVars.sh') }}
 
       - name: Build third-party libraries
         if: steps.restore-thirdparty.outputs.cache-hit != 'true'
         run: |
           cd thirdParty
           ./getSources.sh
-          source setBuildVars.sh -c gnu -t release
+          source setLibVars.sh -c gnu -t release
           cmake -B build
           cmake --build build
 
@@ -50,11 +50,11 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: thirdParty/installation
-          key: thirdparty-${{ runner.os }}-gfortran${{ steps.gfortran.outputs.version }}-${{ hashFiles('thirdParty/CMakeLists.txt', 'thirdParty/getSources.sh', 'thirdParty/setBuildVars.sh') }}
+          key: thirdparty-${{ runner.os }}-gfortran${{ steps.gfortran.outputs.version }}-${{ hashFiles('thirdParty/CMakeLists.txt', 'thirdParty/getSources.sh', 'thirdParty/setLibVars.sh') }}
 
       - name: Build CodyFortran and tests
         run: |
-          source setBuildVars.sh -c gnu -t release
+          source setCodyVars.sh -c gnu -t release
           cmake -B build
           cmake --build build --target tests -j"$(nproc)"
 
@@ -62,6 +62,6 @@ jobs:
       # other (e.g. T_He1d_04 loads orbitals saved by T_He1d_03).
       - name: Run tests
         run: |
-          source setBuildVars.sh -c gnu -t release
+          source setCodyVars.sh -c gnu -t release
           cd build
           ctest -R T_ --output-on-failure

@@ -32,7 +32,7 @@ molecules/
 ## Running
 
 ```bash
-source setBuildVars.sh -c gnu -t release
+source setCodyVars.sh -c gnu -t release
 cody build app
 export CODY_PRETTY_PRINT=OFF OMP_NUM_THREADS=2
 cd app/atoms/ne/groundstate/mctdhf && ./P_GroundMctdhf.exe

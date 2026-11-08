@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# Script: setBuildVars.sh
+# Script: setLibVars.sh
 # Purpose: Sets environment variables for CMake-based Fortran build
 
 # Detect if the script is being sourced
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "Error: This script must be sourced, not executed."
-    echo "Usage: source setBuildVars.sh [-c compiler] [-t type]"
+    echo "Usage: source setLibVars.sh [-c compiler] [-t type]"
     exit 1
 fi
 
 # Function to show help
 show_help() {
-    echo "Usage: source setBuildVars.sh [-c compiler] [-t type]"
+    echo "Usage: source setLibVars.sh [-c compiler] [-t type]"
     echo "Options:"
     echo "    -c compiler  Set the compiler family (gnu/intel, default: gnu)"
     echo "    -t type      Set build type (debug/release, default: release)"
@@ -90,6 +90,7 @@ fi
 
 # Get script directory for absolute paths
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+CODY_LIB_DIR="$SCRIPT_DIR"
 INSTALL_DIR="$SCRIPT_DIR/installation"
 INCLUDE_FLAGS="-I$INSTALL_DIR/include"
 
@@ -148,3 +149,25 @@ echo "CFLAGS: $CFLAGS"
 echo "CXXFLAGS: $CXXFLAGS"
 echo "CPPFLAGS: $CPPFLAGS"
 echo "LDFLAGS: $LDFLAGS"
+echo "Available shortcuts: cody build lib"
+
+# Convenience function for building the third-party libraries
+function cody() {
+    local cmd=$1
+    local target=$2
+
+    if [[ "$cmd" == "build" && "$target" == "lib" ]]; then
+        (
+            cd "${CODY_LIB_DIR}" || exit 1
+            rm -rf build sources installation
+            echo "Cleaned thirdParty build, sources and installation directories."
+            bash getSources.sh && \
+            cmake -B build && \
+            cmake --build build && \
+            cmake --install build
+        )
+    else
+        echo "Usage:"
+        echo "  cody build lib             # Clean thirdParty, download the sources, build and install the libraries"
+    fi
+}

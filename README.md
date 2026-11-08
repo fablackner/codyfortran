@@ -92,53 +92,45 @@ git clone https://github.com/fablackner/codyfortran
 cd CodyFortran
 cd thirdParty
 
-# source the setBuildVars.sh file (the one in thirdParty not the top-level one)
+# source the setLibVars.sh file
 # flags:
 # -h help: display help message
 # -c compiler family: gnu or intel
 # -t build type: debug or release
 # For third-party libraries, release build type is recommended unless
 # you need to debug those libraries
-source setBuildVars.sh -c gnu -t release
+source setLibVars.sh -c gnu -t release
 
-# Download the selected libraries (delete the old folders fetching updates)
-bash getSources.sh
-
-# Build and install the libraries
-cmake -B build
-cmake --build build
-cmake --install build
+# Clean the thirdParty folder, download the selected libraries, then build and install them
+cody build lib
 ```
 
 The libraries will be installed in the `thirdParty/installation/` directory.  When building CodyFortran, it will first check for libraries in the `thirdParty/installation/lib/` and `thirdParty/installation/lib64/` directories. If a required library isn't found there, it will search in the standard system paths.
 
 ### Building CodyFortran with CMake
 
-After building the third-party libraries, it is recommended to start a new terminal session before sourcing `setBuildVars.sh` in the main project directory.
+After building the third-party libraries, it is recommended to start a new terminal session before sourcing `setCodyVars.sh` in the main project directory.
 
 ```bash
 # Clone repository (can be skipped if already done)
 git clone https://github.com/fablackner/codyfortran
 cd CodyFortran
 
-# source the setBuildVars.sh file
+# source the setCodyVars.sh file
 # flags:
 # -h help: display help message
 # -c compiler family: gnu or intel
 # -t build type: debug or release
-source setBuildVars.sh -c gnu -t release
+source setCodyVars.sh -c gnu -t release
 
-# Build and install CodyFortran
-cmake -B build
-cmake --build build
-cmake --install build
+# Build CodyFortran
+cody build
 
 # Run the test suite
-cd build
-ctest -R T_
+cody run test
 ```
 
-> **Note**: Each test uses OpenMP with one thread per core by default (or `OMP_NUM_THREADS` if set). Running tests in parallel with `ctest -j` therefore oversubscribes the CPU, which can slow the tests down drastically and trigger timeouts, especially on machines with few cores. Prefer the sequential `ctest -R T_`, or set `OMP_NUM_THREADS` so that `-j` × threads does not exceed the number of cores, e.g. on a 4-core machine:
+> **Note**: Each test uses OpenMP with one thread per core by default (or `OMP_NUM_THREADS` if set). Running tests in parallel with `ctest -j` therefore oversubscribes the CPU, which can slow the tests down drastically and trigger timeouts, especially on machines with few cores. Prefer the sequential `cody run test`, or set `OMP_NUM_THREADS` so that `-j` × threads does not exceed the number of cores, e.g. on a 4-core machine:
 >
 > ```bash
 > OMP_NUM_THREADS=2 ctest -R T_ -j2
@@ -156,7 +148,7 @@ CodyFortran's console output uses ANSI color escape codes and a few non-ASCII ch
 ```bash
 export CODY_PRETTY_PRINT="OFF"
 ```
-Per default, `CODY_PRETTY_PRINT` is set to `"ON"` in `setBuildVars.sh`. You can change this default behavior by editing that script.
+Per default, `CODY_PRETTY_PRINT` is set to `"ON"` in `setCodyVars.sh`. You can change this default behavior by editing that script.
 
 ## Usage
 
@@ -168,7 +160,7 @@ All `.f90` files in the `app` folder are automatically compiled into executable 
 
 ```bash
 # Set the dynamic library paths (needs to be done once per terminal session)
-source setBuildVars.sh -c gnu -t release
+source setCodyVars.sh -c gnu -t release
 
 # Run the executable with the specified input file
 ./myProg.exe myInput.json
@@ -179,7 +171,7 @@ source setBuildVars.sh -c gnu -t release
 
 ### Build Shortcuts
 
-When you source `setBuildVars.sh`, it also defines a convenient `cody` bash function that provides shortcuts for building and running tests:
+When you source `setCodyVars.sh`, it also defines a convenient `cody` bash function that provides shortcuts for building and running tests:
 
 ```bash
 # Build the entire project
@@ -200,7 +192,7 @@ cody clean
 # Run tests
 cody run test
 
-# Run tests with coverage (requires source setBuildVars.sh -c gnu -t debug)
+# Run tests with coverage (requires source setCodyVars.sh -c gnu -t debug)
 cody run cov
 ```
 ## Example Programs

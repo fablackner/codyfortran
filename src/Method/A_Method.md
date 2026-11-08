@@ -988,5 +988,5 @@ i ∂D²/∂t = [h¹, D²] + [Ŵ, D³]   (D³ approximated via reconstruction)
 ## Contact & Further Reading
 
 - Main documentation: `README.md` in repository root
-- Build instructions: `CMakeLists.txt`, `setBuildVars.sh`
+- Build instructions: `CMakeLists.txt`, `setCodyVars.sh`
 - Related modules: `M_Propagator`, `M_Orbs`, `M_Coeffs`, `M_TwoRdm`

@@ -67,7 +67,7 @@ Resulting files:
 6. Build and run.
 
 ```bash
-source setBuildVars.sh -c gnu -t release
+source setCodyVars.sh -c gnu -t release
 cmake -B build && cmake --build build && cmake --install build
 ./app/<category>/<system>/<stage>/<method>/<programBase>.exe
 ```

@@ -45,7 +45,7 @@ fortitude check .
 - From repository root, run:
 
 ```bash
-source setBuildVars.sh -c gnu -t release && cmake -B build && cmake --build build && cd build && ctest -R T_
+source setCodyVars.sh -c gnu -t release && cmake -B build && cmake --build build && cd build && ctest -R T_
 ```
 
 ## Reporting format
