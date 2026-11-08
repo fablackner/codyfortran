@@ -146,9 +146,12 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/sources/arpack")
     ExternalProject_Add(
         arpack
         SOURCE_DIR "${CMAKE_SOURCE_DIR}/sources/arpack"
+        DEPENDS openblas
         CMAKE_ARGS
             -DCMAKE_BUILD_TYPE=$ENV{CMAKE_BUILD_TYPE}
             -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+            -DBLAS_LIBRARIES=${CMAKE_INSTALL_PREFIX}/lib/libopenblas.so
+            -DLAPACK_LIBRARIES=${CMAKE_INSTALL_PREFIX}/lib/libopenblas.so
             -DMPI=OFF
             -DBUILD_SHARED_LIBS=ON
             -DICB=ON
