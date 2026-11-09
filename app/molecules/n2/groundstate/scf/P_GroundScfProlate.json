@@ -1,0 +1,154 @@
+{
+    "grid": {
+        "prolate": {
+            "R": 2.068,
+            "ximax": 12.0,
+            "mmax": 1,
+            "nEta": 80,
+            "fedvr": {
+                "nElements": 12,
+                "nLocals": 16,
+                "grading": 2.0
+            }
+        }
+    },
+    "sysKinetic": {
+        "prolate": {
+            "laplacian": {
+                "bodyMass": [
+                    1.0,
+                    1.0
+                ],
+                "fedvr": {}
+            }
+        }
+    },
+    "sysPotential": {
+        "prolate": {
+            "coulomb": {
+                "charge": 7.0
+            }
+        }
+    },
+    "sysInteraction": {
+        "prolate": {
+            "coulomb": {
+                "strength": 1.0,
+                "stdImpl": {}
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [
+                7,
+                7
+            ],
+            "bodyStatistics": [
+                "f",
+                "f"
+            ],
+            "orbBased": {
+                "nOrbs": [
+                    7,
+                    7
+                ],
+                "tdhx": {}
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "prolate": {
+            "lcao": {
+                "charge": 5.0,
+                "n": [
+                    1,
+                    1,
+                    2,
+                    2,
+                    2,
+                    2,
+                    2
+                ],
+                "l": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1
+                ],
+                "m": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    -1,
+                    1,
+                    0
+                ],
+                "geradeQ": [
+                    true,
+                    false,
+                    true,
+                    false,
+                    false,
+                    false,
+                    true
+                ]
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1,
+                "nExcitations": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2,
+                "nExcitations": 1
+            }
+        }
+    },
+    "coeffs": {
+        "generic": {}
+    },
+    "coeffsInit": {
+        "unary": {}
+    },
+    "diagonalizerList": {
+        "lobpcg": {
+            "nEvals": 7,
+            "nGuard": 3,
+            "maxIter": 100,
+            "tol": 1e-08
+        }
+    },
+    "groundSolver": {
+        "precShiftMin": 0.5,
+        "scf": {
+            "stdImpl": {
+                "mixTarget": "orbitals",
+                "aceQ": true
+            }
+        }
+    },
+    "mixing": {
+        "diis": {
+            "startThreshold": 0.0
+        }
+    },
+    "program": {
+        "convThresh": 1e-10,
+        "epsThresh": 1e-07,
+        "maxIter": 40
+    }
+}

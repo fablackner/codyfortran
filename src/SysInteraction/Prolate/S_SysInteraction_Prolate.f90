@@ -85,7 +85,7 @@ contains
     !$omp do schedule(dynamic)
     do m = -SysInteraction_Prolate_mmax, SysInteraction_Prolate_mmax
       call Grid_Prolate_GetMComponent(srcM, m, src)
-      if (all(abs(srcM) < 1.0e-14_R64)) cycle
+      if (all(abs(real(srcM, kind=R64)) < 1.0e-14_R64) .and. all(abs(aimag(srcM)) < 1.0e-14_R64)) cycle
       call SysInteraction_Prolate_FillInteractionPotentialChannel(potM, srcM, m, time, bt1_, bt2_)
       call Grid_Prolate_SetMComponent(interactionPotential, m, potM)
     end do

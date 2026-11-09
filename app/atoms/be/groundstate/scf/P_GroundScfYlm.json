@@ -1,28 +1,32 @@
 {
     "grid": {
         "ylm": {
-            "lmax": 1,
+            "lmax": 0,
+            "mmax": 0,
             "rmin": 0.0,
-            "rmax": 8.0,
+            "rmax": 200.0,
             "fedvr": {
-                "nElements": 5,
-                "nLocals": 21
+                "nElements": 50,
+                "nLocals": 20
             }
         }
     },
     "sysKinetic": {
         "ylm": {
             "laplacian": {
-                "bodyMass": [ 1.0, 1.0 ],
-                "fedvr": { }
+                "bodyMass": [
+                    1.0,
+                    1.0
+                ],
+                "fedvr": {}
             }
         }
     },
     "sysPotential": {
         "ylm": {
             "coulomb": {
-                "charge": 10.0,
-                "stdImpl": { }
+                "charge": 4.0,
+                "stdImpl": {}
             }
         }
     },
@@ -30,31 +34,55 @@
         "ylm": {
             "coulomb": {
                 "strength": 1.0,
-                "blockEq": { }
+                "blockEq": {}
             }
         }
     },
     "method": {
         "mb": {
             "nBodyTypes": 2,
-            "nBodies": [ 5, 5 ],
-            "bodyStatistics": [ "f", "f" ],
+            "nBodies": [
+                2,
+                2
+            ],
+            "bodyStatistics": [
+                "f",
+                "f"
+            ],
             "orbBased": {
-                "nOrbs": [ 5, 5 ],
-                "tdhx": { }
+                "nOrbs": [
+                    2,
+                    2
+                ],
+                "tdhx": {},
+                "mOfOrbs": [
+                    0,
+                    0,
+                    0,
+                    0
+                ]
             }
         }
     },
     "orbs": {
-        "restrictedQ": false
+        "restrictedQ": true
     },
     "orbsInit": {
         "ylm": {
             "hydrogenLike": {
-                "charge": 10.0,
-                "n": [ 1, 2, 2, 2, 2 ],
-                "l": [ 0, 0, 1, 1, 1 ],
-                "m": [ 0, 0, -1, 0, 1 ]
+                "charge": 3.0,
+                "n": [
+                    1,
+                    2
+                ],
+                "l": [
+                    0,
+                    0
+                ],
+                "m": [
+                    0,
+                    0
+                ]
             }
         }
     },
@@ -73,25 +101,18 @@
         }
     },
     "coeffs": {
-        "generic": { }
+        "generic": {}
     },
     "coeffsInit": {
-        "unary": { }
+        "unary": {}
     },
     "diagonalizerList": {
         "arpack1": {
             "nEvals": 2,
             "which": "SR",
             "bmat": "I",
-            "nKry": 60,
-            "checkConvergenceQ": false,
-            "printLevel": 0
-        },
-        "arpack2": {
-            "nEvals": 1,
-            "which": "SR",
-            "bmat": "I",
-            "nKry": 25,
+            "nKry": 30,
+            "tol": 1e-08,
             "checkConvergenceQ": false,
             "printLevel": 0
         }

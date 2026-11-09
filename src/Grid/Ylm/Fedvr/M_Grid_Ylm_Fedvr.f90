@@ -37,6 +37,10 @@ module M_Grid_Ylm_Fedvr
   !> Number of finite elements in the radial grid partition.
   integer(I32) :: Grid_Ylm_Fedvr_nElements
 
+  !> Ratio of consecutive element sizes (grid.ylm.fedvr.grading, default 1: uniform;
+  !> > 1 refines toward the lower end of the domain).
+  real(R64) :: Grid_Ylm_Fedvr_grading
+
   !> Number of Gauss–Lobatto nodes per element (local basis size).
   integer(I32) :: Grid_Ylm_Fedvr_nLocals
 

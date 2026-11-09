@@ -87,7 +87,7 @@
     },
     "orbsInit": {
         "load": {
-            "dir": "../../../groundstate/hf",
+            "dir": "../../../groundstate/scf",
             "lmaxIn": 0
         }
     },
@@ -110,7 +110,7 @@
     },
     "coeffsInit": {
         "load": {
-            "dir": "../../../groundstate/hf"
+            "dir": "../../../groundstate/scf"
         }
     },
     "integratorList": {

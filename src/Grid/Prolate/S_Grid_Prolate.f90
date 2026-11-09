@@ -57,6 +57,7 @@ contains
 
     integer(I32) :: iXi, jEta, kEta, iEta1, iEta2, mChannel, iGrid
     real(R64) :: jacobian
+    real(R64), allocatable :: dEta(:, :), gOdd(:, :)
 
     call Say_Setup("grid.prolate")
 
@@ -73,22 +74,37 @@ contains
 
     call gauss_legendre(Grid_Prolate_etaPoints, Grid_Prolate_etaWeights, [-1.0_R64, 1.0_R64])
 
-    ! Sturm-Liouville matrix S_eta(i,j) = sum_k w_k (1-eta_k^2) D(k,i) D(k,j);
-    ! the quadrature is exact (integrand degree 2*nEta-2 <= 2*nEta-1) and the
-    ! boundary terms of the integration by parts vanish since (1-eta^2) = 0
-    ! at eta = +-1
-    allocate (Grid_Prolate_etaKinMatrix(Grid_Prolate_nEta, Grid_Prolate_nEta))
+    ! Sturm-Liouville matrices S_eta(i,j,parity) = sum_k w_k (1-eta_k^2) chi_i'(eta_k) chi_j'(eta_k);
+    ! the boundary terms of the integration by parts vanish since (1-eta^2) = 0
+    ! at eta = +-1.
+    !   parity 0 (even |m|): chi_i = L_i; the quadrature is exact (integrand
+    !     degree 2*nEta-2 <= 2*nEta-1).
+    !   parity 1 (odd |m|): chi_i = s(eta) L_i / s(eta_i) with s = sqrt(1-eta^2),
+    !     the axis factor of odd-m fields; s chi_i' = g_i / s_i at the nodes with
+    !     g_i(eta_k) = -eta_k delta_ki + (1-eta_k^2) L_i'(eta_k) (DVR quadrature).
+    allocate (Grid_Prolate_etaKinMatrix(Grid_Prolate_nEta, Grid_Prolate_nEta, 0:1))
+    allocate (dEta(Grid_Prolate_nEta, Grid_Prolate_nEta), gOdd(Grid_Prolate_nEta, Grid_Prolate_nEta))
+    do iEta1 = 1, Grid_Prolate_nEta
+      do kEta = 1, Grid_Prolate_nEta
+        dEta(kEta, iEta1) = LagrangeDerivative(Grid_Prolate_etaPoints, iEta1, kEta, Grid_Prolate_nEta)
+        gOdd(kEta, iEta1) = (1.0_R64 - Grid_Prolate_etaPoints(kEta)**2) * dEta(kEta, iEta1)
+        if (kEta .eq. iEta1) gOdd(kEta, iEta1) = gOdd(kEta, iEta1) - Grid_Prolate_etaPoints(kEta)
+        gOdd(kEta, iEta1) = gOdd(kEta, iEta1) / sqrt(1.0_R64 - Grid_Prolate_etaPoints(iEta1)**2)
+      end do
+    end do
     Grid_Prolate_etaKinMatrix = 0.0_R64
     do iEta2 = 1, Grid_Prolate_nEta
       do iEta1 = 1, Grid_Prolate_nEta
         do kEta = 1, Grid_Prolate_nEta
-          Grid_Prolate_etaKinMatrix(iEta1, iEta2) = Grid_Prolate_etaKinMatrix(iEta1, iEta2) + &
+          Grid_Prolate_etaKinMatrix(iEta1, iEta2, 0) = Grid_Prolate_etaKinMatrix(iEta1, iEta2, 0) + &
             Grid_Prolate_etaWeights(kEta) * (1.0_R64 - Grid_Prolate_etaPoints(kEta)**2) * &
-            LagrangeDerivative(Grid_Prolate_etaPoints, iEta1, kEta, Grid_Prolate_nEta) * &
-            LagrangeDerivative(Grid_Prolate_etaPoints, iEta2, kEta, Grid_Prolate_nEta)
+            dEta(kEta, iEta1) * dEta(kEta, iEta2)
+          Grid_Prolate_etaKinMatrix(iEta1, iEta2, 1) = Grid_Prolate_etaKinMatrix(iEta1, iEta2, 1) + &
+            Grid_Prolate_etaWeights(kEta) * gOdd(kEta, iEta1) * gOdd(kEta, iEta2)
         end do
       end do
     end do
+    deallocate (dEta, gOdd)
 
     !------------------------------------
     ! flattened arrays (channel-outer layout, xi fastest)
@@ -190,9 +206,10 @@ contains
     logical, intent(in), optional         :: conjgQ_
     logical, intent(in), optional         :: withWeightsQ_
 
-    integer(I32) :: m1, m2, mOut, mChannel
+    integer(I32) :: m1, m2, mOut, mChannel, base1, base2, baseOut, nSpatial
     logical :: conjgQ, withWeightsQ
-    complex(R64), allocatable :: aTmp(:), bTmp(:), outTmp(:)
+    logical, allocatable :: nonzeroQ(:)
+    complex(R64), allocatable :: aTmp(:)
 
     conjgQ = .false.
     if (present(conjgQ_)) conjgQ = conjgQ_
@@ -200,14 +217,30 @@ contains
     withWeightsQ = .false.
     if (present(withWeightsQ_)) withWeightsQ = withWeightsQ_
 
-    allocate (aTmp(Grid_Prolate_nSpatial), bTmp(Grid_Prolate_nSpatial), outTmp(Grid_Prolate_nSpatial))
+    nSpatial = Grid_Prolate_nSpatial
+    allocate (aTmp(nSpatial))
+
+    ! channels of f with a non-negligible value (checked once, not per m1;
+    ! real and imaginary parts separately, which avoids a complex abs)
+    allocate (nonzeroQ(-mMax:mMax))
+    do m2 = -mMax, mMax
+      base2 = ChannelOfM(m2) * nSpatial
+      nonzeroQ(m2) = .not. NegligibleQ(f(base2 + 1:base2 + nSpatial))
+    end do
 
     fOut = (0.0_R64, 0.0_R64)
 
     do m1 = -mMaxConjg, mMaxConjg
-      call GetMComponent(aTmp, m1, fConjg)
-      if (all(abs(aTmp) < 1.0e-14_R64)) cycle
-      if (conjgQ) aTmp = conjg(aTmp)
+      base1 = ChannelOfM(m1) * nSpatial
+      if (NegligibleQ(fConjg(base1 + 1:base1 + nSpatial))) cycle
+
+      ! One factor 1/sqrt(2 pi) from the product of two channel basis
+      ! functions e^(i m phi)/sqrt(2 pi)
+      if (conjgQ) then
+        aTmp(:) = conjg(fConjg(base1 + 1:base1 + nSpatial)) / sqrt(TWOPI)
+      else
+        aTmp(:) = fConjg(base1 + 1:base1 + nSpatial) / sqrt(TWOPI)
+      end if
 
       do m2 = -mMax, mMax
         ! conjg(e^(i m1 phi)) e^(i m2 phi) = e^(i (m2-m1) phi)
@@ -217,16 +250,25 @@ contains
           mOut = m2 + m1
         end if
         if (abs(mOut) > mMaxOut) cycle
+        if (.not. nonzeroQ(m2)) cycle
 
-        call GetMComponent(bTmp, m2, f)
-        if (all(abs(bTmp) < 1.0e-14_R64)) cycle
-
-        ! One factor 1/sqrt(2 pi) from the product of two channel basis
-        ! functions e^(i m phi)/sqrt(2 pi)
-        outTmp(:) = aTmp(:) * bTmp(:) / sqrt(TWOPI)
-
-        call AddMComponent(fOut, mOut, outTmp)
+        base2 = ChannelOfM(m2) * nSpatial
+        baseOut = ChannelOfM(mOut) * nSpatial
+        fOut(baseOut + 1:baseOut + nSpatial) = fOut(baseOut + 1:baseOut + nSpatial) + &
+                                               aTmp(:) * f(base2 + 1:base2 + nSpatial)
       end do
+    end do
+
+    ! Channel Dirichlet point: an m /= 0 field vanishes on the axis (xi = 1),
+    ! as in the kinetic operator and the Poisson solver. Without it a
+    ! potential times orbital product keeps the axis value of the m /= 0
+    ! channels, which the kinetic operator does not couple: every such point
+    ! is then a spurious eigenvector with eigenvalue V(1, eta) (about -1e3 Ha
+    ! near the nuclei of N2)
+    do mChannel = 1, 2 * mMaxOut
+      associate (base => mChannel * Grid_Prolate_nSpatial)
+        fOut(base + 1:base + Grid_Prolate_nSpatial:Grid_Prolate_nXi) = (0.0_R64, 0.0_R64)
+      end associate
     end do
 
     ! Apply weights if requested
@@ -239,9 +281,19 @@ contains
       end do
     end if
 
-    deallocate (aTmp, bTmp, outTmp)
+    deallocate (aTmp, nonzeroQ)
 
   end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> True if every real and imaginary part of a channel is below 1e-14.
+  pure function NegligibleQ(fM) result(res)
+    complex(R64), intent(in) :: fM(:)
+    logical :: res
+
+    res = all(abs(real(fM, kind=R64)) < 1.0e-14_R64) .and. all(abs(aimag(fM)) < 1.0e-14_R64)
+
+  end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   pure subroutine GetMComponent(fMOut, m, f)

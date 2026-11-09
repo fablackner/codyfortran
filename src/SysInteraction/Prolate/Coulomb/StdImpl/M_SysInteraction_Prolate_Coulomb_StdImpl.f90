@@ -15,8 +15,12 @@
 !>     [ d/dxi (xi^2-1) d/dxi - tau(tau+1) - m^2/(xi^2-1) ] v = -(4 pi / a) g,
 !>     g(xi_i) = sum_j Pbar_tau^m(eta_j) srcW_m(xi_i, eta_j),
 !>
-!> where srcW includes the metric weights. The weak-form DVR matrix
-!> A = S_xi + diag(w_xi q) is LU-factorized once at setup for every (tau, m).
+!> where srcW includes the metric weights. The weak-form DVR matrix is
+!> A_tau = K_m + tau(tau+1) W with K_m = S_xi + m^2 W/(xi^2-1) and W =
+!> diag(w_xi). One generalized eigen-decomposition K_m U = W U Lambda,
+!> U^T W U = 1, per |m| at setup gives A_tau^-1 = U (Lambda + tau(tau+1))^-1
+!> U^T for every tau, so a channel solve is a few matrix products (eta
+!> projection, U^T, diagonal scaling, U, eta synthesis) over all tau at once.
 !> The homogeneous-Dirichlet solution is corrected by the exact exterior tail:
 !> the difference between the true solution (which behaves like Q_tau^m(xi)
 !> outside the source) and the Dirichlet solution is proportional to the
@@ -44,24 +48,25 @@ module M_SysInteraction_Prolate_Coulomb_StdImpl
   ! module data
   !=============================================================================
 
-  !> LU factorization of the weak-form xi matrix for one (tau, |m|) pair.
-  type :: T_SysInteraction_Prolate_Coulomb_StdImpl_Lu
-    real(R64), allocatable :: lu(:, :)
-    integer(I32), allocatable :: ipiv(:)
+  !> Solver tables of one azimuthal channel |m| (degrees tau = |m|..lmax,
+  !> nTau = lmax - |m| + 1; xi index iStart..nXi with iStart = 2 for m /= 0).
+  type :: T_SysInteraction_Prolate_Coulomb_StdImpl_Channel
+    !> Generalized eigenvectors U (nSolve, nSolve) of K_m, U^T W U = 1.
+    real(R64), allocatable :: u(:, :)
+    !> Generalized eigenvalues of K_m (nSolve).
+    real(R64), allocatable :: lambda(:)
+    !> tau (tau + 1) per degree (nTau).
+    real(R64), allocatable :: tauFactor(:)
+    !> Normalized on-cut Legendre values Pbar_tau^m(eta_j) (nEta, nTau).
+    real(R64), allocatable :: pBarEta(:, :)
+    !> Off-cut Legendre values P_tau^m(xi_i) (nXi, nTau).
+    real(R64), allocatable :: pXi(:, :)
+    !> Exterior-tail coefficients Q_tau^m(ximax)/(kappa P_tau^m(ximax)) (nTau).
+    real(R64), allocatable :: corrCoef(:)
   end type
 
-  !> LU solvers indexed (tau = 0:lmax, |m| = 0:mmaxAbs).
-  type(T_SysInteraction_Prolate_Coulomb_StdImpl_Lu), allocatable :: SysInteraction_Prolate_Coulomb_StdImpl_solvers(:, :)
-
-  !> Normalized on-cut Legendre values Pbar_tau^m(eta_j), indexed (tau, j, |m|).
-  real(R64), allocatable :: SysInteraction_Prolate_Coulomb_StdImpl_pBarEta(:, :, :)
-
-  !> Off-cut Legendre values P_tau^m(xi_i), indexed (tau, i, |m|).
-  real(R64), allocatable :: SysInteraction_Prolate_Coulomb_StdImpl_pXi(:, :, :)
-
-  !> Exterior-tail correction coefficients Q_tau^m(ximax)/(kappa P_tau^m(ximax)),
-  !> indexed (tau, |m|).
-  real(R64), allocatable :: SysInteraction_Prolate_Coulomb_StdImpl_corrCoef(:, :)
+  !> Solver tables indexed |m| = 0:mmaxAbs.
+  type(T_SysInteraction_Prolate_Coulomb_StdImpl_Channel), allocatable :: SysInteraction_Prolate_Coulomb_StdImpl_channels(:)
 
   !=============================================================================
   ! module procedures pointers

@@ -5,7 +5,7 @@
 !> program of ../mctdhf, without its time-step bias (any atom with the
 !> corresponding input).
 !>
-!> Start: the Hartree-Fock orbitals 1s 2s of ../hf (orbsInit.load with
+!> Start: the Hartree-Fock orbitals 1s 2s of ../scf (orbsInit.load with
 !> nOrbsIn 2 and lmaxIn 0) and hydrogen-like 2p (orbsInit.ylm.hydrogenLike,
 !> listing only the 2p). Every iteration (GroundSolver_Approach) starts with
 !> the CI eigenvector of the current orbitals (diagonalizerList(1)), so the

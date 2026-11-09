@@ -190,6 +190,9 @@ src/Grid/
 | `grid.ylm.lmax` | int | 1 | Maximum angular momentum |
 | `grid.ylm.mmax` | int | `lmax` | Maximum \|m\| of orbitals (clamped to `lmax`) |
 | `grid.ylm.rmax` | real | 20.0 | Radial box size |
+| `grid.ylm.fedvr.nElements` | int | 10 | Radial finite elements |
+| `grid.ylm.fedvr.nLocals` | int | 7 | Lobatto points per element |
+| `grid.ylm.fedvr.grading` | real | 1.0 | Ratio of consecutive element sizes (geometric, `Fedvr_CreateCtxGraded`); > 1 refines toward r = 0, 1 is the uniform grid (bitwise) |
 
 **m truncation.** Orbitals store the channels 0 ≤ l ≤ lmax, |m| ≤ min(l, mmax),
 l-major with m ascending and radial points innermost
@@ -282,15 +285,47 @@ in η (interior nodes only).
 | `grid.prolate.nEta` | int | 8 | Gauss–Legendre points in η |
 | `grid.prolate.fedvr.nElements` | int | 10 | Finite elements in ξ |
 | `grid.prolate.fedvr.nLocals` | int | 7 | Lobatto points per element |
+| `grid.prolate.fedvr.grading` | real | 1.0 | Ratio of consecutive ξ element sizes; > 1 refines toward ξ = 1 (the nuclei and the axis), needed for heavier nuclei (N₂: 2.0 with 12 elements) |
 
 Companion back-ends: `sysKinetic.prolate.laplacian.fedvr`,
 `sysPotential.prolate.coulomb` (charge per nucleus, −2Zξ/(a(ξ²−η²))),
 `sysInteraction.prolate.coulomb.stdImpl` (Neumann-expansion Poisson solve per
 (τ,m) channel), `orbsInit.prolate.lcao` (gerade/ungerade hydrogen-like LCAO).
 Validated against the exact H₂⁺ 1sσg energy at R = 2 and the H₂ Hartree–Fock
-limit at R = 1.4 (`test/simulationTests/H2/`). Note: odd-|m| channels carry a
-non-polynomial factor ((ξ²−1)(1−η²))^{|m|/2} and converge only algebraically;
-even-m channels are fully spectral.
+limit at R = 1.4 (`test/simulationTests/H2/`).
+
+**Odd-|m| channels.** Near the axis an m channel behaves as
+((ξ²−1)(1−η²))^{|m|/2} times a smooth function. For odd |m| the factor
+t = √(ξ²−1) (and s = √(1−η²)) is not a polynomial, so the plain Lagrange DVR
+basis converges only algebraically. The odd channels therefore use an
+axis-adapted basis on the same nodes:
+
+- ξ: χᵢ = t Mᵢ / tᵢ. In the first element Mᵢ are the Lagrange polynomials of
+  the nodes ξ > 1 only, so g = f/t stays free at the axis (the Lagrange
+  polynomials of all nodes would force g(1) = 0, i.e. f ∝ t³); in the other
+  elements Mᵢ = Lᵢ.
+- η: χⱼ = s Lⱼ / sⱼ (the Gauss–Legendre nodes avoid η = ±1).
+
+Field values at the nodes, the quadrature weights and every pointwise
+operation (potentials, `Grid_Prolate_SpatialProduct`) are the same for both
+parities. Only the 1D matrices change; they carry a parity index
+p = mod(|m|, 2) as the third dimension: `Grid_Prolate_xiKinMatrix` (S_ξ),
+`Grid_Prolate_xiCentrifugalMatrix` (C_ξ, the ξ operator of channel m is
+S_ξ + m² C_ξ; for odd p the axis node adds a rank-one term to the diagonal
+w/(ξ²−1), because Mᵢ(1) ≠ 0) and `Grid_Prolate_etaKinMatrix` (S_η). The
+kinetic operator, `SysKinetic_SolveShifted` and the Poisson solver select the
+matrices of the channel's parity; the cost per application is unchanged.
+H₂⁺ 2pπu at R = 2 gives −0.4287718199 already on 10 η and 6 × 10 ξ points
+(`T_H2_03`; the plain basis was off by 0.06–0.6 mHa, partly below the exact
+value, without converging).
+
+**Axis point of the m ≠ 0 channels.** The kinetic operator, the Poisson
+solver and `Grid_Prolate_SpatialProduct` treat ξ = 1 as a Dirichlet point
+of every m ≠ 0 channel (an m ≠ 0 field vanishes on the axis): the spatial
+product zeroes it in its m ≠ 0 output channels. Without that a potential
+times an orbital kept the axis value, which the kinetic operator does not
+couple, and every such point was a spurious eigenvector with eigenvalue
+V(1, η) (−10³ Ha near the N₂ nuclei).
 
 ### FEM Grid (3D Cartesian Spectral Elements for Molecules)
 

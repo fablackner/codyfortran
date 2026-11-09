@@ -24,6 +24,8 @@ contains
     ! Read FEDVR-specific parameters
     Grid_Ylm_Fedvr_nElements = Json_Get("grid.ylm.fedvr.nElements", 10)
     Grid_Ylm_Fedvr_nLocals = Json_Get("grid.ylm.fedvr.nLocals", 7)
+    Grid_Ylm_Fedvr_grading = Json_Get("grid.ylm.fedvr.grading", 1.0_R64)
+    if (.not. (Grid_Ylm_Fedvr_grading > 0.0_R64)) error stop "grid.ylm.fedvr.grading must be positive"
 
     ! Calculate total grid points from FEDVR parameters (without rmin and rmax)
     Grid_Ylm_nRadial = Grid_Ylm_Fedvr_nElements * (Grid_Ylm_Fedvr_nLocals - 1)
@@ -58,11 +60,12 @@ contains
     allocate (Grid_Ylm_radialWeights(Grid_Ylm_nRadial))
 
     ! Initialize the FEDVR grid using the utility module
-    call Fedvr_CreateCtx(Grid_Ylm_Fedvr_fedvrCtx, &
+    call Fedvr_CreateCtxGraded(Grid_Ylm_Fedvr_fedvrCtx, &
                          0.0_R64, &
                          Grid_Ylm_rmax, &
                          Grid_Ylm_Fedvr_nElements, &
                          Grid_Ylm_Fedvr_nLocals, &
+                         Grid_Ylm_Fedvr_grading, &
                          .true., &
                          .false.)
 

@@ -4,6 +4,7 @@
             "lmax": 1,
             "rmin": 0.0,
             "rmax": 8.0,
+            "mmax": 1,
             "fedvr": {
                 "nElements": 5,
                 "nLocals": 21
@@ -46,12 +47,13 @@
             "bodyStatistics": [ "f", "f" ],
             "orbBased": {
                 "nOrbs": [ 9, 9 ],
+                "mOfOrbs": [ 0, 0, -1, 0, 1, 0, -1, 0, 1, 0, 0, -1, 0, 1, 0, -1, 0, 1 ],
                 "mctdhx": { }
             }
         }
     },
     "orbs": {
-        "restrictedQ": false
+        "restrictedQ": true
     },
     "orbsInit": {
         "load": {
@@ -71,7 +73,7 @@
         }
     },
     "coeffs": {
-        "generic": { }
+        "generic": { "totalM": 0 }
     },
     "coeffsInit": {
         "load": {
@@ -97,6 +99,6 @@
         "startTime": 0.0,
         "endTime": 220.7,
         "outputStep": 0.5,
-        "nTimeStepsPropagation": 50
+        "nTimeStepsPropagation": 200
     }
 }

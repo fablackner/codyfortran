@@ -75,7 +75,7 @@
     },
     "orbsInit": {
         "load": {
-            "dir": "../hf",
+            "dir": "../scf",
             "lmaxIn": 0,
             "nOrbsIn": 2
         },

@@ -30,9 +30,13 @@
 !> eta (interior nodes only, so the endpoint factors (1 - eta^2) never vanish
 !> on the grid).
 !>
-!> @note For odd |m| the physical fields carry a factor ((xi^2-1)(1-eta^2))^(|m|/2)
-!> that is not polynomial in (xi, eta); the polynomial DVR basis then converges
-!> only algebraically. Even-m channels (sigma, delta, ...) are fully spectral.
+!> Axis factor: an m channel behaves as ((xi^2-1)(1-eta^2))^(|m|/2) near the
+!> axis, which is not polynomial for odd |m|. The odd-|m| channels therefore use
+!> the axis-adapted DVR basis M_i(xi) t(xi)/t(xi_i), t = sqrt(xi^2-1) (and
+!> L_j(eta) s(eta)/s(eta_j), s = sqrt(1-eta^2), in eta). The field values at the
+!> nodes, the quadrature and all pointwise operations stay the same for both
+!> parities; only the xi and eta kinetic matrices and the xi centrifugal matrix
+!> differ (third index 1), so pi orbitals converge spectrally like sigma orbitals.
 module M_Grid_Prolate
   use M_Utils_Types
 
@@ -85,16 +89,29 @@ module M_Grid_Prolate
   !> eta quadrature weights.
   real(R64), allocatable :: Grid_Prolate_etaWeights(:)
 
-  !> Symmetric Sturm-Liouville DVR matrix of the xi kinetic term,
-  !>   S_xi(i,j) = sum_k w_k (xi_k^2 - 1) D(k,i) D(k,j)
-  !> so that [d/dxi (xi^2-1) d/dxi f]_i = -(1/w_i) sum_j S_xi(i,j) f_j.
-  !> Filled by the xi back-end during setup.
-  real(R64), allocatable :: Grid_Prolate_xiKinMatrix(:, :)
+  !> Symmetric Sturm-Liouville DVR matrices of the xi kinetic term, one per
+  !> parity p = mod(|m|, 2) of the channel (third index 0: even, 1: odd),
+  !>   S_xi(i,j,p) = sum_k w_k (xi_k^2 - 1) chi_i'(xi_k) chi_j'(xi_k).
+  !> With the centrifugal matrix C_xi the xi operator of channel m is
+  !>   [-d/dxi (xi^2-1) d/dxi + m^2/(xi^2-1)] f -> (1/w_i) sum_j (S_xi + m^2 C_xi)(i,j,p) f_j.
+  !> Even |m| uses the Lagrange basis chi_i = L_i; odd |m| the axis-adapted
+  !> basis chi_i = M_i sqrt((xi^2-1)/(xi_i^2-1)) (M_i: Lagrange polynomials of
+  !> the first element without the axis node, L_i elsewhere), which represents
+  !> the factor sqrt(xi^2-1) of odd-m fields exactly. Row and column of the axis
+  !> point xi = 1 are zero for p = 1. Filled by the xi back-end during setup.
+  real(R64), allocatable :: Grid_Prolate_xiKinMatrix(:, :, :)
 
-  !> Symmetric Sturm-Liouville DVR matrix of the eta kinetic term,
-  !>   S_eta(i,j) = sum_k w_k (1 - eta_k^2) D(k,i) D(k,j)
-  !> so that [d/deta (1-eta^2) d/deta f]_j = -(1/w_j) sum_j' S_eta(j,j') f_j'.
-  real(R64), allocatable :: Grid_Prolate_etaKinMatrix(:, :)
+  !> Centrifugal DVR matrices C_xi(i,j,p) = sum_k w_k chi_i(xi_k) chi_j(xi_k) / (xi_k^2 - 1)
+  !> (see Grid_Prolate_xiKinMatrix). Even p: diag(w_i / (xi_i^2 - 1)) without the
+  !> axis point; odd p: the same diagonal plus the rank-one contribution of the
+  !> axis node in the first element. Filled by the xi back-end during setup.
+  real(R64), allocatable :: Grid_Prolate_xiCentrifugalMatrix(:, :, :)
+
+  !> Symmetric Sturm-Liouville DVR matrices of the eta kinetic term, one per
+  !> parity of |m| (odd: chi_j = L_j sqrt((1-eta^2)/(1-eta_j^2))),
+  !>   S_eta(i,j,p) = sum_k w_k (1 - eta_k^2) chi_i'(eta_k) chi_j'(eta_k)
+  !> so that [d/deta (1-eta^2) d/deta f]_j = -(1/w_j) sum_j' S_eta(j,j',p) f_j'.
+  real(R64), allocatable :: Grid_Prolate_etaKinMatrix(:, :, :)
 
   !> Spatial metric weights per (xi, eta) point in channel-block order
   !> (xi fastest): w_xi * w_eta * a^3 * (xi^2 - eta^2). One channel's worth;

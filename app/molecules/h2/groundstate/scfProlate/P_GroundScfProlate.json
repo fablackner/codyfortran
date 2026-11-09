@@ -1,18 +1,18 @@
 {
     "grid": {
-        "ylm": {
-            "lmax": 0,
+        "prolate": {
+            "R": 1.4,
+            "ximax": 20.0,
             "mmax": 0,
-            "rmin": 0.0,
-            "rmax": 200.0,
+            "nEta": 10,
             "fedvr": {
-                "nElements": 50,
-                "nLocals": 20
+                "nElements": 5,
+                "nLocals": 12
             }
         }
     },
     "sysKinetic": {
-        "ylm": {
+        "prolate": {
             "laplacian": {
                 "bodyMass": [
                     1.0,
@@ -23,18 +23,17 @@
         }
     },
     "sysPotential": {
-        "ylm": {
+        "prolate": {
             "coulomb": {
-                "charge": 4.0,
-                "stdImpl": {}
+                "charge": 1.0
             }
         }
     },
     "sysInteraction": {
-        "ylm": {
+        "prolate": {
             "coulomb": {
                 "strength": 1.0,
-                "blockEq": {}
+                "stdImpl": {}
             }
         }
     },
@@ -42,8 +41,8 @@
         "mb": {
             "nBodyTypes": 2,
             "nBodies": [
-                2,
-                2
+                1,
+                1
             ],
             "bodyStatistics": [
                 "f",
@@ -51,16 +50,10 @@
             ],
             "orbBased": {
                 "nOrbs": [
-                    2,
-                    2
+                    1,
+                    1
                 ],
-                "tdhx": {},
-                "mOfOrbs": [
-                    0,
-                    0,
-                    0,
-                    0
-                ]
+                "tdhx": {}
             }
         }
     },
@@ -68,20 +61,20 @@
         "restrictedQ": true
     },
     "orbsInit": {
-        "ylm": {
-            "hydrogenLike": {
-                "charge": 3.0,
+        "prolate": {
+            "lcao": {
+                "charge": 1.0,
                 "n": [
-                    1,
-                    2
+                    1
                 ],
                 "l": [
-                    0,
                     0
                 ],
                 "m": [
-                    0,
                     0
+                ],
+                "geradeQ": [
+                    true
                 ]
             }
         }
@@ -107,18 +100,17 @@
         "unary": {}
     },
     "diagonalizerList": {
-        "arpack1": {
-            "nEvals": 2,
+        "arpack": {
+            "nEvals": 1,
             "which": "SR",
-            "bmat": "I",
-            "nKry": 60,
-            "checkConvergenceQ": false,
-            "printLevel": 0
+            "nKry": 20,
+            "tol": 1e-10,
+            "checkConvergenceQ": false
         }
     },
     "groundSolver": {
         "scf": {
-            "ylmOpt": {
+            "stdImpl": {
                 "mixTarget": "orbitals"
             }
         }
@@ -130,6 +122,7 @@
     },
     "program": {
         "convThresh": 1e-12,
-        "nTimeSteps": 1
+        "epsThresh": 1e-09,
+        "maxIter": 40
     }
 }

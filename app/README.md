@@ -5,11 +5,11 @@ program `P_X.f90` and its input `P_X.json` (and `P_X.exe` after the build).
 Programs are named `P_<Stage><Method><Variant>`: stage `Ground` (ground or
 initial state), `Laser` (laser pulse) or `Kick` (delta kick); method `Scf`,
 `Mcscf`, `Mctdhf`, `Td2rdm`, `Tdhf`, `Ks` (Kohn–Sham DFT) or `Tddft`; variant the gauge (`Velocity`,
-`Length`) or the grid (`Ylm`, `Fem`) where several exist.
+`Length`) or the grid (`Ylm`, `Fem`, `Prolate`) where several exist.
 
 ```
 atoms/
-  be/  groundstate/hf                          P_GroundScfYlm         Hartree-Fock (1s, 2s)
+  be/  groundstate/scf                         P_GroundScfYlm         Hartree-Fock (1s, 2s)
        groundstate/mcscf                       P_GroundMcscf          MCSCF, 5 orbitals (ground solver)
        groundstate/mctdhf                      P_GroundMctdhf         MCTDHF, 5 orbitals (imaginary time)
        groundstate/td2rdm                      P_GroundTd2rdm         TD-2RDM initial state
@@ -17,8 +17,8 @@ atoms/
        dynamics/td2rdm/{weak4c,strong2c}       P_LaserTd2rdmVelocity
        analysis/plot_hhg.py
   ne/  groundstate/mctdhf                      P_GroundMctdhf         MCTDHF, 9 orbitals
-       groundstate/hf                          P_GroundScfYlm         Hartree-Fock
-       groundstate/mcscf                       P_GroundMcscfYlm       MCSCF, 9 orbitals
+       groundstate/scf                         P_GroundScfYlm         Hartree-Fock
+       groundstate/mcscf                       P_GroundMcscf          MCSCF, 9 orbitals (ground solver)
        dynamics/mctdhf                         P_LaserMctdhfVelocity  HHG, velocity gauge
        dynamics/mctdhfLengthGauge              P_LaserMctdhfLength    from mcscf
 molecules/
@@ -27,6 +27,8 @@ molecules/
              dynamics/tdhf                     P_KickTdhfFem          absorption spectrum
              dynamics/tddft                    P_KickTddftFem         absorption spectrum, real-time TDDFT
              analysis/absorption_spectrum.py
+  h2/        groundstate/scfProlate            P_GroundScfProlate     RHF on the prolate spheroidal grid
+  n2/        groundstate/scf                   P_GroundScfProlate     RHF on the prolate spheroidal grid
 ```
 
 ## Running
@@ -65,14 +67,14 @@ for MCTDHF), Hartree-Fock the orbitals 1s 2s (SCF ground solver, E =
 lmax = 32 (mmax 1, Hartree-Fock mmax 0) on FEDVR 50 × 20 points (rmax 200),
 cos^¼ absorber from 160 a.u.
 
-Order: `groundstate/hf`, then the correlated ground state with either
+Order: `groundstate/scf`, then the correlated ground state with either
 `groundstate/mcscf` (ground solver `groundSolver.mcscf.gradient`, 10
 iterations, 2 s: E = −14.6168560449) or `groundstate/mctdhf` (imaginary-time
-MCTDHF, about 15 min: E = −14.6168560112, 3.4e-8 higher from its dtau = 0.005
+MCTDHF, about 50 s: E = −14.6168560112, 3.4e-8 higher from its dtau = 0.005
 step bias), then `groundstate/td2rdm` (TD-2RDM initial state from the MCTDHF
 ground state: field-free TD-2RDM propagation averaged over 40 a.u.), then any
 `dynamics/<method>/<pulse>`. Both correlated runs start from the
-Hartree-Fock 1s 2s of `../hf` plus hydrogen-like 2p (`orbsInit.load.nOrbsIn`)
+Hartree-Fock 1s 2s of `../scf` plus hydrogen-like 2p (`orbsInit.load.nOrbsIn`)
 and the CI eigenvector of these orbitals (`program.ciStartQ` for imaginary
 time: from a unary CI vector it ends in a local minimum at E = −14.5956,
 where the 2p shell correlates the 1s² core), and both write the same files
@@ -94,10 +96,40 @@ own unwindowed Larmor spectrum.
   2 s). With `program.outputStep` 0.05 and `absorber.keepOrthonormalQ: true`
   the acceleration spectrum stays clean up to harmonic ~1100; at 0.2 a.u. it
   shows an aliasing floor above H95.
-- `groundstate/hf`, `groundstate/mcscf`: HF and 9-orbital MCSCF ground
-  states on a small grid (lmax 1, rmax 8). `dynamics/mctdhfLengthGauge`
-  propagates the MCSCF state in a length-gauge pulse on that grid; its
-  `hhg.dat` holds the length form only.
+- `groundstate/scf`, `groundstate/mcscf`: HF (E = −128.5470989, 0.7 s) and
+  9-orbital MCSCF ground states on a small grid (lmax 1, rmax 8). The MCSCF
+  is the variational `groundSolver.mcscf.gradient` (program of
+  `atoms/be/groundstate/mcscf`): HF 1s 2s 2p of `../scf` plus hydrogen-like
+  3s 3p, 12 iterations, 3.5 s, E = −128.6818315, 0.135 Ha below HF (3s 3p
+  occupations 5.7e-3, 3.5e-3). `dynamics/mctdhfLengthGauge` propagates it in
+  a length-gauge pulse on that grid (restricted orbitals of declared m,
+  total-M = 0 sector) at dt = 0.0025: at dt 0.01 the energy of the
+  correlated state drifts by 7 mHa within 2 a.u. before the pulse (splitting
+  error; 4th-order splitting is worse), at 0.0025 by 4e-5. Its `hhg.dat`
+  holds the length form only.
+- The MCTDHF grid (rmax 160, 40 uniform elements of 4 bohr) is coarse at the
+  nucleus: HF there is 5.8 mHa below the HF limit, MCSCF on that grid has
+  the same offset (−128.6876610), so the correlation energy agrees with the
+  small grid. Imaginary-time MCTDHF reaches the MCSCF state (same natural
+  occupations to 1e-6) with a dtau bias of 2.9 mHa at dtau 0.02, 4.1e-4 at
+  0.01 and 3.4e-5 at 0.005.
+
+## H2 and N2: RHF on the prolate spheroidal grid
+
+`P_GroundScfProlate` (`groundSolver.scf.stdImpl`, DIIS on the orbitals) on
+`grid.prolate`, nuclei at the foci; σ and π orbitals (azimuthal channels up
+to `grid.prolate.mmax`) come out of one Fock eigenproblem, and the program
+labels every occupied orbital (σ/π, g/u).
+
+- `h2/groundstate/scfProlate`: R = 1.4, ARPACK, 9 steps, 0.2 s, E =
+  −1.133629571, the HF limit to 1e-11 (ximax 20, nEta 10, 5 × 12 ξ points).
+- `n2/groundstate/scf`: R = 2.068, LOBPCG preconditioned by the exact
+  (T + σ)⁻¹ of the prolate Laplacian with ACE, graded ξ elements
+  (`grid.prolate.fedvr.grading` 2.0), 11 steps, 24 s: E = −108.9938256, the
+  numerical HF limit −108.993826 to all its digits; orbital energies 1σg
+  −15.6819, 3σg −0.6348, πu −0.6156 (πu above 3σg). The π channels use the
+  axis-adapted odd-m basis of the grid (`src/Grid/A_Grid.md`, Prolate Grid);
+  with the plain basis the same grid gave −108.996274, 2.4 mHa below the limit.
 
 ## H2 and H2O: RHF and TDHF kick spectra on grid.fem
 
@@ -111,8 +143,9 @@ own unwindowed Larmor spectrum.
 The ground states use DIIS on the orbitals (`mixTarget: "orbitals"`,
 `mixing.diis.startThreshold: 0`; `src/Mixing/A_Mixing.md`, "What to mix").
 H2: R = 1.4 bohr, SCF in 8 steps (4 s), 50 a.u. of TDHF in about 15 min.
-H2O: SCF in 12 steps (22 with linear Hartree-potential mixing), about
-1.5 min on two threads; the SCF mesh is the coarse one of the kick (the accurate mesh with 1.1 M nodes,
+H2O: SCF in 12 steps (22 with linear Hartree-potential mixing), 30 s on
+two threads (466 Fock products; two LOBPCG guard vectors cost 686, tol 1e-6
+three more SCF steps); the SCF mesh is the coarse one of the kick (the accurate mesh with 1.1 M nodes,
 1.7 mHa below the HF limit, is `app/fem_molecules/h2o_scf.json` in the git
 history). For the isotropic H2O spectrum run three kicks
 (`program.kickDirection` 1, 2, 3, each in its own copy of the folder) and

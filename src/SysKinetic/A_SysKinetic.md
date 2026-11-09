@@ -43,7 +43,7 @@ The module follows the **CodyFortran fabrication pattern**:
 
 3. **Hierarchical Dispatch**: The top-level `SysKinetic_Fabricate` reads JSON and delegates to the appropriate backend (Lattice/Linear/Ylm/Prolate/Fem), which further delegates to specific implementations.
 
-4. **Optional hooks**: `SysKinetic_SolveShifted` (exact solve of (T̂ + s) x = b) is `null()` unless the backend has a fast exact inverse (Fem, Ylm FEDVR). `SysKinetic_Fabricate` nullifies it before it dispatches, so a backend fabricated earlier in the same process leaves no stale binding. Callers test `associated(SysKinetic_SolveShifted)` and fall back otherwise.
+4. **Optional hooks**: `SysKinetic_SolveShifted` (exact solve of (T̂ + s) x = b) is `null()` unless the backend has a fast exact inverse (Fem, Ylm FEDVR, Prolate FEDVR for real shifts). `SysKinetic_Fabricate` nullifies it before it dispatches, so a backend fabricated earlier in the same process leaves no stale binding. Callers test `associated(SysKinetic_SolveShifted)` and fall back otherwise.
 
 ## File Structure
 
@@ -201,7 +201,7 @@ call SysKinetic_MultiplyWithKineticOp(dOrb, orb, time, bt_)
 |---------|-----------|-------------|
 | `SysKinetic_Setup` | `subroutine()` | Initialize grid-dependent data |
 | `SysKinetic_MultiplyWithKineticOp` | `subroutine(dOrb, orb, time, bt_)` | Apply T̂·ψ → dψ |
-| `SysKinetic_SolveShifted` | `subroutine(dOrb, orb, shift, bt_)`, `complex(R64) :: shift` | Optional (default `null()`): solve (T̂ + shift) dOrb = orb exactly; only grids with a fast exact kinetic inverse bind it (Fem, Ylm FEDVR). Real shift: preconditioner (T̂ + σ)⁻¹; shift = 2/(i dt) = −2i/dt: Crank–Nicolson factor 1 + i dt T̂/2 = (i dt/2)(T̂ − 2i/dt) |
+| `SysKinetic_SolveShifted` | `subroutine(dOrb, orb, shift, bt_)`, `complex(R64) :: shift` | Optional (default `null()`): solve (T̂ + shift) dOrb = orb exactly; only grids with a fast exact kinetic inverse bind it (Fem, Ylm FEDVR, Prolate FEDVR: real shifts only). Real shift: preconditioner (T̂ + σ)⁻¹; shift = 2/(i dt) = −2i/dt: Crank–Nicolson factor 1 + i dt T̂/2 = (i dt/2)(T̂ − 2i/dt) |
 
 ### Fem Laplacian (M_SysKinetic_Fem_Laplacian)
 
@@ -267,6 +267,34 @@ the hook.
 **Test:** `test/componentTests/SysKinetic/Ylm/Laplacian/Fedvr/T_SysKinetic_Ylm_Laplacian_Fedvr_SolveShifted`
 ((T̂ + s) x = f to 2e-12 for a real and a complex shift and a second body mass,
 all (l, m) channels of lmax = mmax = 2).
+
+### Prolate FEDVR Shifted Solve
+
+`sysKinetic.prolate.laplacian.fedvr` binds `SysKinetic_SolveShifted` for
+real shifts σ. Per azimuthal channel, multiplying (T̂ + σ) F = R by the
+prefactor 2 M a² (ξ² − η²) separates the operator, because the shift term
+σ 2 M a² (ξ² − η²) splits into a ξ and an η part:
+
+  A_ξ F + F B_η = R ⊙ 2 M a² (ξ² − η²),
+  A_ξ = W_ξ⁻¹ (S_ξ + m² C_ξ) + diag(2 M σ a² ξ²),
+  B_η = S_η W_η⁻¹ + diag(m²/(1−η²) − 2 M σ a² η²).
+
+S_ξ, C_ξ and S_η are the grid matrices of the parity of m
+(`Grid_Prolate_xiKinMatrix`, `Grid_Prolate_xiCentrifugalMatrix`,
+`Grid_Prolate_etaKinMatrix`; axis-adapted for odd |m|, see the Prolate Grid
+section of `src/Grid/A_Grid.md`). The symmetric forms of both 1D operators are diagonalized (DSYEV, per call:
+they depend on σ; nXi, nEta ≲ 200) and the transformed equation is solved
+elementwise (fast diagonalization, four DGEMMs per channel and part). For
+m ≠ 0 the axis point ξ = 1 is excluded. A complex shift stops with an error
+(it would need complex-symmetric decompositions). Consumer:
+`GroundSolver_PreconditionAction` for LOBPCG (`app/molecules/n2`: the
+unpreconditioned ARPACK solve of the graded grid does not converge, LOBPCG
+with this preconditioner converges the 7 Fock eigenpairs in 100–300
+products per SCF step).
+
+**Test:** `test/componentTests/SysKinetic/Prolate/Laplacian/Fedvr/T_SysKinetic_Prolate_Laplacian_Fedvr_SolveShifted`
+((T̂ + σ) x = f to 1e-13 for σ = 0.7, 5e-11 for σ = −0.05, and a second body
+mass; channels |m| ≤ 2 on graded ξ elements).
 
 ### Fem Spectral-Element Laplacian
 

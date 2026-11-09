@@ -76,7 +76,7 @@
     },
     "orbsInit": {
         "load": {
-            "dir": "../hf",
+            "dir": "../scf",
             "lmaxIn": 0,
             "nOrbsIn": 2
         },
@@ -145,7 +145,7 @@
         "convThresh": 1e-12,
         "nStepsCheck": 20,
         "maxChecks": 4000,
-        "nSubStepsNonLin": 10,
+        "nSubStepsNonLin": 1,
         "ciStartQ": true
     }
 }

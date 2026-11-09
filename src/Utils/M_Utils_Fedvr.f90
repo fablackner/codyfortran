@@ -61,6 +61,7 @@ module M_Utils_Fedvr
   public :: T_Fedvr_Element
   public :: Fedvr_CreateCtx
   public :: Fedvr_CreateCtxFromBounds
+  public :: Fedvr_CreateCtxGraded
   public :: Fedvr_DestroyCtx
 
 contains
@@ -101,6 +102,53 @@ contains
     ctx % xmin = xmin
     ctx % xmax = xmax
     ctx % elements(:) % size = elementSize
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Creates and initializes an FEDVR grid of nE geometrically graded elements:
+!> element iE has the size h q^(iE-1), q = grading, h fixed by the domain
+!> length. grading = 1 is the uniform grid of Fedvr_CreateCtx (bitwise);
+!> grading > 1 refines toward xmin (e.g. toward a nucleus at r = 0 or xi = 1).
+!> @param ctx The FEDVR grid structure to initialize
+!> @param xmin Lower bound of the domain
+!> @param xmax Upper bound of the domain
+!> @param nE Number of finite elements
+!> @param nLocals Number of local points within each element
+!> @param grading Ratio of consecutive element sizes (positive)
+!> @param xminExcludedQ Logical flag to determine if global lower endpoint (xmin) is excluded
+!> @param xmaxExcludedQ Logical flag to determine if global upper endpoint (xmax) is excluded
+  subroutine Fedvr_CreateCtxGraded(ctx, xmin, xmax, nE, nLocals, grading, xminExcludedQ, xmaxExcludedQ)
+
+    type(T_Fedvr_Ctx), intent(out) :: ctx
+    real(R64), intent(in) :: xmin, xmax
+    integer(I32), intent(in) :: nE, nLocals
+    real(R64), intent(in) :: grading
+    logical, intent(in) :: xminExcludedQ
+    logical, intent(in) :: xmaxExcludedQ
+
+    integer(I32) :: iE
+    real(R64) :: firstSize
+    real(R64), allocatable :: bounds(:)
+
+    if (.not. (grading > 0.0_R64)) error stop "Fedvr_CreateCtxGraded: grading must be positive"
+
+    if (abs(grading - 1.0_R64) < 1e-14_R64) then
+      call Fedvr_CreateCtx(ctx, xmin, xmax, nE, nLocals, xminExcludedQ, xmaxExcludedQ)
+      return
+    end if
+
+    ! sum of the sizes h q^(iE-1), iE = 1..nE, is the domain length
+    firstSize = (xmax - xmin) * (grading - 1.0_R64) / (grading**nE - 1.0_R64)
+
+    allocate (bounds(0:nE))
+    bounds(0) = xmin
+    do iE = 1, nE - 1
+      bounds(iE) = bounds(iE - 1) + firstSize * grading**(iE - 1)
+    end do
+    bounds(nE) = xmax
+
+    call Fedvr_CreateCtxFromBounds(ctx, bounds, nLocals, xminExcludedQ, xmaxExcludedQ)
 
   end subroutine
 

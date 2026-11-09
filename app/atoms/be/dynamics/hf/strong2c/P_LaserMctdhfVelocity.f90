@@ -4,7 +4,7 @@
 !> method.mb.orbBased.mOfOrbs).
 !>
 !> The initial state (orbXX_YY.in, coeffs.in) is the ground state of
-!> groundstate/mctdhf (imaginary time; groundstate/hf, SCF, for the
+!> groundstate/mctdhf (imaginary time; groundstate/scf, SCF, for the
 !> Hartree-Fock runs), read from orbsInit.load.dir and coeffsInit.load.dir;
 !> it is computed at small lmax and embedded into the propagation grid
 !> (orbsInit.load.lmaxIn, exact since every orbital has a pure l).

@@ -40,8 +40,8 @@
             "nBodies": [ 5, 5 ],
             "bodyStatistics": [ "f", "f" ],
             "orbBased": {
-                "nOrbs": [ 9, 9 ],
-                "mctdhx": { }
+                "nOrbs": [ 5, 5 ],
+                "tdhx": { }
             }
         }
     },
@@ -52,21 +52,23 @@
         "ylm": {
             "hydrogenLike": {
                 "charge": 10.0,
-                "n": [ 1, 2, 2, 2, 2, 3, 3, 3, 3 ],
-                "l": [ 0, 0, 1, 1, 1, 0, 1, 1, 1 ],
-                "m": [ 0, 0, -1, 0, 1, 0, -1, 0, 1 ]
+                "n": [ 1, 2, 2, 2, 2 ],
+                "l": [ 0, 0, 1, 1, 1 ],
+                "m": [ 0, 0, -1, 0, 1 ]
             }
         }
     },
     "configList": {
         "allActive1": {
             "fermionic": {
-                "bodyTarget": 1
+                "bodyTarget": 1,
+                "nExcitations": 1
             }
         },
         "allActive2": {
             "fermionic": {
-                "bodyTarget": 2
+                "bodyTarget": 2,
+                "nExcitations": 1
             }
         }
     },
@@ -77,47 +79,39 @@
         "unary": { }
     },
     "diagonalizerList": {
-        "arpackCi": {
-            "nEvals": 1,
-            "which": "SR",
-            "bmat": "I",
-            "nKry": 30,
-            "tol": 1e-12,
-            "checkConvergenceQ": false,
-            "printLevel": 0
-        },
-        "arpackL0": {
-            "nEvals": 3,
-            "which": "SR",
-            "bmat": "I",
-            "nKry": 25,
-            "checkConvergenceQ": false,
-            "printLevel": 0
-        },
-        "arpackL1": {
+        "arpack1": {
             "nEvals": 2,
             "which": "SR",
             "bmat": "I",
+            "nKry": 30,
+            "tol": 1e-08,
+            "checkConvergenceQ": false,
+            "printLevel": 0
+        },
+        "arpack2": {
+            "nEvals": 1,
+            "which": "SR",
+            "bmat": "I",
             "nKry": 25,
+            "tol": 1e-08,
             "checkConvergenceQ": false,
             "printLevel": 0
         }
     },
     "groundSolver": {
-        "mcscf": {
+        "scf": {
             "ylmOpt": {
-                "mixTarget": "potential",
-                "alphaCi": 1.0
+                "mixTarget": "orbitals"
             }
         }
     },
     "mixing": {
-        "linear": {
-            "alpha": 0.85
+        "diis": {
+            "startThreshold": 0.0
         }
     },
     "program": {
         "convThresh": 1e-12,
-        "nTimeSteps": 10
+        "nTimeSteps": 1
     }
 }

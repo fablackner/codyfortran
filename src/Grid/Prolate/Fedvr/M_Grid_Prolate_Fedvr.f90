@@ -39,6 +39,10 @@ module M_Grid_Prolate_Fedvr
   !> Number of finite elements in the xi partition.
   integer(I32) :: Grid_Prolate_Fedvr_nElements
 
+  !> Ratio of consecutive element sizes (grid.prolate.fedvr.grading, default 1: uniform;
+  !> > 1 refines toward the lower end of the domain).
+  real(R64) :: Grid_Prolate_Fedvr_grading
+
   !> Number of Gauss-Lobatto nodes per element (local basis size).
   integer(I32) :: Grid_Prolate_Fedvr_nLocals
 
