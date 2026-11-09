@@ -166,7 +166,9 @@ program T_SysInteraction_Fem_Coulomb
   call SysInteraction_ConjugateInteractionPotential(potConj, pot)
   errSwap = maxval(abs(potConj - potSwap)) / maxval(abs(potSwap))
 
-  call check(error, errSrcSwap <= 0.0_R64, "the swapped source must be the conjugate")
+  ! exact up to rounding: FMA contraction (-march=native) breaks bitwise symmetry
+  call check(error, errSrcSwap <= 4.0_R64 * epsilon(1.0_R64) * maxval(abs(src)), &
+             "the swapped source must be the conjugate")
   if (allocated(error)) error stop "T_SysInteraction_Fem_Coulomb swapped source failure"
   call check(error, errSwap, 0.0_R64, thr=1.0e-14_R64)
   if (allocated(error)) error stop "T_SysInteraction_Fem_Coulomb ConjugateInteractionPotential failure"

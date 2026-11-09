@@ -11,7 +11,7 @@
 !> U^ c; here it does not, and without the CI term the orbitals would rotate
 !> by <phi|U|phi> while the coefficients do not follow.
 !>
-!> Checks at dt = program.timeStep = 0.005 up to program.endTime = 0.25
+!> Checks at dt = program.timeStep = 0.005 up to program.endTime = 0.1
 !> (measured values in parentheses; a scratch build without the CI term in
 !> brackets, which fails checks 1 and 2):
 !> 1. the induced dipoles d(t) = <z>(t) - <z>(0) of both splits agree at every

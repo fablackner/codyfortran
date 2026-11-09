@@ -20,20 +20,20 @@
 !>    (1e-12); at most MAX_ITERATIONS_GROUND GMRES iterations per Cayley solve
 !>    (dt/4 = 0.025: 6).
 !> 3. Kick kappa = program.kappa = 1e-3 along z at dt = program.timeStep =
-!>    0.02 (the step of T_Fem_06_H2Kick) up to program.endTime = 0.6, with a
+!>    0.02 (the step of T_Fem_06_H2Kick) up to program.endTime = 0.2, with a
 !>    fresh reference (built after the kick): the checks of T_Fem_06 (kick
 !>    energy, TRK slope, energy conserved to 1e-8, N = 2, <x> = <y> = 0), and
 !>    the induced dipole agrees with T_Fem_06's dipoleKick.dat (no reference,
 !>    same dt; header checked as in T_Fem_07: kappa, dt, mesh, E_el(0),
 !>    complete run) at every common step to program.dipoleTolerance = 1e-5
-!>    relative to the largest response (2.7e-7: two splittings of the same
+!>    relative to the largest response (7.0e-7: two splittings of the same
 !>    equations, each off by about 6e-6 at dt = 0.02, see 4).
 !> 4. Convergence of the splitting with the reference: the kick at dt/2 and
-!>    dt/4 up to program.refineEndTime = 0.1; at that time the order
+!>    dt/4 up to program.refineEndTime = 0.04; at that time the order
 !>    p = log2(|d(dt) - d(dt/2)| / |d(dt/2) - d(dt/4)|) of the induced dipole
 !>    d lies in [1.7, 2.3] (2.00), and the errors at dt of both splittings
-!>    against the Richardson limit of the refined runs are printed (-5.7e-6
-!>    with, -6.4e-6 without the reference, so both converge to the same
+!>    against the Richardson limit of the refined runs are printed (-6.1e-6
+!>    with, -6.7e-6 without the reference, so both converge to the same
 !>    trajectory); the error with the reference stays below
 !>    program.refineTolerance = 2e-5 relative to the response.
 !> 5. A reference built explicitly before the kick, from the ground state (as

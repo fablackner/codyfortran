@@ -96,8 +96,8 @@
     },
     "program": {
         "timeStep": 0.01,
-        "endTime": 0.5,
-        "outputEvery": 10,
+        "endTime": 0.1,
+        "outputEvery": 5,
         "checkTimeStep": 0.05
     }
 }

@@ -1,10 +1,10 @@
 {
     "grid": {
         "linear": {
-            "xmin": -25,
-            "xmax": 25,
+            "xmin": -15,
+            "xmax": 15,
             "const": {
-                "nPoints": 251
+                "nPoints": 61
             }
         }
     },

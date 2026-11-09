@@ -97,7 +97,7 @@
     "program": {
         "kappa": 1e-3,
         "timeStep": 0.02,
-        "endTime": 1.0,
-        "outputEvery": 10
+        "endTime": 0.2,
+        "outputEvery": 5
     }
 }

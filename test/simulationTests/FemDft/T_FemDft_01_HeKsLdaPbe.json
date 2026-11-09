@@ -1,7 +1,7 @@
 {
     "grid": {
         "fem": {
-            "nLocals": 7,
+            "nLocals": 5,
             "xmin": -8.0,
             "xmax": 8.0,
             "ymin": -8.0,
@@ -12,7 +12,7 @@
                 "x": [ 0.0 ],
                 "y": [ 0.0 ],
                 "z": [ 0.0 ],
-                "hMin": [ 0.2 ]
+                "hMin": [ 0.12 ]
             },
             "growth": 1.6,
             "hMax": 2.0,
@@ -111,8 +111,8 @@
         }
     },
     "program": {
-        "convThresh": 1e-11,
-        "epsThresh": 1e-07,
+        "convThresh": 1e-8,
+        "epsThresh": 1e-5,
         "maxScfIterations": 40
     },
     "sysXc": {

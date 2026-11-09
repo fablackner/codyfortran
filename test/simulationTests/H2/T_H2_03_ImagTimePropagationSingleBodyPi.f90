@@ -109,7 +109,7 @@ program T_H2_03_ImagTimePropagationSbPi
   print *
   print *, "final energy: ", energyNew
 
-  ! exact electronic 1s sigma_g energy of H2+ at R = 2.0 (the converged
+  ! exact electronic 2p pi_u energy of H2+ at R = 2.0 (the converged
   ! grid reproduces it to ~4e-12)
   call check(error, energyNew, -0.42877182_R64, thr=1e-8_R64)
   if (allocated(error)) error stop "T_H2_03_ImagTimePropagationSbPi failure"

@@ -4,7 +4,7 @@
 !> T_Fem_03, kicked by phi <- exp(i kappa z) phi with kappa = program.kappa =
 !> 1e-3 along the molecular axis, then propagated field-free as in T_Fem_05
 !> (splitStep order2, Cayley exact part with exactPartScheme strang, RK4) with
-!> dt = program.timeStep = 0.02 up to program.endTime = 1.0. The dipole
+!> dt = program.timeStep = 0.02 up to program.endTime = 0.2. The dipole
 !> (<x>, <y>, <z>) is written at every step with PrinterObservableFem_DumpDipole
 !> to dipoleKick.dat (replaced at the start, first line a header with kappa,
 !> the step parameters, E_el(0) and the mesh size), which

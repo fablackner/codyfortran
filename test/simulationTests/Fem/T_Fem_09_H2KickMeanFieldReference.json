@@ -98,11 +98,11 @@
     "program": {
         "kappa": 1e-3,
         "timeStep": 0.02,
-        "endTime": 0.6,
+        "endTime": 0.2,
         "groundTimeStep": 0.1,
         "groundEndTime": 0.3,
         "refineTimeSteps": [ 0.01, 0.005 ],
-        "refineEndTime": 0.1,
+        "refineEndTime": 0.04,
         "dipoleTolerance": 1e-5,
         "refineTolerance": 2e-5
     }

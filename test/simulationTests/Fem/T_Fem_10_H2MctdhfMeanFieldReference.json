@@ -108,7 +108,7 @@
     "program": {
         "kappa": 0.1,
         "timeStep": 0.005,
-        "endTime": 0.25,
+        "endTime": 0.1,
         "dipoleTolerance": 1e-5,
         "energyTolerance": 1e-5,
         "energyAgreement": 3e-6

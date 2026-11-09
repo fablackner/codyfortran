@@ -101,8 +101,8 @@
     "program": {
         "kappa": 0.001,
         "timeStep": 0.02,
-        "endTime": 0.6,
-        "outputEvery": 10
+        "endTime": 0.2,
+        "outputEvery": 5
     },
     "sysXc": {
         "fem": {

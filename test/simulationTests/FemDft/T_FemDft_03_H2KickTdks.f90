@@ -10,8 +10,8 @@
 !>  - the propagated initial slope, the Kohn-Sham energy (the equations are
 !>    its Hamiltonian flow; 2e-11 over 0.6 a.u. at dt = 0.02, 2e-7 with the
 !>    plain split h0 | v_KS), the particle number and the vanishing
-!>    transverse dipole over 0.6 a.u. (the dipole follows the plain split at
-!>    dt = 0.005 to 5e-6 of the response).
+!>    transverse dipole up to program.endTime = 0.2 (over 0.6 a.u. the dipole
+!>    follows the plain split at dt = 0.005 to 5e-6 of the response).
 program T_FemDft_03_H2KickTdks
   use M_Utils_Types
   use M_Utils_Say

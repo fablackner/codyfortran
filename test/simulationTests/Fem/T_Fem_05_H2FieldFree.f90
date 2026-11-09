@@ -10,7 +10,7 @@
 !> every linear half step is Cayley(h0, dt/4) · RK4[gauge](dt/2) ·
 !> Cayley(h0, dt/4) (exactPartScheme strang; h0 = T + V_nuc, no sysGauge here,
 !> so the RK4 substep is the identity) and the interaction part is RK4;
-!> dt = program.timeStep = 0.01 up to program.endTime = 0.5.
+!> dt = program.timeStep = 0.01 up to program.endTime = 0.1.
 !>
 !> Checks:
 !> 1. the loaded state reproduces the SCF energy of T_Fem_03 (E_el against the

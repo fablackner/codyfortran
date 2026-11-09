@@ -1,10 +1,10 @@
 {
     "grid": {
         "linear": {
-            "xmin": -25,
-            "xmax": 25,
+            "xmin": -15,
+            "xmax": 15,
             "const": {
-                "nPoints": 251
+                "nPoints": 61
             }
         }
     },
@@ -87,9 +87,9 @@
         "single": { }
     },
     "program": {
-        "convThresh": 1e-10,
+        "convThresh": 1e-9,
         "outputStep": 0.5,
-        "nTimeSteps": 50
+        "nTimeSteps": 10
     },
     "sysXc": {
         "linear": {

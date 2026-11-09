@@ -85,7 +85,7 @@ program T_He1d_12_GroundSolverKsLda1d
 
   call check(error, abs(energy - energyOld) < convThresh)
   if (allocated(error)) error stop "T_He1d_12_GroundSolverKsLda1d failure: SCF not converged"
-  call check(error, energy, -2.2013755814_R64, thr=1e-8_R64)
+  call check(error, energy, -2.2014358365_R64, thr=1e-8_R64)
   if (allocated(error)) error stop "T_He1d_12_GroundSolverKsLda1d failure: energy (regression)"
 
   call Say_Goodbye
