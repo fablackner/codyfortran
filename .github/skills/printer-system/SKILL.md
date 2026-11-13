@@ -31,8 +31,7 @@ Load these files first:
 
 For plotting conventions, inspect:
 
-- [Hubbard line plot example](../../../app/cnnHubbard/checkModel/density_site3.gnup)
-- [Hubbard heatmap example](../../../app/cnnHubbard/checkModel/colorDensity.gnup)
+- [HHG spectrum plot](../../../app/atoms/be/analysis/plot_hhg.py)
 
 ## Printer Module Map
 

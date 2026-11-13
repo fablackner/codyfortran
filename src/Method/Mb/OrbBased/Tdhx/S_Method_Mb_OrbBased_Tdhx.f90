@@ -70,6 +70,8 @@ contains
     call Coeffs_ApplyH1FillRdm1(Coeffs_coeffs, rdm1_=Method_Mb_OrbBased_rdm1)
     call Coeffs_ApplyH2FillRdm2(Coeffs_coeffs, rdm2_=Method_Mb_OrbBased_rdm2)
 
+    call Method_Mb_OrbBased_SetSwitchingReference
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

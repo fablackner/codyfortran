@@ -142,8 +142,7 @@ contains
 !> @param[in]    twoRdmState   Input state (1-RDM + trace-free 2-RDM)
 !> @param[in]    h2            Two-body interaction (spin-orbital basis)
   subroutine ApplyCommutatorH2(dTwoRdmState, twoRdmState, h2)
-    use M_Method_Mb
-    use M_Method_Mb_OrbBased
+    use M_Utils_RdmAlgebra
     use M_Utils_RdmEnforceTraceM2ab
 
     complex(R64), intent(inout), contiguous  :: dTwoRdmState(:)
@@ -153,37 +152,10 @@ contains
     complex(R64), allocatable :: rdm2ab(:, :, :, :)
     complex(R64), allocatable :: dRdm2ab(:, :, :, :)
 
-    integer(I32) :: nOa, nOb
-    integer(I32) :: i1, i2, j1, j2, k1, k2
-
     call TwoRdm_Fermionic_SingletTr0_FillRdm2abFromTwoRdmState(rdm2ab, twoRdmState)
     call TwoRdm_Fermionic_SingletTr0_FillRdm2abFromTwoRdmState(dRdm2ab, dTwoRdmState)
 
-    nOa = Method_Mb_OrbBased_nOrbs(1)
-    nOb = Method_Mb_OrbBased_nOrbs(2)
-
-    do j2 = 1, nOb
-      do j1 = 1, nOa
-
-        do i2 = 1, nOb
-          do i1 = 1, nOa
-
-            ! [Ŵ₁₂, D²_αβ]
-            do k2 = 1, nOb
-              do k1 = 1, nOa
-
-                dRdm2ab(i1, i2, j1, j2) = dRdm2ab(i1, i2, j1, j2) + &
-                                          2.0_R64 * h2(i1, i2 + nOa, k1, k2 + nOa) * rdm2ab(k1, k2, j1, j2)
-                dRdm2ab(i1, i2, j1, j2) = dRdm2ab(i1, i2, j1, j2) - &
-                                          2.0_R64 * h2(k1, k2 + nOa, j1, j2 + nOa) * rdm2ab(i1, i2, k1, k2)
-
-              end do
-            end do
-
-          end do
-        end do
-      end do
-    end do
+    call RdmAlgebra_AddCommutatorH2ab(dRdm2ab, rdm2ab, h2)
 
     ! Enforce trace-free and repack (1-RDM unchanged by [W,D²])
     call RdmEnforceTraceM2ab_Apply(dRdm2ab)

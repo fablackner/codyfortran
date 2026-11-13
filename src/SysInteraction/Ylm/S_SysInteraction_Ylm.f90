@@ -134,7 +134,7 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine SysInteraction_Ylm_FillInteractionPotentialM(potM, srcM, m, time)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(out), contiguous :: potM(:, :)
     complex(R64), intent(in), contiguous  :: srcM(:, :)

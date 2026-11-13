@@ -183,7 +183,7 @@ contains
     ! ((w_i + (J z)_i) - o_1 zeta_i1) - o_2 zeta_i2 - ... Reentrant; its
     ! passes are parallel when called outside a parallel region.
     !---------------------------------------------------------------------------
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Grid
 
     complex(R64), intent(inout), contiguous :: w(:)

@@ -6,7 +6,7 @@
 !> the CUDA runtime and cuBLAS C APIs are called through bind(C) interfaces.
 submodule(M_Utils_CublasLib) S_Utils_CublasLib_Cuda
   use, intrinsic :: iso_c_binding, only: c_int, c_size_t, c_intptr_t, c_double, c_null_ptr, &
-                                         c_associated, c_loc
+                                                                            c_associated, c_loc
 
   implicit none
 

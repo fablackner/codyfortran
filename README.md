@@ -107,6 +107,8 @@ cody build lib
 
 The libraries will be installed in the `thirdParty/installation/` directory.  When building CodyFortran, it will first check for libraries in the `thirdParty/installation/lib/` and `thirdParty/installation/lib64/` directories. If a required library isn't found there, it will search in the standard system paths.
 
+OpenBLAS must be the OpenMP build (`USE_OPENMP=1`, as `cody build lib` builds it): the NY cumulant of the TD-2RDM reconstruction, the transition RDMs of Coeffs and the per-l eigen-decompositions call BLAS/LAPACK inside OpenMP regions, which the OpenMP build runs single-threaded. A pthreads OpenBLAS from the system paths oversubscribes the cores or warns about OpenMP loops.
+
 ### Building CodyFortran with CMake
 
 After building the third-party libraries, it is recommended to start a new terminal session before sourcing `setCodyVars.sh` in the main project directory.

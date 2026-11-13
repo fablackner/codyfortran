@@ -50,6 +50,14 @@ module M_Grid_Prolate
     !> Instantiate and configure a prolate-spheroidal grid back-end.
     module subroutine Grid_Prolate_Fabricate
     end subroutine
+
+    !> coord = direction . r at every stored entry (all m channels, after
+    !> Grid_Setup): direction(3) z with z = a ξ η; x and y components stop
+    !> (they couple the m channels).
+    module subroutine Grid_Prolate_FillNodeCoordinate(coord, direction)
+      real(R64), allocatable, intent(out) :: coord(:)
+      real(R64), intent(in)               :: direction(3)
+    end subroutine
   end interface
 
   !=============================================================================

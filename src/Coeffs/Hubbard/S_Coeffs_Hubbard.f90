@@ -81,6 +81,7 @@ contains
     ! Select spin-symmetry variant from JSON
     !------------------------------------
 
+    Coeffs_Hubbard_spinSymQ = .not. Json_GetExistence("coeffs.hubbard.noSpinSym")
     if (Json_GetExistence("coeffs.hubbard.noSpinSym")) then
       call Coeffs_Hubbard_NoSpinSym_Fabricate
 
@@ -407,11 +408,8 @@ contains
 !> to the `bt`-th spin sector.
 !>
 !> Uses `ExciteBits` to compute target configuration and phase for each
-!> source configuration, then scatters the result.
-!>
-!> @note Currently uses the spin-up inverse lookup table for all body types,
-!>       which assumes equal numbers of up and down configurations. This is
-!>       valid for half-filling but may need generalization for other cases.
+!> source configuration, then scatters the result. noSpinSym only: in a
+!> spin-exchange sector the excited vector cannot be stored.
 !>
 !> @param[inout] coeffs   CI coefficients (modified in-place)
 !> @param[in]    creates  Orbital indices for creation operators
@@ -433,6 +431,9 @@ contains
     real(R64)  :: factor
     integer(I32) :: configurations(Method_Mb_nBodyTypes)
 
+    if (Coeffs_Hubbard_spinSymQ) &
+      error stop "coeffs.hubbard: an excitation of one spin species leaves the spin-exchange sector (use noSpinSym)"
+
     allocate (coeffsTmp, source=coeffs)
 
     coeffs(:) = 0.0_R64
@@ -441,11 +442,19 @@ contains
 
       call Coeffs_ConfigurationsFromIndex(configurations, iCoeff)
 
-      bits = Coeffs_Hubbard_bitcodesUP(configurations(bt))
+      if (bt .eq. 1) then
+        bits = Coeffs_Hubbard_bitcodesUP(configurations(bt))
+      else
+        bits = Coeffs_Hubbard_bitcodesDN(configurations(bt))
+      end if
       tbits = ExciteBits(creates, destroys, bits)
       if (tbits .eq. 0) cycle
 
-      configurationBtNew = ConfigurationsFromIndexUP(abs(tbits))
+      if (bt .eq. 1) then
+        configurationBtNew = ConfigurationsFromIndexUP(abs(tbits))
+      else
+        configurationBtNew = ConfigurationsFromIndexDN(abs(tbits))
+      end if
       factor = sign(1.0_R64, real(tbits, kind=R64))
 
       configurations(bt) = configurationBtNew

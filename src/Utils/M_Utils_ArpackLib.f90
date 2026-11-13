@@ -456,7 +456,7 @@ contains
       error stop
     end if
 
-    call DSEUPD(evecsQ, "All", select, d, v, ldv, sigma, bmat, dim, which, &
+    call DSEUPD(evecsQ, "A", select, d, v, ldv, sigma, bmat, dim, which, &
                 nEvals, tol, resid, nKry, v, ldv, iparam, ipntr, workd, workl, lworkl, ierr)
 
     if (ierr .ne. 0) then

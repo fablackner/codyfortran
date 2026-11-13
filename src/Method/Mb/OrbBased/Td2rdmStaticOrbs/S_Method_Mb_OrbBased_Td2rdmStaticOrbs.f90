@@ -30,9 +30,11 @@ contains
     !------------------------------------
 
     Method_Setup => Setup
+    Method_Mb_OrbBased_staticOrbsQ = .true.
     Method_Mb_OrbBased_FillRdm1 => FillRdm1
     Method_Mb_OrbBased_FillRdm2 => FillRdm2
     Method_TimeDerivative => TimeDerivative
+    Method_GetEnergy => GetEnergy
 
   end subroutine
 
@@ -69,8 +71,11 @@ contains
     Orbs_orbs(1:nG, 1:nOS) => staticComponents(1:nVals2)
     call OrbsInit_Initialize(Orbs_orbs)
 
-    call Method_Mb_OrbBased_FillH1(Method_Mb_OrbBased_h1, Orbs_orbs, 0.0_R64)
+    ! the static Hamiltonian; the time-dependent terms follow in
+    ! Method_Mb_OrbBased_RefillStaticH1
+    call Method_Mb_OrbBased_FillH0(Method_Mb_OrbBased_h1, Orbs_orbs, 0.0_R64)
     call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, Orbs_orbs, 0.0_R64)
+    call Method_Mb_OrbBased_SetSwitchingReference
 
   end subroutine
 
@@ -87,22 +92,45 @@ contains
     complex(R64), intent(in), contiguous, target  :: twoRdmState(:)
     real(R64), intent(in)             :: time
 
-    ! h1 at this time if any of its terms depends on time (as TDCI): a laser
-    ! (time-dependent sysPotential or sysGauge) would otherwise stay frozen at
-    ! its t = 0 value; h2 is static
-    if (.not. Method_Mb_OrbBased_H1TimeIndependentQ()) then
-      call Method_Mb_OrbBased_FillH1(Method_Mb_OrbBased_h1, Orbs_orbs, time)
-    end if
+    real(R64) :: lambda
+
+    ! h1 at this time if any of its terms depends on time (as TDCI); h2 is
+    ! static, its terms (both linear in h2) carry the switching factor
+    call Method_Mb_OrbBased_RefillStaticH1(Method_Mb_OrbBased_h1, Orbs_orbs, time)
 
     dTwoRdmState(:) = 0.0_R64
 
-    call TwoRdm_ApplyCommutatorH1(dTwoRdmState, twoRdmState, Method_Mb_OrbBased_h1)
     call TwoRdm_ApplyCommutatorH2(dTwoRdmState, twoRdmState, Method_Mb_OrbBased_h2)
     call Reconstruction_AddCollisionOp(dTwoRdmState, twoRdmState, Method_Mb_OrbBased_h2)
+    lambda = Method_Mb_OrbBased_SwitchFactor(time)
+    if (lambda < 1.0_R64) dTwoRdmState(:) = lambda * dTwoRdmState(:)
+    call TwoRdm_ApplyCommutatorH1(dTwoRdmState, twoRdmState, Method_Mb_OrbBased_h1)
 
     dTwoRdmState(:) = -IU * dTwoRdmState(:) ! out is the time-derivative!
 
   end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Energy of the Hamiltonian at time with the stored matrices (the static
+  !> Hamiltonian is not rebuilt from the grid: a program may have replaced
+  !> it): h1 at time, lambda h2; fills Method_Mb_OrbBased_rdm1 and _rdm2 as
+  !> the generic energy does.
+  function GetEnergy(time) result(res)
+    use M_Utils_RdmObservables
+    use M_Orbs
+    use M_Method
+    use M_Method_Mb_OrbBased
+
+    real(R64), intent(in) :: time
+    real(R64) :: res
+
+    call Method_Mb_OrbBased_RefillStaticH1(Method_Mb_OrbBased_h1, Orbs_orbs, time)
+    call FillRdm1(Method_Mb_OrbBased_rdm1, Method_state)
+    call FillRdm2(Method_Mb_OrbBased_rdm2, Method_state)
+    res = RdmObservables_Energy(Method_Mb_OrbBased_rdm1, Method_Mb_OrbBased_h1, &
+                                Method_Mb_OrbBased_SwitchFactor(time) * Method_Mb_OrbBased_rdm2, Method_Mb_OrbBased_h2)
+
+  end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine FillRdm1(rdm1, state)

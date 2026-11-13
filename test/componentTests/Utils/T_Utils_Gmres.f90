@@ -277,7 +277,7 @@ program T_Utils_Gmres
 
   call Gmres_CreateCtx(ctx, 2, 200, TOL)
 
-  call check(error, .not. allocated(ctx % basis), "Gmres_CreateCtx releases the workspace of an earlier context")
+  call check(error,.not. allocated(ctx % basis), "Gmres_CreateCtx releases the workspace of an earlier context")
   if (allocated(error)) error stop "T_Utils_Gmres context reset failure"
 
   call Gmres_Solve(y, nIterRestart, relResRestart, convergedQ, ctx, b, ApplyPrecM, ApplyMatOnPrecVecMN, ApplyMatMN, &
@@ -301,7 +301,7 @@ program T_Utils_Gmres
   call Gmres_Solve(y, nIterFail, relResFail, convergedQ, ctx, b, ApplyPrecM, ApplyMatOnPrecVecMN, ApplyMatMN, &
                    InnerProductW)
 
-  call check(error, .not. convergedQ .and. nIterFail .eq. 2, "one cycle of two iterations does not converge")
+  call check(error,.not. convergedQ .and. nIterFail .eq. 2, "one cycle of two iterations does not converge")
   if (allocated(error)) error stop "T_Utils_Gmres maxRestarts = 0 failure"
   call check(error, relResFail > TOL .and. relResFail < 1.0_R64, "the residual is reduced, above the tolerance")
   if (allocated(error)) error stop "T_Utils_Gmres maxRestarts = 0 residual failure"
@@ -364,7 +364,7 @@ program T_Utils_Gmres
 
   call Gmres_DestroyCtx(ctx)
 
-  call check(error, .not. (allocated(ctx % basis) .or. allocated(ctx % precBasis) .or. allocated(ctx % residual)) &
+  call check(error,.not. (allocated(ctx % basis) .or. allocated(ctx % precBasis) .or. allocated(ctx % residual)) &
              .and. ctx % krylovDim .eq. 0, "Gmres_DestroyCtx releases the workspace")
   if (allocated(error)) error stop "T_Utils_Gmres destroy failure"
 

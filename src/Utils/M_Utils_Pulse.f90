@@ -5,7 +5,7 @@
 !> Laser-pulse shapes (stateless, pure).
 !>
 !> Pulse_Sin2Field is the electric field of the length-gauge laser couplings
-!> sysPotential.ylm.coulombLaser and sysGauge.fem.length:
+!> sysPotential.ylm.coulombLaser and sysGauge.{fem,prolate}.length:
 !>   E(t) = E0 sin^2(pi tRel/T) cos(omega (tRel - T/2) + cep),
 !>   tRel = t - tStart,  T = 2 pi nCycles/omega,
 !> zero outside [tStart, tStart + T] and for omega <= 0. The carrier is

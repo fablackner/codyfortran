@@ -11,14 +11,12 @@
 !>   - `ProjectOnSubspace`:   Gram-Schmidt projection onto orthogonal complement
 !>   - `SaveCoeffs`:          Binary checkpoint output
 !>   - `SaveTwoRdm`:          Compute and persist 2-RDM per body-type block
-!>   - `FillRdm{1,2,3}Bt`:    Generic RDM construction via excitation application
 !>   - `ApplyGroupedExcitations`: Helper to batch excitations by body type
 !>
-!> The body-type-resolved RDM routines (`FillRdm1Bt`, `FillRdm2Bt`, `FillRdm3Bt`)
-!> use a brute-force loop over all orbital indices, applying ladder operators
-!> via `Coeffs_ApplyExcitation` and computing expectation values. These are
-!> primarily useful for diagnostics and validation; optimized backends may
-!> provide direct implementations.
+!> The excitation-based RDM blocks (Coeffs_FillTransitionRdm{2,3}Bt) come
+!> from one worker, FillTransitionBlock: one excitation of the bra per element
+!> and one matrix-vector product with the kets. The n^(2R) excitations of a CI
+!> vector make it brute force: for small systems and validation.
 submodule(M_Coeffs) S_Coeffs
 
   implicit none
@@ -34,7 +32,7 @@ contains
 !>
 !> Reads the `"coeffs"` section from global JSON and dispatches to either
 !> `Coeffs_Generic_Fabricate` or `Coeffs_Hubbard_Fabricate`. Common routines
-!> (normalization, projection, RDM fills, I/O) are assigned unconditionally
+!> (normalization, projection, I/O) are assigned unconditionally
 !> as they are backend-independent.
 !>
 !> **JSON keys:**
@@ -57,9 +55,6 @@ contains
     Coeffs_ProjectOnSector => NoOpProcedures_ProjectCoeffs
     Coeffs_SaveCoeffs => SaveCoeffs
     Coeffs_SaveTwoRdm => SaveTwoRdm
-    Coeffs_FillRdm3Bt => FillRdm3Bt
-    Coeffs_FillRdm2Bt => FillRdm2Bt
-    Coeffs_FillRdm1Bt => FillRdm1Bt
 
     !------------------------------------
     ! Select backend from JSON
@@ -197,156 +192,79 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Compute 3-body RDM for specified body-type triplet.
-!>
-!> Computes:
-!>   ρ(i1,i2,i3,j1,j2,j3) = ⟨Ψ| a†_{i1,bt1} a†_{i2,bt2} a†_{i3,bt3}
-!>                                a_{j3,bt3} a_{j2,bt2} a_{j1,bt1} |Ψ⟩
-!>
-!> where orbital indices i,j run over the orbitals of the respective body type.
-!>
-!> **Complexity:** O(n₁² n₂² n₃² · nCoeffs) — use for small systems only.
-!>
-!> @param[out] rdm3Bt  6D array (n1×n2×n3×n1×n2×n3) allocated on output
-!> @param[in]  coeffs  CI coefficient vector
-!> @param[in]  bt1,bt2,bt3  Body type indices (1..nBodyTypes)
-  subroutine FillRdm3Bt(rdm3Bt, coeffs, bt1, bt2, bt3)
+  module subroutine Coeffs_FillTransitionRdm2Bt(rdm2Bt, bra, kets, bt1, bt2)
     use M_Method_Mb_OrbBased
 
-    complex(R64), intent(out), allocatable :: rdm3Bt(:, :, :, :, :, :)
-    complex(R64), intent(in), contiguous, target     :: coeffs(:)
+    complex(R64), intent(out), allocatable :: rdm2Bt(:, :, :, :, :)
+    complex(R64), intent(in), contiguous   :: bra(:)
+    complex(R64), intent(in), contiguous   :: kets(:, :)
+    integer(I32), intent(in) :: bt1
+    integer(I32), intent(in) :: bt2
+
+    associate (n1 => Method_Mb_OrbBased_nOrbs(bt1), n2 => Method_Mb_OrbBased_nOrbs(bt2))
+      allocate (rdm2Bt(n1, n2, n1, n2, size(kets, 2)))
+    end associate
+    call FillTransitionBlock(rdm2Bt, bra, kets, [bt1, bt2])
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Coeffs_FillTransitionRdm3Bt(rdm3Bt, bra, kets, bt1, bt2, bt3)
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(out), allocatable :: rdm3Bt(:, :, :, :, :, :, :)
+    complex(R64), intent(in), contiguous   :: bra(:)
+    complex(R64), intent(in), contiguous   :: kets(:, :)
     integer(I32), intent(in) :: bt1
     integer(I32), intent(in) :: bt2
     integer(I32), intent(in) :: bt3
 
-    complex(R64), allocatable  :: coeffsTmp(:)
-
-    integer(I32) :: i1, i2, i3, j1, j2, j3
-
-    if (.not. allocated(rdm3Bt)) allocate (rdm3Bt(Method_Mb_OrbBased_nOrbs(bt1), &
-                                                  Method_Mb_OrbBased_nOrbs(bt2), &
-                                                  Method_Mb_OrbBased_nOrbs(bt3), &
-                                                  Method_Mb_OrbBased_nOrbs(bt1), &
-                                                  Method_Mb_OrbBased_nOrbs(bt2), &
-                                                  Method_Mb_OrbBased_nOrbs(bt3)))
-
-    allocate (coeffsTmp, source=coeffs)
-
-    do j3 = 1, size(rdm3Bt, 6)
-      do j2 = 1, size(rdm3Bt, 5)
-        do j1 = 1, size(rdm3Bt, 4)
-          do i3 = 1, size(rdm3Bt, 3)
-            do i2 = 1, size(rdm3Bt, 2)
-              do i1 = 1, size(rdm3Bt, 1)
-
-                coeffsTmp = coeffs
-
-                call ApplyGroupedExcitations(coeffsTmp, [i1, i2, i3], [j1, j2, j3], [bt1, bt2, bt3], 3)
-
-                rdm3Bt(i1, i2, i3, j1, j2, j3) = dot_product(coeffs, coeffsTmp)
-              end do
-            end do
-          end do
-        end do
-      end do
-    end do
+    associate (n1 => Method_Mb_OrbBased_nOrbs(bt1), n2 => Method_Mb_OrbBased_nOrbs(bt2), &
+               n3 => Method_Mb_OrbBased_nOrbs(bt3))
+      allocate (rdm3Bt(n1, n2, n3, n1, n2, n3, size(kets, 2)))
+    end associate
+    call FillTransitionBlock(rdm3Bt, bra, kets, [bt1, bt2, bt3])
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Compute 2-body RDM for specified body-type pair.
-!>
-!> Computes:
-!>   ρ(i1,i2,j1,j2) = ⟨Ψ| a†_{i1,bt1} a†_{i2,bt2} a_{j2,bt2} a_{j1,bt1} |Ψ⟩
-!>
-!> For same body type (bt1 == bt2), this gives the intra-species 2-RDM.
-!> For different body types, this gives the inter-species correlation matrix.
-!>
-!> **Complexity:** O(n₁² n₂² · nCoeffs)
-!>
-!> @param[out] rdm2Bt  4D array (n1×n2×n1×n2) allocated on output
-!> @param[in]  coeffs  CI coefficient vector
-!> @param[in]  bt1,bt2 Body type indices (1..nBodyTypes)
-  subroutine FillRdm2Bt(rdm2Bt, coeffs, bt1, bt2)
+  !> rdm(l + (k - 1) nElements) = <bra| a+_j1..a+_jR a_iR..a_i1 |kets(:, k)>,
+  !> l the column-major index of (i1..iR, j1..jR), i_r and j_r orbitals of body
+  !> type bts(r) (ket-first, the layout of TwoRdm): one excitation of the bra
+  !> per element and one matrix-vector product with the kets, OpenMP over the
+  !> elements (Coeffs_ApplyExcitation must be thread-safe).
+  subroutine FillTransitionBlock(rdm, bra, kets, bts)
+    use M_Utils_BlasLib
     use M_Method_Mb_OrbBased
 
-    complex(R64), intent(out), allocatable :: rdm2Bt(:, :, :, :)
-    complex(R64), intent(in), contiguous, target     :: coeffs(:)
-    integer(I32), intent(in) :: bt1
-    integer(I32), intent(in) :: bt2
+    complex(R64), intent(out)            :: rdm(*)
+    complex(R64), intent(in), contiguous :: bra(:)
+    complex(R64), intent(in), contiguous :: kets(:, :)
+    integer(I32), intent(in)             :: bts(:)
 
-    complex(R64), allocatable  :: coeffsTmp(:)
+    complex(R64), allocatable :: w(:)
+    complex(R64) :: y(size(kets, 2))
+    integer(I32) :: dims(2 * size(bts)), idx(2 * size(bts)), r, nElements, l, m, rest
 
-    integer(I32) :: i1, i2, j1, j2
+    r = size(bts)
+    dims = [Method_Mb_OrbBased_nOrbs(bts), Method_Mb_OrbBased_nOrbs(bts)]
+    nElements = product(dims)
 
-    if (.not. allocated(rdm2Bt)) allocate (rdm2Bt(Method_Mb_OrbBased_nOrbs(bt1), &
-                                                  Method_Mb_OrbBased_nOrbs(bt2), &
-                                                  Method_Mb_OrbBased_nOrbs(bt1), &
-                                                  Method_Mb_OrbBased_nOrbs(bt2)))
-
-    allocate (coeffsTmp, source=coeffs)
-
-    do j2 = 1, size(rdm2Bt, 4)
-      do j1 = 1, size(rdm2Bt, 3)
-        do i2 = 1, size(rdm2Bt, 2)
-          do i1 = 1, size(rdm2Bt, 1)
-
-            coeffsTmp = coeffs
-
-            call ApplyGroupedExcitations(coeffsTmp, [i1, i2], [j1, j2], [bt1, bt2], 2)
-
-            rdm2Bt(i1, i2, j1, j2) = dot_product(coeffs, coeffsTmp)
-          end do
-        end do
+    ! w = a+_i1..a+_iR a_jR..a_j1 |bra>, <w|ket> = <bra| a+_j1..a+_jR a_iR..a_i1 |ket>
+    !$omp parallel do private(w, y, idx, rest, m) schedule(dynamic)
+    do l = 1, nElements
+      rest = l - 1
+      do m = 1, 2 * r
+        idx(m) = mod(rest, dims(m)) + 1
+        rest = rest / dims(m)
       end do
+      w = bra
+      call ApplyGroupedExcitations(w, idx(1:r), idx(r + 1:), bts, r)
+      call BlasLib_CalcMatOnVec(y, kets, w, 'C')
+      rdm(l:l + (size(kets, 2) - 1) * nElements:nElements) = conjg(y)
     end do
+    !$omp end parallel do
 
   end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Compute 1-body RDM for a single body type.
-!>
-!> Computes:
-!>   ρ(i,j) = ⟨Ψ| a†_{i,bt} a_{j,bt} |Ψ⟩
-!>
-!> The diagonal elements ρ(i,i) give orbital occupations; eigenvalues are
-!> natural occupation numbers and eigenvectors are natural orbitals.
-!>
-!> **Complexity:** O(n² · nCoeffs)
-!>
-!> @param[out] rdm1Bt  2D array (n×n) allocated on output
-!> @param[in]  coeffs  CI coefficient vector
-!> @param[in]  bt1     Body type index (1..nBodyTypes)
-  subroutine FillRdm1Bt(rdm1Bt, coeffs, bt1)
-    use M_Method_Mb_OrbBased
-
-    complex(R64), intent(out), allocatable :: rdm1Bt(:, :)
-    complex(R64), intent(in), contiguous, target     :: coeffs(:)
-    integer(I32), intent(in) :: bt1
-
-    complex(R64), allocatable  :: coeffsTmp(:)
-
-    integer(I32) :: i1, j1
-
-    if (.not. allocated(rdm1Bt)) allocate (rdm1Bt(Method_Mb_OrbBased_nOrbs(bt1), &
-                                                  Method_Mb_OrbBased_nOrbs(bt1)))
-
-    allocate (coeffsTmp, source=coeffs)
-
-    do j1 = 1, size(rdm1Bt, 2)
-      do i1 = 1, size(rdm1Bt, 1)
-
-        coeffsTmp = coeffs
-
-        call ApplyGroupedExcitations(coeffsTmp, [i1], [j1], [bt1], 1)
-
-        rdm1Bt(i1, j1) = dot_product(coeffs, coeffsTmp)
-
-      end do
-    end do
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 end submodule

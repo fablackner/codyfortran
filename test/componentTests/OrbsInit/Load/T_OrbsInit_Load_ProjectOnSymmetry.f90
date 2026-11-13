@@ -79,9 +79,9 @@ program T_OrbsInit_Load_ProjectOnSymmetry
   nChanged = 0
   do i = 1, Orbs_nOrbsInState
     nOtherM = nOtherM + count(Grid_Ylm_mCoord .ne. Method_Mb_OrbBased_mOfOrb(i) .and. &
-                              Orbs_orbs(:, i) .ne. (0.0_R64, 0.0_R64))
+                              abs(Orbs_orbs(:, i)) > 0.0_R64)
     nChanged = nChanged + count(Grid_Ylm_mCoord .eq. Method_Mb_OrbBased_mOfOrb(i) .and. &
-                                Orbs_orbs(:, i) .ne. orbsWritten(:, i))
+                                abs(Orbs_orbs(:, i) - orbsWritten(:, i)) > 0.0_R64)
   end do
 
   print *

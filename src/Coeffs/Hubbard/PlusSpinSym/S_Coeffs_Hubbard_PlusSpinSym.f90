@@ -189,39 +189,33 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+  !> iCoeff = (hi - 1) hi / 2 + lo of the configurations lo <= hi of the two
+  !> spins (packed upper triangle, the storage of ApplyH1FillRdm1).
   pure subroutine ConfigurationsFromIndex(configurations, iCoeff)
-    use M_Coeffs_Hubbard
-    use M_Method
-
     integer(I32), intent(out), contiguous :: configurations(:)
     integer(I32), intent(in) :: iCoeff
 
-    integer(I32) :: i2, tri
+    integer(I32) :: hi
 
-    Do i2 = Coeffs_Hubbard_nCoeffsUP, 1, -1
-      tri = (i2) * (i2 + 1) / 2
-      if (tri > iCoeff) cycle
-      configurations(2) = i2
-      configurations(1) = iCoeff - tri
+    hi = 1
+    do while (hi * (hi + 1) / 2 < iCoeff)
+      hi = hi + 1
     end do
+    configurations(1) = iCoeff - (hi - 1) * hi / 2
+    configurations(2) = hi
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
   pure subroutine IndexFromConfigurations(iCoeff, configurations)
-    use M_Coeffs_Hubbard
-    use M_Method
-
     integer(I32), intent(out) :: iCoeff
     integer(I32), intent(in), contiguous  :: configurations(:)
-    integer(I32) :: minVal, maxVal
 
-    minVal = min(configurations(1), configurations(2))
-    maxVal = max(configurations(1), configurations(2))
+    integer(I32) :: lo, hi
 
-    iCoeff = (maxVal) * (maxVal + 1) / 2 + minVal
+    lo = minval(configurations(1:2))
+    hi = maxval(configurations(1:2))
+    iCoeff = (hi - 1) * hi / 2 + lo
 
   end subroutine
 

@@ -181,7 +181,7 @@ contains
   !> pot(ix, iy, iz) += -Z erf(r/rc)/r, r the distance of the node from the
   !> nucleus at center (limit -2Z/(sqrt(pi) rc) on the nucleus node).
   subroutine AddSmearedNucleus(pot, charge, smearing, center, nx, ny, nz)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Grid_Fem
 
     integer(I32), intent(in)    :: nx

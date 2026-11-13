@@ -10,7 +10,7 @@
 !>
 !> **JSON path**: `reconstruction.singlet.valdemoro`
 !>
-!> **Options**:
+!> **Options** (read by the family, S_Reconstruction_Singlet):
 !> - `ccQ` (bool, default=false): Apply contraction-consistent trace constraints
 !>   to enforce that partial traces of D³ match the known D² exactly.
 !>
@@ -25,11 +25,7 @@ module M_Reconstruction_Singlet_Valdemoro
   !=============================================================================
 
   interface
-    !> Bind the singlet Valdemoro implementation at runtime.
-    !>
-    !> Wires the singlet-specific procedure pointers (e.g., alpha–beta block
-    !> builders) to Valdemoro implementations and may read/apply variant options
-    !> as required by the codebase’s configuration system.
+    !> Binds the closure Reconstruction_Singlet_FillRdm3aab.
     module subroutine Reconstruction_Singlet_Valdemoro_Fabricate
     end subroutine
   end interface

@@ -319,6 +319,12 @@ H₂⁺ 2pπu at R = 2 gives −0.4287718199 already on 10 η and 6 × 10 ξ poi
 (`T_H2_03`; the plain basis was off by 0.06–0.6 mHa, partly below the exact
 value, without converging).
 
+**Coordinates.** `Grid_Prolate_FillNodeCoordinate(coord, direction)` gives
+direction · r at every stored entry (all m channels, after `Grid_Setup`):
+direction(3) z with z = (R/2) ξ η; x and y components stop with an error
+(they couple the m channels). It feeds the length gauge
+`sysGauge.prolate.length` and the dipole matrices of `app/molecules/n2`.
+
 **Axis point of the m ≠ 0 channels.** The kinetic operator, the Poisson
 solver and `Grid_Prolate_SpatialProduct` treat ξ = 1 as a Dirichlet point
 of every m ≠ 0 channel (an m ≠ 0 field vanishes on the axis): the spatial

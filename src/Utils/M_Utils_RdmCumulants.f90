@@ -61,10 +61,6 @@ contains
     complex(R64), intent(in), contiguous                :: rdm2(:, :, :, :)
     complex(R64), intent(in), contiguous                :: rdm3(:, :, :, :, :, :)
 
-    integer(I32) :: nO
-
-    nO = size(rdm2, 1)
-
     call RdmCumulants_FillCumulFreePartM3(cumul3, rdm1, rdm2)
 
     cumul3(:, :, :, :, :, :) = rdm3(:, :, :, :, :, :) - cumul3(:, :, :, :, :, :)
@@ -174,209 +170,139 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Free-cumulant (Valdemoro) part of the up-up-down 3-RDM from rdm1a and a
+  !> singlet rdm2ab, ket-first: every element (antisymmetric in (i1,i2), and in
+  !> (j1,j2) since rdm2ab(i1,i2,j1,j2) = rdm2ab(i2,i1,j2,j1)); i1 innermost.
   subroutine RdmCumulants_FillCumulFreePartM3aab(rdm3aabCumulFree, rdm1a, rdm2ab)
+    use M_Utils_RdmSingletRelations
 
     complex(R64), intent(out), allocatable :: rdm3aabCumulFree(:, :, :, :, :, :)
-    complex(R64), intent(in), contiguous                :: rdm1a(:, :)
-    complex(R64), intent(in), contiguous                :: rdm2ab(:, :, :, :)
+    complex(R64), intent(in), contiguous   :: rdm1a(:, :)
+    complex(R64), intent(in), contiguous   :: rdm2ab(:, :, :, :)
 
     complex(R64), allocatable :: rdm2aa(:, :, :, :)
-    integer(I32) :: nOa
-    integer(I32) :: i1, i2, i3, j1, j2, j3
+    integer(I32) :: nOa, i1, i2, i3, j1, j2, j3
 
     nOa = size(rdm2ab, 1)
+    allocate (rdm3aabCumulFree(nOa, nOa, nOa, nOa, nOa, nOa))
+    call RdmSingletRelations_FillRdm2aaFromRdm2ab(rdm2aa, rdm2ab)
 
-    if (.not. allocated(rdm3aabCumulFree)) allocate (rdm3aabCumulFree(nOa, nOa, nOa, nOa, nOa, nOa))
+    !$omp parallel do collapse(2) private(j3, j2, j1, i3, i2, i1)
+    do j3 = 1, nOa
+      do j2 = 1, nOa
+        do j1 = 1, nOa
+          do i3 = 1, nOa
+            do i2 = 1, nOa
+              do i1 = 1, nOa
 
-    rdm3aabCumulFree(:, :, :, :, :, :) = 0.0_R64
+                rdm3aabCumulFree(i1, i2, i3, j1, j2, j3) = rdm2aa(i1, i2, j1, j2) * rdm1a(i3, j3) + &
+                                                           rdm2ab(i2, i3, j2, j3) * rdm1a(i1, j1) + &
+                                                           rdm2ab(i1, i3, j1, j3) * rdm1a(i2, j2) - &
+                                                           rdm2ab(i1, i3, j2, j3) * rdm1a(i2, j1) - &
+                                                           rdm2ab(i2, i3, j1, j3) * rdm1a(i1, j2) - &
+                                                           2.0_R64 * ( &
+                                                           rdm1a(i1, j1) * rdm1a(i2, j2) - &
+                                                           rdm1a(i2, j1) * rdm1a(i1, j2) &
+                                                           ) * &
+                                                           rdm1a(i3, j3)
 
-    allocate (rdm2aa(nOa, nOa, nOa, nOa))
-
-    do j2 = 1, nOa
-      do j1 = 1, nOa
-        do i2 = 1, nOa
-          do i1 = 1, nOa
-
-            rdm2aa(i1, i2, j1, j2) = rdm2ab(i1, i2, j1, j2) - rdm2ab(i2, i1, j1, j2)
-
+              end do
+            end do
           end do
         end do
       end do
     end do
-
-    ! the 3-RDM has to be initialized before calling the subroutine!
-    ! this subroutine adds the valdemoro Reconstruction to the input 3-RDM
-
-    do j2 = 1, nOa
-      do j1 = 1, nOa
-        if (j1 < j2) then
-
-          do i2 = 1, nOa
-            do i1 = 1, nOa
-              if (i1 < i2) then
-
-                do i3 = 1, nOa
-                  do j3 = 1, nOa
-
-                    rdm3aabCumulFree(i1, i2, i3, j1, j2, j3) = rdm3aabCumulFree(i1, i2, i3, j1, j2, j3) + &
-                                                               rdm2aa(i1, i2, j1, j2) * rdm1a(i3, j3) + &
-                                                               rdm2ab(i2, i3, j2, j3) * rdm1a(i1, j1) + &
-                                                               rdm2ab(i1, i3, j1, j3) * rdm1a(i2, j2) - &
-                                                               rdm2ab(i1, i3, j2, j3) * rdm1a(i2, j1) - &
-                                                               rdm2ab(i2, i3, j1, j3) * rdm1a(i1, j2) - &
-                                                               2.0_R64 * ( &
-                                                               rdm1a(i1, j1) * rdm1a(i2, j2) - &
-                                                               rdm1a(i2, j1) * rdm1a(i1, j2) &
-                                                               ) * &
-                                                               rdm1a(i3, j3)
-
-                    rdm3aabCumulFree(i2, i1, i3, j1, j2, j3) = -rdm3aabCumulFree(i1, i2, i3, j1, j2, j3)
-                    rdm3aabCumulFree(i1, i2, i3, j2, j1, j3) = -rdm3aabCumulFree(i1, i2, i3, j1, j2, j3)
-                    rdm3aabCumulFree(i2, i1, i3, j2, j1, j3) = rdm3aabCumulFree(i1, i2, i3, j1, j2, j3)
-
-                  end do
-                end do
-              end if
-            end do
-          end do
-        end if
-      end do
-    end do
+    !$omp end parallel do
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmCumulants_AddNyCumulantM3aab(rdm3aab, nBodiesUP, rdm1a, rdm2ab)
+  !> Adds the Nakatsuji-Yasuda 3-cumulant of a singlet rdm2ab to the
+  !> up-up-down 3-RDM (ket-first): products of two 2-cumulants contracted
+  !> through R = 2 P_occ - 1, P_occ the projector on the nBodiesUp most
+  !> occupied natural orbitals of rdm1a.
+  subroutine RdmCumulants_AddNyCumulantM3aab(rdm3aab, nBodiesUp, rdm1a, rdm2ab)
     use M_Utils_RdmDiagonalize
+    use M_Utils_RdmSingletRelations
+    use M_Utils_BlasLib
 
-    complex(R64), intent(inout), contiguous  :: rdm3aab(:, :, :, :, :, :)
-    integer(I32), intent(in)    :: nBodiesUP
-    complex(R64), intent(in), contiguous     :: rdm1a(:, :)
-    complex(R64), intent(in), contiguous     :: rdm2ab(:, :, :, :)
+    complex(R64), intent(inout), contiguous :: rdm3aab(:, :, :, :, :, :)
+    integer(I32), intent(in)                :: nBodiesUp
+    complex(R64), intent(in), contiguous    :: rdm1a(:, :)
+    complex(R64), intent(in), contiguous    :: rdm2ab(:, :, :, :)
 
-    complex(R64), allocatable :: cumul2ab(:, :, :, :)
-    complex(R64), allocatable :: cumul2aa(:, :, :, :)
-    complex(R64), allocatable :: Rxcumul2ab(:, :, :, :)
-    complex(R64), allocatable :: Rxcumul2aa(:, :, :, :)
-    complex(R64), allocatable :: R(:, :)
+    complex(R64), allocatable :: cumul2ab(:, :, :, :), cumul2aa(:, :, :, :), cumul2abPerm(:, :, :, :)
+    complex(R64), allocatable :: Rxcumul2ab(:, :, :, :), Rxcumul2aa(:, :, :, :), R(:, :), natorbs(:, :)
+    complex(R64), allocatable :: p1t(:, :, :, :, :), p3t(:, :, :, :, :), p5t(:, :, :, :, :), b3(:, :, :)
     real(R64), allocatable    :: natocc(:)
-    complex(R64), allocatable :: natorbs(:, :)
-
-    integer(I32) :: nOa
-    integer(I32) :: i1, i2, i3, j1, j2, j3, i, k
+    integer(I32) :: nOa, i1, i2, i3, j1, j2, j3, k
 
     nOa = size(rdm1a, 1)
 
-    allocate (cumul2ab(nOa, nOa, nOa, nOa))
-    allocate (cumul2aa(nOa, nOa, nOa, nOa))
-    allocate (Rxcumul2ab(nOa, nOa, nOa, nOa))
-    allocate (Rxcumul2aa(nOa, nOa, nOa, nOa))
-    allocate (R(nOa, nOa))
-
-    do j2 = 1, nOa
-      do j1 = 1, nOa
-        do i2 = 1, nOa
-          do i1 = 1, nOa
-
-            cumul2ab(i1, i2, j1, j2) = rdm2ab(i1, i2, j1, j2) - rdm1a(i1, j1) * rdm1a(i2, j2)
-
-          end do
-        end do
-      end do
-    end do
-
-    do j2 = 1, nOa
-      do j1 = 1, nOa
-        do i2 = 1, nOa
-          do i1 = 1, nOa
-
-            cumul2aa(i1, i2, j1, j2) = cumul2ab(i1, i2, j1, j2) - cumul2ab(i2, i1, j1, j2)
-
-          end do
-        end do
-      end do
-    end do
+    call RdmCumulants_FillCumul2ab(cumul2ab, rdm1a, rdm1a, rdm2ab)
+    call RdmSingletRelations_FillRdm2aaFromRdm2ab(cumul2aa, cumul2ab)
 
     call RdmDiagonalize_Rdm1(natocc, natorbs, rdm1a)
+    natocc(:nBodiesUp) = 1.0_R64
+    natocc(nBodiesUp + 1:) = -1.0_R64
+    R = matmul(natorbs * spread(natocc, 1, nOa), conjg(transpose(natorbs)))
 
-    do i = 1, nBodiesUP
-      natocc(i) = 1.0_R64
+    ! R cumul2: one matrix product each, R (n x n) times cumul2 as (n x n^3)
+    allocate (Rxcumul2ab, mold=cumul2ab)
+    allocate (Rxcumul2aa, mold=cumul2ab)
+    call ZGEMM('N', 'N', nOa, nOa**3, nOa, (1.0_R64, 0.0_R64), R, nOa, cumul2ab, nOa, (0.0_R64, 0.0_R64), Rxcumul2ab, nOa)
+    call ZGEMM('N', 'N', nOa, nOa**3, nOa, (1.0_R64, 0.0_R64), R, nOa, cumul2aa, nOa, (0.0_R64, 0.0_R64), Rxcumul2aa, nOa)
+
+    ! The eight products are permutations of three sums over k,
+    !   p1(i1,i2,j1, i3,j2,j3) = sum_k cumul2aa(i1,i2,j1,k) Rxcumul2ab(k,i3,j2,j3)
+    !   p3(i1,i3,j1, i2,j3,j2) = sum_k cumul2ab(i1,i3,j1,k) Rxcumul2ab(k,i2,j3,j2)
+    !   p5(i1,i3,j3, i2,j1,j2) = sum_k cumul2ab(i1,i3,k,j3) Rxcumul2aa(k,i2,j1,j2).
+    ! All eight terms of an element share its j3 (a column index of p1 and p3,
+    ! a row index of p5): one thread forms the products of a j3 slice (n^5 per
+    ! thread) with BLAS inside the parallel region (single-threaded there with
+    ! the OpenMP build of OpenBLAS). Every element is computed; the sum is
+    ! antisymmetric in (i1,i2) (p1 alone, p3 and p5 in pairs) and, for a
+    ! singlet rdm2ab, in (j1,j2) (p5 alone, p1 and p3 in pairs).
+    allocate (cumul2abPerm(nOa, nOa, nOa, nOa))
+    do k = 1, nOa
+      cumul2abPerm(:, :, :, k) = cumul2ab(:, :, k, :)
     end do
 
-    do i = nBodiesUP + 1, nOa
-      natocc(i) = -1.0_R64
-    end do
-
-    R = 0.0_R64
-    do j1 = 1, nOa
-      do i1 = 1, nOa
-        do j2 = 1, nOa
-
-          R(i1, j1) = R(i1, j1) + natorbs(i1, j2) * natocc(j2) * conjg(natorbs(j1, j2))
-
-        end do
-      end do
-    end do
-
-    Rxcumul2ab(:, :, :, :) = 0.0_R64
-    Rxcumul2aa(:, :, :, :) = 0.0_R64
-
-    do j2 = 1, nOa
-      do j1 = 1, nOa
-        do i2 = 1, nOa
-          do i1 = 1, nOa
-
-            do k = 1, nOa
-
-              Rxcumul2ab(i1, i2, j1, j2) = Rxcumul2ab(i1, i2, j1, j2) + R(i1, k) * cumul2ab(k, i2, j1, j2)
-              Rxcumul2aa(i1, i2, j1, j2) = Rxcumul2aa(i1, i2, j1, j2) + R(i1, k) * cumul2aa(k, i2, j1, j2)
-
+    !$omp parallel private(p1t, p3t, p5t, b3, j3, j2, j1, i3, i2, i1)
+    allocate (p1t(nOa, nOa, nOa, nOa, nOa), p3t(nOa, nOa, nOa, nOa, nOa), p5t(nOa, nOa, nOa, nOa, nOa))
+    allocate (b3(nOa, nOa, nOa))
+    !$omp do schedule(dynamic)
+    do j3 = 1, nOa
+      ! p1t(i1,i2,j1, i3,j2) = p1(i1,i2,j1, i3,j2,j3)
+      call ZGEMM('N', 'N', nOa**3, nOa**2, nOa, (1.0_R64, 0.0_R64), cumul2aa, nOa**3, &
+                 Rxcumul2ab(1, 1, 1, j3), nOa, (0.0_R64, 0.0_R64), p1t, nOa**3)
+      ! p3t(i1,i3,j1, i2,j2) = p3(i1,i3,j1, i2,j3,j2)
+      b3(:, :, :) = Rxcumul2ab(:, :, j3, :)
+      call ZGEMM('N', 'N', nOa**3, nOa**2, nOa, (1.0_R64, 0.0_R64), cumul2ab, nOa**3, &
+                 b3, nOa, (0.0_R64, 0.0_R64), p3t, nOa**3)
+      ! p5t(i1,i3, i2,j1,j2) = p5(i1,i3,j3, i2,j1,j2): the rows (i1,i3) of slice j3
+      call ZGEMM('N', 'N', nOa**2, nOa**3, nOa, (1.0_R64, 0.0_R64), cumul2abPerm(1, 1, j3, 1), nOa**3, &
+                 Rxcumul2aa, nOa, (0.0_R64, 0.0_R64), p5t, nOa**2)
+      do j2 = 1, nOa
+        do j1 = 1, nOa
+          do i3 = 1, nOa
+            do i2 = 1, nOa
+              do i1 = 1, nOa
+                rdm3aab(i1, i2, i3, j1, j2, j3) = rdm3aab(i1, i2, i3, j1, j2, j3) + &
+                                                  p1t(i1, i2, j1, i3, j2) - p1t(i1, i2, j2, i3, j1) + &
+                                                  p3t(i1, i3, j1, i2, j2) - p3t(i1, i3, j2, i2, j1) + &
+                                                  p5t(i1, i3, i2, j1, j2) - &
+                                                  p3t(i2, i3, j1, i1, j2) + p3t(i2, i3, j2, i1, j1) - &
+                                                  p5t(i2, i3, i1, j1, j2)
+              end do
             end do
           end do
         end do
       end do
     end do
-
-    ! the 3-RDM has to be initialized before calling the subroutine!
-    !this subroutine adds the valdemoro Reconstruction to the input 3-RDM
-
-    do i2 = 1, nOa
-      do i1 = 1, nOa
-        if (i1 < i2) then
-
-          do j2 = 1, nOa
-            do j1 = 1, nOa
-              if (j1 < j2) then
-
-                do j3 = 1, nOa
-                  do i3 = 1, nOa
-
-                    do k = 1, nOa
-
-                      rdm3aab(i1, i2, i3, j1, j2, j3) = rdm3aab(i1, i2, i3, j1, j2, j3) + &
-                                                        cumul2aa(i1, i2, j1, k) * Rxcumul2ab(k, i3, j2, j3) - &
-                                                        cumul2aa(i1, i2, j2, k) * Rxcumul2ab(k, i3, j1, j3) + &
-                                                        cumul2ab(i1, i3, j1, k) * Rxcumul2ab(k, i2, j3, j2) - &
-                                                        cumul2ab(i1, i3, j2, k) * Rxcumul2ab(k, i2, j3, j1) + &
-                                                        cumul2ab(i1, i3, k, j3) * Rxcumul2aa(k, i2, j1, j2) - &
-                                                        cumul2ab(i2, i3, j1, k) * Rxcumul2ab(k, i1, j3, j2) + &
-                                                        cumul2ab(i2, i3, j2, k) * Rxcumul2ab(k, i1, j3, j1) - &
-                                                        cumul2ab(i2, i3, k, j3) * Rxcumul2aa(k, i1, j1, j2)
-
-                    end do
-
-                    rdm3aab(i2, i1, i3, j1, j2, j3) = -rdm3aab(i1, i2, i3, j1, j2, j3)
-                    rdm3aab(i1, i2, i3, j2, j1, j3) = -rdm3aab(i1, i2, i3, j1, j2, j3)
-                    rdm3aab(i2, i1, i3, j2, j1, j3) = rdm3aab(i1, i2, i3, j1, j2, j3)
-
-                  end do
-                end do
-              end if
-            end do
-          end do
-        end if
-      end do
-    end do
+    !$omp end do
+    deallocate (p1t, p3t, p5t, b3)
+    !$omp end parallel
 
   end subroutine
 

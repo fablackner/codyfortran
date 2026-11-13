@@ -53,17 +53,12 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_FieldFreeMeanField
   !> Whether Method_Mb_OrbBased_SetupFieldFreeMeanField has run.
   logical :: setupQ = .false.
 
-  !> Frozen mean-field reference U = J0 - K0 (exactFieldFreeMeanFieldQ,
+  !> Frozen mean-field reference U (exactFieldFreeMeanFieldQ,
   !> Method_Mb_OrbBased_BuildFieldFreeMeanField): whether it is built since
-  !> the last setup, the Hartree potential J0 of the reference density (in
-  !> the representation of the interaction backend) and the ACE vectors of
-  !> K0, one per stored orbital; the columns meanFieldZetaStart(bt) ..
-  !> meanFieldZetaEnd(bt) act on the orbitals of body type bt.
+  !> the last setup; J0 and the ACE vectors of K0 (Hartree-Fock, or only the
+  !> ACE vectors of a K0 for Kohn-Sham).
   logical :: meanFieldBuiltQ = .false.
-  complex(R64), allocatable :: meanFieldHartree(:)
-  complex(R64), allocatable :: meanFieldZeta(:, :)
-  integer(I32), allocatable :: meanFieldZetaStart(:)
-  integer(I32), allocatable :: meanFieldZetaEnd(:)
+  type(T_Method_Mb_OrbBased_MeanField) :: ref
 
   !> Kohn-Sham reference: the local potential v_KS,s[rho0] on the xc points
   !> (SysXc_nPoints, nSpin), the column of every body type, and whether ACE
@@ -120,8 +115,6 @@ contains
     !---------------------------------------------------------------------------
     use M_Grid
     use M_Orbs
-    use M_Method_Mb
-    use M_SysInteraction
     use M_SysXc
     use M_Method_Mb_OrbBased_Tdks
 
@@ -129,11 +122,10 @@ contains
     complex(R64), intent(in), contiguous :: rdm1(:, :)
     real(R64), intent(in) :: time
 
-    complex(R64), allocatable :: rdmSpatial(:, :), weightedOrbs(:, :)
+    complex(R64), allocatable :: rdmSpatial(:, :)
     real(R64) :: seconds, exchangeFraction
     integer(I64) :: count0, count1, countRate
-    integer(I32) :: nOS, nPairSolves, bt, iStart, iEnd, n
-    logical :: positiveDefiniteQ
+    integer(I32) :: nOS, nPairSolves
 
     if (.not. setupQ) &
       error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ: call Method_Setup before building the reference"
@@ -149,53 +141,19 @@ contains
 
     if (Method_Mb_OrbBased_kohnShamQ) then
       ! Kohn-Sham: the local v_KS,s of the state on the xc points; exchange
-      ! only with the exact-exchange fraction of a hybrid
+      ! only with the exact-exchange fraction a of a hybrid, the ACE vectors
+      ! carry it (a K0 = sum zeta zeta^H)
       call Method_Mb_OrbBased_Tdks_FillKohnShamPotential(meanFieldKohnSham, meanFieldSpinOfBodyType, orbs, rdm1, time)
       exchangeFraction = SysXc_exactExchangeFraction
-    else
-      ! J0: one potential of the total source sum_l conjg(phi_l) (phi rhoS)_l
-      weightedOrbs = matmul(orbs, rdmSpatial)
-      call SysInteraction_FillDirectPotential(meanFieldHartree, orbs, weightedOrbs, time, bt1_=-1, bt2_=-1)
-      exchangeFraction = 1.0_R64
-    end if
-    meanFieldExchangeQ = abs(exchangeFraction) > 0.0_R64
-
-    ! K0: ACE vectors per body type of the stored orbitals
-    allocate (meanFieldZeta(Grid_nPoints, nOS))
-    allocate (meanFieldZetaStart(Method_Mb_nBodyTypes), meanFieldZetaEnd(Method_Mb_nBodyTypes))
-    nPairSolves = 0
-    do bt = 1, Method_Mb_nBodyTypes
-      if (Orbs_restrictedQ) then
-        iStart = 1
-        iEnd = nOS
-      else
-        iStart = Method_Mb_OrbBased_nOrbsStart(bt)
-        iEnd = Method_Mb_OrbBased_nOrbsEnd(bt)
-      end if
-      meanFieldZetaStart(bt) = iStart
-      meanFieldZetaEnd(bt) = iEnd
-
-      ! Restricted: one block (spin-up rdm1) for the shared orbitals
-      if (Orbs_restrictedQ .and. bt > 1) cycle
-      n = iEnd - iStart + 1
-      if (n < 1 .or. .not. meanFieldExchangeQ) cycle
-      weightedOrbs = matmul(orbs(:, iStart:iEnd), rdm1(iStart:iEnd, iStart:iEnd))
-      call SysInteraction_FillExchangeAce(meanFieldZeta(:, iStart:iEnd), positiveDefiniteQ, orbs(:, iStart:iEnd), &
-                                          weightedOrbs, time, bt1_=-1, bt2_=-1)
-      if (.not. positiveDefiniteQ) &
-        write (*, '(A,I0,A)') " warning: exactFieldFreeMeanFieldQ: the exchange matrix <phi_i|K0 phi_j> of body type ", bt, &
-        " is not positive definite, its ACE uses the positive eigen-subspace"
-      if (SysInteraction_conjSymmetricQ) then
-        nPairSolves = nPairSolves + n * (n + 1) / 2
-      else
-        nPairSolves = nPairSolves + n * n
-      end if
-    end do
-
-    ! Kohn-Sham: the ACE vectors carry the exchange fraction, a K0 = sum zeta zeta^H
-    if (Method_Mb_OrbBased_kohnShamQ .and. meanFieldExchangeQ) then
       if (exchangeFraction < 0.0_R64) error stop "exactFieldFreeMeanFieldQ: negative exact-exchange fraction"
-      meanFieldZeta(:, :) = sqrt(exchangeFraction) * meanFieldZeta(:, :)
+      meanFieldExchangeQ = exchangeFraction > 0.0_R64
+      nPairSolves = 0
+      if (meanFieldExchangeQ) then
+        call FillExchangeAce(ref, nPairSolves, orbs, rdm1, time)
+        ref % zeta(:, :) = sqrt(exchangeFraction) * ref % zeta(:, :)
+      end if
+    else
+      call Method_Mb_OrbBased_FillMeanField(ref, orbs, rdm1, time, nPairSolves_=nPairSolves)
     end if
 
     meanFieldBuiltQ = .true.
@@ -266,13 +224,116 @@ contains
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> w = w + U z = w + J0 z - sum_k zeta_k <zeta_k|z> with the ACE vectors of
-  !> body type bt (SysInteraction_AddMeanField; scratch: work vector for
-  !> J0 z). Reentrant; its passes are parallel when called outside a parallel
-  !> region.
+  module subroutine Method_Mb_OrbBased_FillMeanField(mf, orbs, rdm1, time, nPairSolves_)
+    !---------------------------------------------------------------------------
+    ! U = J0 - K0 from the stored orbitals phi and the 1-RDM of the state
+    ! (rdm1(i, j) = <a+_j a_i>), the factors of ApplyHartreeFockOp:
+    !   J0 = V[rho], rho = sum_kl rhoS(k, l) conjg(phi_l) phi_k with the
+    !        spatial 1-RDM rhoS (Method_Mb_OrbBased_FillSpatialRdm1: the sum
+    !        of both spin blocks for restricted storage, i.e. 2 sum |phi|^2
+    !        for a closed shell), one solve of the total source;
+    !   K0 by its ACE vectors (FillExchangeAce).
+    ! The potentials take the body-type-independent arguments (-1, -1) of
+    ! ApplyInteraction.
+    !---------------------------------------------------------------------------
+    use M_SysInteraction
+
+    type(T_Method_Mb_OrbBased_MeanField), intent(out) :: mf
+    complex(R64), intent(in), contiguous :: orbs(:, :)
+    complex(R64), intent(in), contiguous :: rdm1(:, :)
+    real(R64), intent(in) :: time
+    integer(I32), intent(out), optional :: nPairSolves_
+
+    complex(R64), allocatable :: rdmSpatial(:, :)
+    integer(I32) :: nPairSolves
+
+    if (.not. SysInteraction_bodyTypeIndependentQ) &
+      error stop "Method_Mb_OrbBased_FillMeanField requires a body-type-independent interaction (sysInteraction)"
+
+    call Method_Mb_OrbBased_FillSpatialRdm1(rdmSpatial, rdm1)
+    call SysInteraction_FillDirectPotential(mf % hartree, orbs, matmul(orbs, rdmSpatial), time, bt1_=-1, bt2_=-1)
+    call FillExchangeAce(mf, nPairSolves, orbs, rdm1, time)
+    if (present(nPairSolves_)) nPairSolves_ = nPairSolves
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_AddMeanField(w, scratch, mf, z, bt)
+    use M_SysInteraction
+
+    complex(R64), intent(inout), contiguous :: w(:)
+    complex(R64), intent(inout), contiguous :: scratch(:)
+    type(T_Method_Mb_OrbBased_MeanField), intent(in) :: mf
+    complex(R64), intent(in), contiguous :: z(:)
+    integer(I32), intent(in) :: bt
+
+    call SysInteraction_AddMeanField(w, scratch, z, mf % hartree, mf % zeta(:, mf % zetaStart(bt):mf % zetaEnd(bt)))
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> The ACE vectors of K0 within every body type bt (exchange only between
+  !> equal spins): gamma_bt(r, r') = sum_{j,l in bt} rdm1(j, l) phi_j(r)
+  !> conjg(phi_l(r')), SysInteraction_FillExchangeAce on the stored orbitals
+  !> of bt with the weighted orbitals phi rdm1_bt (restricted storage: one
+  !> block, all stored orbitals with the spin-up block of rdm1, shared by both
+  !> spins as the orbitals are); the columns zetaStart(bt) .. zetaEnd(bt) act
+  !> on the orbitals of body type bt. nPairSolves: the pair potentials solved.
+  subroutine FillExchangeAce(mf, nPairSolves, orbs, rdm1, time)
+    use M_Grid
+    use M_Orbs
+    use M_Method_Mb
+    use M_SysInteraction
+
+    type(T_Method_Mb_OrbBased_MeanField), intent(inout) :: mf
+    integer(I32), intent(out) :: nPairSolves
+    complex(R64), intent(in), contiguous :: orbs(:, :)
+    complex(R64), intent(in), contiguous :: rdm1(:, :)
+    real(R64), intent(in) :: time
+
+    integer(I32) :: nOS, bt, iStart, iEnd, n
+    logical :: positiveDefiniteQ
+
+    nOS = Orbs_nOrbsInState
+    allocate (mf % zeta(Grid_nPoints, nOS))
+    allocate (mf % zetaStart(Method_Mb_nBodyTypes), mf % zetaEnd(Method_Mb_nBodyTypes))
+    nPairSolves = 0
+    do bt = 1, Method_Mb_nBodyTypes
+      if (Orbs_restrictedQ) then
+        iStart = 1
+        iEnd = nOS
+      else
+        iStart = Method_Mb_OrbBased_nOrbsStart(bt)
+        iEnd = Method_Mb_OrbBased_nOrbsEnd(bt)
+      end if
+      mf % zetaStart(bt) = iStart
+      mf % zetaEnd(bt) = iEnd
+
+      ! Restricted: one block (spin-up rdm1) for the shared orbitals
+      if (Orbs_restrictedQ .and. bt > 1) cycle
+      n = iEnd - iStart + 1
+      if (n < 1) cycle
+      call SysInteraction_FillExchangeAce(mf % zeta(:, iStart:iEnd), positiveDefiniteQ, orbs(:, iStart:iEnd), &
+                                          matmul(orbs(:, iStart:iEnd), rdm1(iStart:iEnd, iStart:iEnd)), time, &
+                                          bt1_=-1, bt2_=-1)
+      if (.not. positiveDefiniteQ) &
+        write (*, '(A,I0,A)') " warning: frozen mean field: the exchange matrix <phi_i|K0 phi_j> of body type ", bt, &
+        " is not positive definite, its ACE uses the positive eigen-subspace"
+      if (SysInteraction_conjSymmetricQ) then
+        nPairSolves = nPairSolves + n * (n + 1) / 2
+      else
+        nPairSolves = nPairSolves + n * n
+      end if
+    end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> w = w + U z with the reference of body type bt (Hartree-Fock:
+  !> Method_Mb_OrbBased_AddMeanField; scratch: work vector). Reentrant; its
+  !> passes are parallel when called outside a parallel region.
   subroutine AddMeanField(w, scratch, z, bt)
     use M_Grid
-    use M_SysInteraction
     use M_SysXc
 
     complex(R64), intent(inout), contiguous :: w(:)
@@ -284,8 +345,7 @@ contains
     integer(I32) :: k
 
     if (.not. allocated(meanFieldKohnSham)) then
-      call SysInteraction_AddMeanField(w, scratch, z, meanFieldHartree, &
-                                       meanFieldZeta(:, meanFieldZetaStart(bt):meanFieldZetaEnd(bt)))
+      call Method_Mb_OrbBased_AddMeanField(w, scratch, ref, z, bt)
       return
     end if
 
@@ -293,9 +353,9 @@ contains
     call SysXc_MultiplyWithPotential(scratch, meanFieldKohnSham(:, meanFieldSpinOfBodyType(bt)), z)
     call Axpy(w, (1.0_R64, 0.0_R64), scratch)
     if (.not. meanFieldExchangeQ) return
-    do k = meanFieldZetaStart(bt), meanFieldZetaEnd(bt)
-      overlap = Grid_InnerProduct(meanFieldZeta(:, k), z)
-      call Axpy(w, -overlap, meanFieldZeta(:, k))
+    do k = ref % zetaStart(bt), ref % zetaEnd(bt)
+      overlap = Grid_InnerProduct(ref % zeta(:, k), z)
+      call Axpy(w, -overlap, ref % zeta(:, k))
     end do
 
   end subroutine
@@ -308,10 +368,7 @@ contains
     meanFieldExchangeQ = .true.
     if (allocated(meanFieldKohnSham)) deallocate (meanFieldKohnSham)
     if (allocated(meanFieldSpinOfBodyType)) deallocate (meanFieldSpinOfBodyType)
-    if (allocated(meanFieldHartree)) deallocate (meanFieldHartree)
-    if (allocated(meanFieldZeta)) deallocate (meanFieldZeta)
-    if (allocated(meanFieldZetaStart)) deallocate (meanFieldZetaStart)
-    if (allocated(meanFieldZetaEnd)) deallocate (meanFieldZetaEnd)
+    ref = T_Method_Mb_OrbBased_MeanField()
 
   end subroutine
 
@@ -347,7 +404,7 @@ contains
   !> y = y + a x.
   !> Private twin of the Axpy of M_Utils_Gmres, kept for bit-identity (the former (1,0)*u arithmetic).
   subroutine Axpy(y, a, x)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(inout), contiguous :: y(:)
     complex(R64), intent(in) :: a

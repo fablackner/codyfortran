@@ -102,7 +102,7 @@ contains
             totalM = totalM + Method_Mb_OrbBased_mOfOrb(shift + i)
         end do
       end do
-      if (totalM .ne. 0 .and. coeffs(iCoeff) .ne. (0.0_R64, 0.0_R64)) res = res + 1
+      if (totalM .ne. 0 .and. abs(coeffs(iCoeff)) > 0.0_R64) res = res + 1
     end do
 
   end function

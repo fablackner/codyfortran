@@ -5,13 +5,12 @@
 !> @brief Singlet Nakatsuji-Yasuda (NY) reconstruction scheme.
 !>
 !> @details
-!> Extends the Valdemoro approximation by adding particle-number-dependent
-!> corrections to the 3-body cumulant. The NY correction improves accuracy
-!> for systems where correlation is significant.
+!> Extends the Valdemoro approximation by the NY 3-cumulant: products of two
+!> 2-cumulants contracted through R = 2 P_occ - 1.
 !>
 !> **JSON path**: `reconstruction.singlet.singletNy`
 !>
-!> **Options**:
+!> **Options** (read by the family, S_Reconstruction_Singlet):
 !> - `ccQ` (bool, default=false): Apply contraction-consistent trace constraints
 !>
 !> @see H. Nakatsuji & K. Yasuda, Phys. Rev. Lett. 76, 1039 (1996)
@@ -25,11 +24,7 @@ module M_Reconstruction_Singlet_Ny
   !=============================================================================
 
   interface
-    !> Bind the singlet NY implementation at runtime.
-    !>
-    !> Wires the singlet-specific procedure pointers (e.g., alpha–beta block
-    !> builders) to NY implementations and may read/apply variant options as
-    !> required by the codebase’s configuration system.
+    !> Binds the closure Reconstruction_Singlet_FillRdm3aab.
     module subroutine Reconstruction_Singlet_Ny_Fabricate
     end subroutine
   end interface

@@ -1,11 +1,14 @@
 # Applications
 
 Production runs built on the CodyFortran library. Every leaf folder holds one
-program `P_X.f90` and its input `P_X.json` (and `P_X.exe` after the build).
+program `P_X.f90` and its input `P_X.json` (and `P_X.exe` after the build);
+programs with a `make_inputs.py` take an input it wrote to `runs/` as the
+argument.
 Programs are named `P_<Stage><Method><Variant>`: stage `Ground` (ground or
 initial state), `Laser` (laser pulse) or `Kick` (delta kick); method `Scf`,
 `Mcscf`, `Mctdhf`, `Td2rdm`, `Tdhf`, `Ks` (Kohn–Sham DFT) or `Tddft`; variant the gauge (`Velocity`,
-`Length`) or the grid (`Ylm`, `Fem`, `Prolate`) where several exist.
+`Length`) or the grid (`Ylm`, `Fem`, `Prolate`) where several exist; analysis
+programs `P_<Quantity><Grid>` (`P_IntegralsFem`, `P_StepCostFem`).
 
 ```
 atoms/
@@ -19,6 +22,7 @@ atoms/
   ne/  groundstate/mctdhf                      P_GroundMctdhf         MCTDHF, 9 orbitals
        groundstate/scf                         P_GroundScfYlm         Hartree-Fock
        groundstate/mcscf                       P_GroundMcscf          MCSCF, 9 orbitals (ground solver)
+       groundstate/td2rdm                      P_GroundTd2rdm         TD-2RDM by adiabatic switching, no CI
        dynamics/mctdhf                         P_LaserMctdhfVelocity  HHG, velocity gauge
        dynamics/mctdhfLengthGauge              P_LaserMctdhfLength    from mcscf
 molecules/
@@ -27,8 +31,14 @@ molecules/
              dynamics/tdhf                     P_KickTdhfFem          absorption spectrum
              dynamics/tddft                    P_KickTddftFem         absorption spectrum, real-time TDDFT
              analysis/absorption_spectrum.py
+  h2o/       analysis/stepCost                 P_StepCostFem          cost of MCTDHF vs TD-2RDM per derivative
   h2/        groundstate/scfProlate            P_GroundScfProlate     RHF on the prolate spheroidal grid
   n2/        groundstate/scf                   P_GroundScfProlate     RHF on the prolate spheroidal grid
+             groundstate/mcscf                 P_GroundMcscf          MCSCF, 10 orbitals, TD-2RDM anchor
+             dynamics/staticOrbs               P_LaserStaticOrbs      TDCI and TD-2RDM in a pulse along the bond
+  c2h4/      groundstate/scf                   P_GroundScfFem         RHF on grid.fem
+             analysis/integrals                P_IntegralsFem         integrals of HF orbitals + STOs
+             dynamics/td2rdm                   P_KickTd2rdmFem        TD-2RDM in 10-16 active orbitals, kick spectrum
 ```
 
 ## Running
@@ -49,7 +59,8 @@ ground-state folder (`orbsInit.load.dir`, `coeffsInit.load.dir`,
 `twoRdmInit.load.dir` in its JSON) and, for the atoms, writes the HHG spectrum
 `hhg.dat` at the end (harmonic order, acceleration form |a(ω)|², length form
 ω⁴|z(ω)|²; Hann window over the whole pulse, up to `program.hhgMaxOrder`,
-default 300). Outputs (`*.dat`, `*.in`) are git-ignored.
+default 300). Outputs (`*.dat`, `*.in`, `*.bin`, `*.npz`, `*.log`) and the
+`runs/` folders of generated inputs are git-ignored.
 
 The atomic ground states are computed at lmax 1 (Be Hartree-Fock: 0) and
 embedded into the lmax of the propagation grid when the dynamics run loads
@@ -80,6 +91,13 @@ time: from a unary CI vector it ends in a local minimum at E = −14.5956,
 where the 2p shell correlates the 1s² core), and both write the same files
 (the dynamics load `groundstate/mctdhf`; point `orbsInit.load.dir` and
 `coeffsInit.load.dir` at `groundstate/mcscf` to use the MCSCF state).
+Instead of the averaged state of `groundstate/td2rdm`, the TD-2RDM dynamics
+can start from the MCSCF state itself with an anchored reconstruction: run
+`groundstate/mcscf` with a `program.anchor` block (writes
+`rdm3Bt01_01_02.in`), load orbitals and 2-RDM from it, and add
+`"anchor": {"dir": "../../../groundstate/mcscf"}` to
+`reconstruction.singlet` (`src/Reconstruction/Singlet/Anchor/A_Reconstruction_Singlet_Anchor.md`): the
+ground state is then stationary under the TD-2RDM equations.
 
 Pulses: `weak4c` (0.5×10¹⁴ W/cm², 4 cycles) and `strong2c` (4×10¹⁴ W/cm²,
 2 cycles, D/Q purification for TD-2RDM). From `app/atoms/be`,
@@ -107,6 +125,18 @@ own unwindowed Larmor spectrum.
   correlated state drifts by 7 mHa within 2 a.u. before the pulse (splitting
   error; 4th-order splitting is worse), at 0.0025 by 4e-5. Its `hhg.dat`
   holds the length form only.
+- `groundstate/td2rdm`: TD-2RDM ground state without CI, moving orbitals
+  (`P_GroundTd2rdm`, small grid of `../mcscf`): the Hartree-Fock determinant
+  in HF 1s 2s 2p of `../scf` plus hydrogen-like 3s 3p, the interaction
+  switched on over 20 a.u. (`method.mb.orbBased.adiabaticSwitching`, frozen
+  HF mean field as the reference, `regularizationParameter` 1e-14), singlet
+  NY with ccQ, split step dt 0.01, then 10 a.u. of free propagation; 4.5 min
+  (8 threads). E(0) = −128.67801 (T = 40: −128.67765), 97% of the MCSCF
+  correlation energy in these 9 orbitals; natural occupations of the
+  correlating orbitals 5.7e-3 (three) and 3.5e-3, as in MCSCF; min eigenvalues of D and Q about −1e-5; the
+  energy drifts by 3e-4 over the 10 a.u. With the default regularization
+  1e-10 E(0) is −128.67437 (T = 20) and the occupations oscillate by 10%
+  afterwards.
 - The MCTDHF grid (rmax 160, 40 uniform elements of 4 bohr) is coarse at the
   nucleus: HF there is 5.8 mHa below the HF limit, MCSCF on that grid has
   the same offset (−128.6876610), so the correlation energy agrees with the
@@ -130,6 +160,160 @@ labels every occupied orbital (σ/π, g/u).
   −15.6819, 3σg −0.6348, πu −0.6156 (πu above 3σg). The π channels use the
   axis-adapted odd-m basis of the grid (`src/Grid/A_Grid.md`, Prolate Grid);
   with the plain basis the same grid gave −108.996274, 2.4 mHa below the limit.
+
+## N2: MCSCF and TD-2RDM against TDCI
+
+- `n2/groundstate/mcscf`: 10 restricted orbitals (the 7 occupied RHF orbitals
+  of `../scf` plus LCAO 1πg and 3σu), full CI of 14 electrons (14 400
+  configurations), `groundSolver.mcscf.gradient`, 11 iterations, 36 s:
+  E_el = −132.8362386, total −109.14184 (0.148 Ha below RHF); natural
+  occupations 1πu 0.971, 1πg 0.032, 3σu 0.0096. With `program.anchor` it
+  also writes the reference of an anchored TD-2RDM reconstruction
+  (`rdm3Bt01_01_02.in`) and, with `nTransitions` 12, the transition RDMs of
+  the 12 lowest Ritz states of the CI Hamiltonian in the Krylov space of
+  Z|Ψ⟩ (60 Lanczos vectors; excitation energies 0.7651, 1.2135, 1.4375,
+  1.9184, … Ha, the dipole-allowed 1Σu+ states): 80 s on three threads,
+  208 MB of files.
+- `n2/dynamics/staticOrbs`: N2 in the MCSCF orbitals (static), length-gauge
+  pulse along the bond (`sysGauge.prolate.length`), TDCI
+  (`P_LaserStaticOrbs.json`) or TD-2RDM (`td2rdmNy.json`,
+  `td2rdmNyAnchor.json`, `td2rdmNySpectral.json`). `program.kick` replaces
+  the pulse by a dipole kick exp(−iκZ) (TDCI and TD-2RDM; remove the
+  `sysGauge` block). TD-2RDM costs about 0.05 s per time derivative on one
+  thread (RK4, dt = outputStep/nTimeSteps = 0.04): 120 a.u. take about 10 min.
+
+What the anchor of the reconstruction (`src/Reconstruction/Singlet/Anchor/A_Reconstruction_Singlet_Anchor.md`)
+does for N2 (NY closure with ccQ, all numbers against the exact TDCI of the
+same orbitals):
+
+- Ground state without field: with the plain closure Q gets an eigenvalue of
+  −3e-3 within 4 a.u. (the 1σ core holes) and the occupations drift; with the
+  anchor the MCSCF state is stationary (energy to 1e-14, eigenvalues of D and
+  Q unchanged).
+- Linear response (kick κ = 0.01, 60 a.u.): the closure puts the bright
+  state at 0.809 Ha instead of 0.769 and adds a spurious peak at 0.633 Ha;
+  the dipole error equals the dipole itself (rms 0.0229 vs 0.0228). With the
+  spectral anchor (12 transitions) the peaks are those of TDCI (0.769, 1.213,
+  1.439, 1.92) and the dipole error is 0.0020; occupations within 3e-4.
+- Weak resonant pulse (0.7651 Ha, E0 = 0.01 a.u., 10 cycles, 5% excited):
+  TDCI absorbs 0.0380 Ha. Spectral anchor with D/Q purification: 0.0393 Ha,
+  dipole within 6% up to t = 50, after that a growing phase error (half the
+  dipole at t = 80–90).
+- Strong resonant pulse (E0 = 0.04 a.u., two thirds of the population
+  excited): TDCI absorbs 0.494 Ha. The NY closure without and with the plain
+  anchor absorbs about 0.2 Ha and diverges at t = 65–70 (negative
+  occupations); with purification it stays physical (min eig D −1e-5, Q
+  −4e-4) but absorbs 0.263 Ha. Spectral anchor with purification: 0.563 Ha,
+  dipole close to TDCI up to t = 50; afterwards both differ from TDCI by as
+  much as the dipole itself, and the 1πg occupation stays at 0.04 instead of
+  0.1–0.17. The spectral anchor is linear in D2 − D2_ref: far from the ground
+  state the closure errors of second order remain, and without purification
+  the spectral anchor alone diverges after strong driving (occupations
+  above 1 that grow exponentially).
+
+## Ethylene: TD-2RDM in a fixed active space beyond CI dynamics
+
+C2H4 (C=C along z, molecule in the yz plane, 16 electrons) on grid.fem with a
+fixed orbital basis: the grid enters once, through the integrals, and the
+dynamics is a finite-basis problem in which TD-2RDM costs n^6 to n^7 per
+derivative independent of the number of electrons, CI binomial(n, 6)^2 x
+connections.
+
+1. `groundstate/scf`: RHF in a box of ±16 bohr with a ghost center (charge 0)
+   at the C=C midpoint that grades the mesh for the Rydberg functions (685 647
+   nodes, 11 steps, 137 s): E = −78.1052105.
+2. `analysis/integrals` (`P_IntegralsFem`, 93 min, 3 GB): h1, h2, dipoles and
+   overlap of the 8 occupied RHF orbitals plus 39 raw STOs: C 2s 2p (ζ 1.6,
+   0.9), C 3d (ζ 2.0), H 1s (ζ 1.2) and 3s 3p 3d (ζ 0.5) on the ghost center
+   (`intsDiffuse.bin`).
+3. `dynamics/td2rdm/make_inputs.py NAME NVIRT select=cis` writes `runs/NAME/`
+   (Hamiltonian and input of `P_KickTd2rdmFem`): it projects the STOs on
+   the complement of the occupied orbitals, orthogonalizes them (39
+   virtuals), freezes C 1s and writes the active space of the 6 occupied
+   valence orbitals and NVIRT virtuals (12 active electrons). `select=cis`
+   takes the particle natural transition orbitals of the bright z-polarized
+   CIS states first, state by state from the lowest one, and fills up with
+   MP2 natural orbitals of the rest; `select=mp2` (default) takes MP2 natural
+   orbitals only (MP2 with frozen C 1s: −0.2557 Ha in this basis).
+4. `P_KickTd2rdmFem`: TD-2RDM (singlet NY with ccQ, static orbitals) from the
+   Hartree–Fock determinant, the correlation switched on adiabatically over
+   40 a.u. (`method.mb.orbBased.adiabaticSwitching`, from the Fock operator
+   of the determinant; no CI anywhere: NY is exact for a determinant), then
+   a z kick (κ = 0.01) and 80 a.u. of free evolution (RK4, dt 0.2).
+
+The rows of the table: `python3 make_inputs.py d10 4 select=cis` (d12 6, d14
+8, d16 10), then `cd runs/d10 && ../../P_KickTd2rdmFem.exe
+P_KickTd2rdmFem.json`.
+
+The V state (π→π*, B1u, polarized along C=C) is the one to compare with
+experiment: band maximum 7.66 eV, vertical excitation about 7.9 to 8.0 eV. CIS
+in the full 39-virtual space puts it at 0.2928 Ha = 7.97 eV (oscillator
+strength 0.45). In a compact basis (±10 box, 22 STOs without diffuse
+functions) it was at 0.3825 Ha = 10.4 eV, and an
+exact 10-orbital calculation there gave 11.7 eV: the missing diffuse
+functions were the main error. The excitation energies below come from a
+matrix-pencil fit of the dipole signal; the median over model orders 8 to 30
+is quoted, because a single order can split or shift peaks by 0.1 eV over
+80 a.u. (it splits a peak of the exact signal at 40 modes).
+
+| active orbitals | E_corr exact | TD-2RDM error | V state exact | V state TD-2RDM | CIS in the active space | TD-2RDM run |
+|---|---|---|---|---|---|---|
+| 10 | −22.66 mHa | −0.06 mHa | 0.3232 Ha = 8.79 eV | 8.84 eV | 8.41 eV | 1.8 min |
+| 12 | −28.01 mHa | −0.10 mHa | 0.3139 Ha = 8.54 eV | 8.56 eV | 8.40 eV | 5 min |
+| 14 | | E_corr −36.0 mHa | | 8.42 eV | 8.35 eV | 12 min |
+| 16 | | E_corr −45.5 mHa | | 8.25 eV | 8.33 eV | 31 min |
+
+The exact references are a matrix-free FCI ground state and a Lanczos
+spectrum of D_z|0⟩ (Python on `runs/dNN/hamiltonian.npz`, not part of the
+repository; 8 s at 10, 5.5 min at 12 orbitals; 14 orbitals would take hours
+here). The second bright state agrees as well: 11.62 eV TD-2RDM against
+11.67 eV exact at 10 orbitals, 11.45 against 11.38 at 12. The V state comes
+down by 0.15 to 0.3 eV per two orbitals and is at 8.25 eV with 16, 0.3 eV
+above the experimental vertical value; 18 orbitals would take about 80 min.
+The minimal eigenvalue of D stays at −3e-3 to −4e-3 (no purification) and the
+signal does not grow.
+
+Orthonormalizing all CIS particle orbitals at once and truncating by singular
+value (an earlier version of `select=cis`) lost the π* orbital
+of the V state at 10 and 12 orbitals: CIS in those spaces gave 9.18 eV with a
+seventh of the strength, and the exact 10-orbital V state was at 8.89 eV
+(E_corr −2.6 mHa against −22.7 with the state-ordered selection).
+
+`twoRdm=singletTr0` (explicit 1-RDM and trace-free 2-RDM, NY without ccQ) is
+faster per derivative but not usable here: in the compact
+basis at 10 orbitals it gives a spurious bright peak at 0.548 Ha (40% of the
+strength of the main peak, independent of the switching time) and three
+times more negative eigenvalues of D than the singlet storage with ccQ. The
+singlet storage costs 0.23 s per derivative at 14 orbitals (8 threads).
+
+## H2O: cost of TD-2RDM and MCTDHF on grid.fem
+
+`h2o/analysis/stepCost/P_StepCostFem` times one time derivative of MCTDHF
+(full CI) and TD-2RDM (NY with ccQ) for H2O (10 electrons) on the mesh of
+`groundstate/scf` (353 367 nodes) with n moving orbitals (STOs; the cost does
+not depend on the values). `python3 make_inputs.py 6 8 10 12 14 16` writes the
+inputs to `runs/` (`./P_StepCostFem.exe runs/td2rdm_10.json`). Four threads:
+
+| n | CI coefficients | MCTDHF | TD-2RDM | of which 2-RDM part |
+|---|-----------------|--------|---------|---------------------|
+| 8  | 3 136      | 5.2 s  | 5.1 s  | 0.01 s |
+| 10 | 63 504     | 12.6 s | 12.6 s | 0.06 s |
+| 12 | 627 264    | 26.9 s | 22.8 s | 0.16 s |
+| 14 | 4 008 004  | 89.9 s | 42.5 s | 0.42 s |
+| 16 | 19 079 424 | 497 s  | 65.9 s | 0.88 s |
+
+Both methods share the grid part (one-body operator, n(n+1)/2 Poisson solves
+for the pair potentials, mean fields); TD-2RDM replaces the CI vector by the
+2-RDM (n^4 entries), and the CI matvec and the RDMs of the CI vector by the
+commutators and the reconstructed collision operator. Up to n = 10 the grid
+part is everything and both cost the same. From n = 12 the CI part of MCTDHF
+grows combinatorially (CI matvec 2.2 s at 12, 23 s at 14, 191 s at 16, plus
+the 2-RDM of the CI vector), the 2-RDM part of TD-2RDM stays below a second,
+and TD-2RDM is 2.1 times faster at n = 14 and 7.5 times at n = 16 (memory
+1.4 GB for both at 16). The grid part (about n^2) then sets the cost of
+TD-2RDM: a derivative still takes a minute at n = 16, so a 50 a.u. kick
+spectrum (thousands of derivatives) is about a day on this machine for
+TD-2RDM and a week for MCTDHF.
 
 ## H2 and H2O: RHF and TDHF kick spectra on grid.fem
 

@@ -44,6 +44,10 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   !> (Method_Mb_OrbBased_H1TimeIndependentQ).
   logical :: gaugeQ = .false.
 
+  !> Static part of h1 of the static orbitals (Method_Mb_OrbBased_RefillStaticH1:
+  !> h1 at its first call), reset by Method_Mb_OrbBased_Setup.
+  complex(R64), allocatable :: h0Static(:, :)
+
   !> Skeleton of the node path (SetupYlmNodes): ordered pairs (k2, l2), every
   !> unordered pair followed by its swap, with M = m_k2 - m_l2 and the index of
   !> the stored potential (negative for the swap: conjugate); the target groups
@@ -82,6 +86,9 @@ contains
     !                                               (default false; mctdhx, non-Ylm)
     !   - method.mb.orbBased.mOfOrbs:               Declared m of every spin
     !                                               orbital (Ylm grids, optional)
+    !   - method.mb.orbBased.adiabaticSwitching.switchTime: interaction switched
+    !                                               on over -T < t < 0
+    !                                               (S_Method_Mb_OrbBased_Switching)
     !
     ! Binds default operator-application procedures, then branches to the
     ! selected method (TDCI, TDHX, MCTDHX, TD-2RDM, or TD-2RDM-StaticOrbs).
@@ -203,7 +210,7 @@ contains
              Method_Mb_OrbBased_ApplyFieldFreePhi, Method_Mb_OrbBased_ProjectBelowFieldFreeCut)
     Method_Mb_OrbBased_exactFieldFreeQ = Json_Get("method.mb.orbBased.exactFieldFreeQ", .false.)
     if (Method_Mb_OrbBased_exactFieldFreeQ) then
-      Method_Mb_OrbBased_ApplyLinOp => Method_Mb_OrbBased_ApplyGaugeOp
+      Method_Mb_OrbBased_ApplyLinOp => ApplyDrivingOp
       call BindExactFieldFree
     else
       Method_Mb_OrbBased_ApplyLinOp => ApplySingleBodyOpLin
@@ -258,6 +265,24 @@ contains
 
     ! Set by the Kohn-Sham method only (no binding of an earlier fabricate survives)
     Method_Mb_OrbBased_kohnShamQ = .false.
+    ! Set by the static-orbital methods only
+    Method_Mb_OrbBased_staticOrbsQ = .false.
+
+    ! Adiabatic switching of the interaction (S_Method_Mb_OrbBased_Switching)
+    Method_Mb_OrbBased_switchTime = 0.0_R64
+    if (Json_GetExistence("method.mb.orbBased.adiabaticSwitching")) then
+      Method_Mb_OrbBased_switchTime = Json_Get("method.mb.orbBased.adiabaticSwitching.switchTime", 0.0_R64)
+      if (.not. (Method_Mb_OrbBased_switchTime > 0.0_R64)) &
+        error stop "method.mb.orbBased.adiabaticSwitching.switchTime must be positive"
+      if (.not. Json_GetExistence("sysInteraction")) &
+        error stop "method.mb.orbBased.adiabaticSwitching requires sysInteraction (the interaction it switches on)"
+      if (any(Method_Mb_bodyStatistics .ne. 'f')) &
+        error stop "method.mb.orbBased.adiabaticSwitching requires fermions (the reference is a Hartree-Fock mean field)"
+      if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) &
+        error stop "method.mb.orbBased.adiabaticSwitching is not available with exactFieldFreeMeanFieldQ"
+      if (Json_GetExistence("method.mb.orbBased.tdci") .or. Json_GetExistence("method.mb.orbBased.tdks")) &
+        error stop "method.mb.orbBased.adiabaticSwitching is available for tdhx, mctdhx, td2rdm and td2rdmStaticOrbs"
+    end if
 
     !------------------------------------
     ! branch: method selection
@@ -336,6 +361,7 @@ contains
   module subroutine Method_Mb_OrbBased_Setup
     use M_Method
 
+    if (allocated(h0Static)) deallocate (h0Static)
     if (ylmNodesQ) call SetupYlmNodes
 
     ! The orbital-based methods bind Method_PropagateExactPart only with
@@ -535,6 +561,52 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_FillH0(h0, orbs, time)
+    complex(R64), intent(out), allocatable :: h0(:, :)
+    complex(R64), intent(in), contiguous   :: orbs(:, :)
+    real(R64), intent(in)                  :: time
+
+    complex(R64), allocatable :: hOrbs(:, :)
+
+    allocate (hOrbs, mold=orbs)
+    hOrbs(:, :) = 0.0_R64
+    call Method_Mb_OrbBased_ApplyKineticOp(hOrbs, orbs, time)
+    call Method_Mb_OrbBased_ApplyPotentialOp(hOrbs, orbs, time)
+    call Method_Mb_OrbBased_FillOneBodyMatrix(h0, orbs, hOrbs)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_RefillStaticH1(h1, orbs, time)
+    use M_SysKinetic
+    use M_SysPotential
+
+    complex(R64), intent(inout), allocatable :: h1(:, :)
+    complex(R64), intent(in), contiguous     :: orbs(:, :)
+    real(R64), intent(in)                    :: time
+
+    complex(R64), allocatable :: gOrbs(:, :), h1Gauge(:, :)
+
+    if (Method_Mb_OrbBased_H1TimeIndependentQ()) return
+    if (.not. (SysKinetic_timeIndependentQ .and. SysPotential_timeIndependentQ)) then
+      call Method_Mb_OrbBased_FillH1(h1, orbs, time)
+    else
+      ! the static part: h1 as the setup (FillH0) or a program left it
+      if (.not. allocated(h0Static)) h0Static = h1
+      h1 = h0Static
+      if (gaugeQ) then
+        allocate (gOrbs, mold=orbs)
+        gOrbs(:, :) = 0.0_R64
+        call Method_Mb_OrbBased_ApplyGaugeOp(gOrbs, orbs, time)
+        call Method_Mb_OrbBased_FillOneBodyMatrix(h1Gauge, orbs, gOrbs)
+        h1 = h1 + h1Gauge
+      end if
+    end if
+    call Method_Mb_OrbBased_AddSwitchingReferenceMatrix(h1, time)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module function Method_Mb_OrbBased_H1TimeIndependentQ() result(res)
     !---------------------------------------------------------------------------
     ! h1 = T + V_ext (+ Ĥ_A if the gauge coupling is bound, gaugeQ) of
@@ -549,7 +621,7 @@ contains
     logical :: res
 
     res = SysPotential_timeIndependentQ .and. SysKinetic_timeIndependentQ .and. &
-          (.not. gaugeQ .or. SysGauge_timeIndependentQ)
+          (.not. gaugeQ .or. SysGauge_timeIndependentQ) .and. Method_Mb_OrbBased_switchTime <= 0.0_R64
 
   end function
 
@@ -812,10 +884,14 @@ contains
     complex(R64), intent(inout), contiguous, optional :: dOrbsSwap_(:, :)
 
     integer(I32) :: nBt, bt
+    real(R64) :: lambda
     complex(R64), allocatable :: src(:)
 
-    ! Source density ρ(r₂) = φ*_{i2}(r₂) φ_{j2}(r₂)
+    ! Source density ρ(r₂) = φ*_{i2}(r₂) φ_{j2}(r₂), times the switching
+    ! factor of the interaction (S_Method_Mb_OrbBased_Switching)
     call SysInteraction_FillInteractionSrc(src, orbs(:, i2), orbs(:, j2))
+    lambda = Method_Mb_OrbBased_SwitchFactor(time)
+    if (lambda < 1.0_R64) src(:) = lambda * src(:)
 
     if (SysInteraction_bodyTypeIndependentQ) then
       call ApplyPotential(-1, -1, 1, Orbs_nOrbsInState)
@@ -1221,10 +1297,13 @@ contains
     complex(R64), allocatable :: srcM(:, :), potM(:, :)
     complex(R64), contiguous, pointer :: nodes(:, :)
     integer(I32) :: nRad, nNodes, nL, iP, iL, mP
+    real(R64) :: lambda
 
     nRad = Grid_Ylm_nRadial
     nNodes = Grid_Ylm_nNodes
     allocate (potNodes(nRad * nNodes, nodeNPots))
+    ! switching factor of the interaction (S_Method_Mb_OrbBased_Switching)
+    lambda = Method_Mb_OrbBased_SwitchFactor(time)
 
     !$omp parallel default(shared) private(iP, iL, mP, nL, srcNodes, srcM, potM, nodes)
     allocate (srcNodes(nRad * nNodes))
@@ -1241,6 +1320,7 @@ contains
       do iL = 1, nL
         srcM(:, iL) = srcM(:, iL) * Grid_Ylm_radialMetricWeights(:)
       end do
+      if (lambda < 1.0_R64) srcM(:, :) = lambda * srcM(:, :)
 
       call SysInteraction_Ylm_FillInteractionPotentialM(potM, srcM, mP, time)
 
@@ -1551,9 +1631,26 @@ contains
 
     call Method_Mb_OrbBased_ApplyKineticOp(dOrbs, orbs, time)
     call Method_Mb_OrbBased_ApplyPotentialOp(dOrbs, orbs, time)
-    call Method_Mb_OrbBased_ApplyGaugeOp(dOrbs, orbs, time)
+    call ApplyDrivingOp(dOrbs, orbs, time)
 
     if (present(h1_)) call Method_Mb_OrbBased_FillOneBodyMatrix(h1_, orbs, dOrbs)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine ApplyDrivingOp(dOrbs, orbs, time)
+    !---------------------------------------------------------------------------
+    ! The time-dependent one-body terms outside h0 = T + V_ext: the gauge
+    ! coupling and the switching reference (1 - lambda) U0 (moving orbitals;
+    ! S_Method_Mb_OrbBased_Switching). The linear split-step operator with
+    ! exactFieldFreeQ.
+    !---------------------------------------------------------------------------
+    complex(R64), intent(inout), contiguous :: dOrbs(:, :)
+    complex(R64), intent(in), contiguous    :: orbs(:, :)
+    real(R64), intent(in)                   :: time
+
+    call Method_Mb_OrbBased_ApplyGaugeOp(dOrbs, orbs, time)
+    call Method_Mb_OrbBased_AddSwitchingReference(dOrbs, orbs, time)
 
   end subroutine
 

@@ -9,6 +9,8 @@ program T_Coeffs_Generic_Sector
   ! rows outside the sector exactly zero. Coeffs_ProjectOnSector removes a
   ! small admixture of other M exactly. The M of a configuration is taken
   ! here from the number operators a+_i a_i (ConfigList ExciteConfiguration).
+  ! In the full space the excitation-based 2-RDM blocks of every pair of body
+  ! types (Coeffs_FillTransitionRdm2Bt with bra = ket) match rdm2.
   !-----------------------------------------------------------------------------
   use M_Utils_Types
   use M_Utils_Say
@@ -29,10 +31,10 @@ program T_Coeffs_Generic_Sector
   complex(R64), allocatable :: coeffs(:), h1(:, :), h2(:, :, :, :)
   complex(R64), allocatable :: d1Sector(:), d2Sector(:), d1Full(:), d2Full(:)
   complex(R64), allocatable :: rdm1Sector(:, :), rdm2Sector(:, :, :, :), rdm1Full(:, :), rdm2Full(:, :, :, :)
-  complex(R64), allocatable :: projected(:)
+  complex(R64), allocatable :: projected(:), block2(:, :, :, :), t2(:, :, :, :, :)
   logical, allocatable :: inSectorQ(:)
-  integer(I32) :: nO, nNonZeroOutside, nChangedProjected
-  real(R64) :: errRdm1, errRdm2, errH1, errH2
+  integer(I32) :: nO, nNonZeroOutside, nChangedProjected, b1, b2
+  real(R64) :: errRdm1, errRdm2, errH1, errH2, errBlocks
 
   !==========================================
   call Say_Hello
@@ -72,7 +74,7 @@ program T_Coeffs_Generic_Sector
   ! Admixture of other M of relative norm ~1e-12, below the error threshold
   projected = coeffs + merge((0.0_R64, 0.0_R64), 1e-6_R64 * RandomVector(Coeffs_nCoeffs), inSectorQ)
   call Coeffs_ProjectOnSector(projected)
-  nChangedProjected = count(projected .ne. merge(coeffs, (0.0_R64, 0.0_R64), inSectorQ))
+  nChangedProjected = count(abs(projected - merge(coeffs, (0.0_R64, 0.0_R64), inSectorQ)) > 0.0_R64)
 
   !==========================================
   call Say_Section("full space")
@@ -84,6 +86,18 @@ program T_Coeffs_Generic_Sector
 
   call Apply(d1Full, d2Full, rdm1Full, rdm2Full)
 
+  errBlocks = 0.0_R64
+  do b2 = 1, Method_Mb_nBodyTypes
+    do b1 = 1, Method_Mb_nBodyTypes
+      associate (s1 => Method_Mb_OrbBased_nOrbsStart(b1), e1 => Method_Mb_OrbBased_nOrbsEnd(b1), &
+                 s2 => Method_Mb_OrbBased_nOrbsStart(b2), e2 => Method_Mb_OrbBased_nOrbsEnd(b2))
+        block2 = rdm2Full(s1:e1, s2:e2, s1:e1, s2:e2)
+      end associate
+      call Coeffs_FillTransitionRdm2Bt(t2, coeffs, reshape(coeffs, [Coeffs_nCoeffs, 1]), b1, b2)
+      errBlocks = max(errBlocks, maxval(abs(t2(:, :, :, :, 1) - block2)))
+    end do
+  end do
+
   !==========================================
   call Say_Section("printout results")
   !==========================================
@@ -92,7 +106,7 @@ program T_Coeffs_Generic_Sector
   errRdm2 = maxval(abs(rdm2Sector - rdm2Full))
   errH1 = maxval(abs(d1Sector - d1Full), mask=inSectorQ)
   errH2 = maxval(abs(d2Sector - d2Full), mask=inSectorQ)
-  nNonZeroOutside = count(.not. inSectorQ .and. (d1Sector .ne. 0.0_R64 .or. d2Sector .ne. 0.0_R64))
+  nNonZeroOutside = count(.not. inSectorQ .and. (abs(d1Sector) > 0.0_R64 .or. abs(d2Sector) > 0.0_R64))
 
   print *
   print *, "sector configurations:          ", count(inSectorQ), " of ", Coeffs_nCoeffs
@@ -103,6 +117,7 @@ program T_Coeffs_Generic_Sector
   print *, "max |P_out H2 c full|:          ", maxval(abs(d2Full), mask=.not. inSectorQ)
   print *, "nonzero H c outside the sector: ", nNonZeroOutside
   print *, "entries changed by projection:  ", nChangedProjected
+  print *, "max |2-RDM blocks - rdm2|:      ", errBlocks
 
   call check(error, errRdm1 < 1e-14_R64 .and. errRdm2 < 1e-14_R64)
   if (allocated(error)) error stop "T_Coeffs_Generic_Sector failure: RDMs of sector and full space differ"
@@ -117,6 +132,9 @@ program T_Coeffs_Generic_Sector
   ! Exactly the sector part of the vector survives the projection
   call check(error, nChangedProjected, 0)
   if (allocated(error)) error stop "T_Coeffs_Generic_Sector failure: Coeffs_ProjectOnSector"
+
+  call check(error, errBlocks < 1e-13_R64)
+  if (allocated(error)) error stop "T_Coeffs_Generic_Sector failure: excitation-based 2-RDM blocks"
 
   !==========================================
   call Say_Goodbye

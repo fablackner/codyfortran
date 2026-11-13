@@ -97,10 +97,10 @@ contains
       do iEta1 = 1, Grid_Prolate_nEta
         do kEta = 1, Grid_Prolate_nEta
           Grid_Prolate_etaKinMatrix(iEta1, iEta2, 0) = Grid_Prolate_etaKinMatrix(iEta1, iEta2, 0) + &
-            Grid_Prolate_etaWeights(kEta) * (1.0_R64 - Grid_Prolate_etaPoints(kEta)**2) * &
-            dEta(kEta, iEta1) * dEta(kEta, iEta2)
+                                                       Grid_Prolate_etaWeights(kEta) * (1.0_R64 - Grid_Prolate_etaPoints(kEta)**2) * &
+                                                       dEta(kEta, iEta1) * dEta(kEta, iEta2)
           Grid_Prolate_etaKinMatrix(iEta1, iEta2, 1) = Grid_Prolate_etaKinMatrix(iEta1, iEta2, 1) + &
-            Grid_Prolate_etaWeights(kEta) * gOdd(kEta, iEta1) * gOdd(kEta, iEta2)
+                                                       Grid_Prolate_etaWeights(kEta) * gOdd(kEta, iEta1) * gOdd(kEta, iEta2)
         end do
       end do
     end do
@@ -335,6 +335,19 @@ contains
     base = ChannelOfM(m) * Grid_Prolate_nSpatial
     fInOut(base + 1:base + Grid_Prolate_nSpatial) = &
       fInOut(base + 1:base + Grid_Prolate_nSpatial) + fM(1:Grid_Prolate_nSpatial)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Grid_Prolate_FillNodeCoordinate(coord, direction)
+    real(R64), allocatable, intent(out) :: coord(:)
+    real(R64), intent(in)               :: direction(3)
+
+    if (.not. allocated(Grid_Prolate_xiCoord)) error stop "Grid_Prolate_FillNodeCoordinate: call Grid_Setup first"
+    if (any(abs(direction(1:2)) > 0.0_R64)) &
+      error stop "Grid_Prolate_FillNodeCoordinate: only along z (x and y couple the m channels)"
+
+    coord = direction(3) * Grid_Prolate_a * Grid_Prolate_xiCoord(:) * Grid_Prolate_etaCoord(:)
 
   end subroutine
 

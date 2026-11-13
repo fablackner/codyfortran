@@ -1,0 +1,116 @@
+{
+    "grid": {
+        "prolate": {
+            "R": 2.068,
+            "ximax": 12.0,
+            "mmax": 1,
+            "nEta": 80,
+            "fedvr": {
+                "nElements": 12,
+                "nLocals": 16,
+                "grading": 2.0
+            }
+        }
+    },
+    "sysKinetic": {
+        "prolate": {
+            "laplacian": {
+                "bodyMass": [
+                    1.0,
+                    1.0
+                ],
+                "fedvr": {}
+            }
+        }
+    },
+    "sysPotential": {
+        "prolate": {
+            "coulomb": {
+                "charge": 7.0
+            }
+        }
+    },
+    "sysInteraction": {
+        "prolate": {
+            "coulomb": {
+                "strength": 1.0,
+                "stdImpl": {}
+            }
+        }
+    },
+    "sysGauge": {
+        "prolate": {
+            "length": {
+                "fieldStrength": 0.04,
+                "omega": 0.7651,
+                "nCycles": 10.0,
+                "cep": 0.0,
+                "tStart": 0.0
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "load": {
+            "dir": "../../groundstate/mcscf"
+        }
+    },
+    "integratorList": {
+        "sil1": {
+            "krylovDim": 20,
+            "tolerance": 1e-12,
+            "maxRestarts": 10
+        }
+    },
+    "propagator": {
+        "single": {}
+    },
+    "program": {
+        "endTime": 120.0,
+        "outputStep": 0.2,
+        "nTimeSteps": 4,
+        "outputName": "tdci"
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [
+                7,
+                7
+            ],
+            "bodyStatistics": [
+                "f",
+                "f"
+            ],
+            "orbBased": {
+                "nOrbs": [
+                    10,
+                    10
+                ],
+                "tdci": {}
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2
+            }
+        }
+    },
+    "coeffs": {
+        "generic": {}
+    },
+    "coeffsInit": {
+        "load": {
+            "dir": "../../groundstate/mcscf"
+        }
+    }
+}

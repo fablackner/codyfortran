@@ -417,7 +417,7 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Grid_Fem_FillNodeCoordinate(coord, direction)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Grid
 
     real(R64), allocatable, intent(out) :: coord(:)

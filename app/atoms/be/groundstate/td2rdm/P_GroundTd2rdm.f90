@@ -28,6 +28,7 @@ program P_GroundTd2rdm
   use M_Utils_Say
   use M_Utils_Json
   use M_Utils_RdmDiagonalize
+  use M_Utils_RdmBasisChange
   use M_Utils_RdmHole
   use M_Utils_LapackLib
   use M_Grid
@@ -185,56 +186,13 @@ contains
     if (Orbs_restrictedQ) uFull(nOS + 1:, nOS + 1:) = u
 
     call TwoRdm_FillRdm2FromTwoRdmState(rdm2, TwoRdm_twoRdmState)
-    call TransformRdm2(rdm2, uFull)
+    call RdmBasisChange_Transform(rdm2, 4, uFull)
 
     if (.not. allocated(rdm2Average)) then
       allocate (rdm2Average, mold=rdm2)
       rdm2Average = 0.0_R64
     end if
     rdm2Average = rdm2Average + weight * rdm2
-
-  end subroutine
-
-  !> rdm2 <- sum U(k1,i1) U(k2,i2) rdm2(i1,i2,j1,j2) conjg(U(l1,j1)) conjg(U(l2,j2))
-  subroutine TransformRdm2(rdm2, u)
-    complex(R64), intent(inout), contiguous :: rdm2(:, :, :, :)
-    complex(R64), intent(in), contiguous    :: u(:, :)
-
-    complex(R64), allocatable :: tmp(:, :, :, :)
-    integer(I32) :: n, a, b, c
-
-    n = size(u, 1)
-    allocate (tmp, mold=rdm2)
-
-    ! index 1 and 3 (creators/annihilators of particle 1), then 2 and 4
-    do c = 1, n
-      do b = 1, n
-        do a = 1, n
-          tmp(:, a, b, c) = matmul(u, rdm2(:, a, b, c))
-        end do
-      end do
-    end do
-    do c = 1, n
-      do b = 1, n
-        do a = 1, n
-          rdm2(a, :, b, c) = matmul(u, tmp(a, :, b, c))
-        end do
-      end do
-    end do
-    do c = 1, n
-      do b = 1, n
-        do a = 1, n
-          tmp(a, b, :, c) = matmul(conjg(u), rdm2(a, b, :, c))
-        end do
-      end do
-    end do
-    do c = 1, n
-      do b = 1, n
-        do a = 1, n
-          rdm2(a, b, c, :) = matmul(conjg(u), tmp(a, b, c, :))
-        end do
-      end do
-    end do
 
   end subroutine
 

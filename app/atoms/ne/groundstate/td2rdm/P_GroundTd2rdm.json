@@ -1,0 +1,154 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "rmin": 0.0,
+            "rmax": 8.0,
+            "fedvr": {
+                "nElements": 5,
+                "nLocals": 21
+            },
+            "mmax": 1
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [
+                    1.0,
+                    1.0
+                ],
+                "fedvr": {}
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 10.0,
+                "stdImpl": {}
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "blockEq": {}
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [
+                5,
+                5
+            ],
+            "bodyStatistics": [
+                "f",
+                "f"
+            ],
+            "orbBased": {
+                "nOrbs": [
+                    9,
+                    9
+                ],
+                "mOfOrbs": [
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    -1,
+                    0,
+                    1
+                ],
+                "td2rdm": {},
+                "exactFieldFreeQ": true,
+                "regularizationParameter": 1e-14,
+                "adiabaticSwitching": {
+                    "switchTime": 20.0
+                }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "load": {
+            "dir": "../scf",
+            "nOrbsIn": 5
+        },
+        "ylm": {
+            "hydrogenLike": {
+                "charge": 10.0,
+                "n": [
+                    3,
+                    3,
+                    3,
+                    3
+                ],
+                "l": [
+                    0,
+                    1,
+                    1,
+                    1
+                ],
+                "m": [
+                    0,
+                    -1,
+                    0,
+                    1
+                ]
+            }
+        }
+    },
+    "twoRdm": {
+        "fermionic": {
+            "singlet": {}
+        }
+    },
+    "twoRdmInit": {
+        "excited": {}
+    },
+    "reconstruction": {
+        "singlet": {
+            "singletNy": {
+                "ccQ": true
+            }
+        }
+    },
+    "integratorList": {
+        "sil1": {
+            "krylovDim": 40,
+            "tolerance": 1e-10,
+            "maxRestarts": 10
+        },
+        "rk2": {
+            "o4Expl": {}
+        }
+    },
+    "propagator": {
+        "splitStep": {
+            "order2": {},
+            "exactPartScheme": "blanesMoan6Swap"
+        }
+    },
+    "program": {
+        "relaxTime": 10.0,
+        "outputStep": 0.2,
+        "nTimeSteps": 20
+    }
+}

@@ -48,7 +48,7 @@ program T_SysXc_Ylm
   nPh = SysXc_Ylm_nPhi
   r = Grid_Ylm_radialPoints
   write (*, *) "radial points ", nRad, ", nTheta ", nT, ", nPhi ", nPh, ", xc points ", SysXc_nPoints
-  call check(error, .not. SysXc_Ylm_axialQ .and. nPh .eq. 9)
+  call check(error,.not. SysXc_Ylm_axialQ .and. nPh .eq. 9)
   if (allocated(error)) error stop "T_SysXc_Ylm: general mode with nPhi = 4 mmax + 1 expected"
 
   !------------------------------------

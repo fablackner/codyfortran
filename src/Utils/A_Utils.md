@@ -66,14 +66,13 @@ complex(R64), intent(inout), contiguous :: A2(:,:,:,:)
 | `M_Utils_RdmProjection`         | Project corrections onto energy-conserving subspaces      |
 | `M_Utils_RdmDiagonalize`        | Diagonalize RDMs to obtain natural orbitals/occupations; `RdmDiagonalize_Rdm1(..., blockOf_)` diagonalizes per block (e.g. `Orbs_blockOfOrb`) |
 | `M_Utils_RdmObservables`        | Compute expectation values from RDMs                      |
-| `M_Utils_RdmNatOrbTransform`    | Transform RDMs to natural orbital basis                   |
-| `M_Utils_RdmCollisionOp`        | Compute collision operator Tr₃[Ŵ, D³]                     |
-| `M_Utils_RdmCholeskyExtract`    | Cholesky decomposition of 2-RDM for ML features           |
+| `M_Utils_RdmBasisChange`        | Basis change of ket-first RDMs: `RdmBasisChange_Transform(x, r, m)`, rdm ← m rdm m^+ in every particle, one ZGEMM per index (threaded BLAS: call outside parallel regions) |
+| `M_Utils_RdmCollisionOp`        | Collision operators Tr₃[Ŵ, D³] (spin-orbital, singlet aab: one ZGEMM) and Tr₂[Ŵ, D²] (1-RDM, singlet); sizes from the arguments |
 | `M_Utils_RdmSingletRelations`   | Singlet spin-symmetry relations between RDM blocks        |
 | `M_Utils_RdmEnforceTraceM2ab`   | Enforce trace constraints on α-β 2-RDM; coefficients cached per nDim and recomputed when nDim changes |
 | `M_Utils_RdmEnforceTraceM2sym`  | Enforce trace constraints on symmetric 2-RDM; coefficients cached per nDim and recomputed when nDim changes |
 | `M_Utils_RdmEnforceTraceM2anti` | Enforce trace constraints on antisymmetric 2-RDM; coefficients cached per nDim and recomputed when nDim changes |
-| `M_Utils_RdmEnforceTraceM3aab`  | Enforce trace constraints on 3-RDM (αα-β block); coefficients cached per nDim and recomputed when nDim changes |
+| `M_Utils_RdmEnforceTraceM3aab`  | Contraction consistency of the αα-β 3-RDM block (ccQ): m ← A(m + K(t − C(m))), coefficients cached per nDim; each Kronecker term is added in one pass over its hyperplane (elements i1 < i2, j1 < j2, then antisymmetry) |
 
 ---
 
@@ -222,10 +221,10 @@ Stateless, pure pulse shapes shared by the laser couplings.
 
 Used by the length-gauge couplings `sysPotential.ylm.coulombLaser`
 (`SysPotential_Ylm_CoulombLaser_FieldAmplitude`; test T_Ne3d_07) and
-`sysGauge.fem.length` (`SysGauge_Fem_Length_FieldAmplitude`; tests
-T_SysGauge_Fem_Length and the Fem length-gauge tests of Method), with the
-same floating-point operations as their former private copies (bit-identical
-outputs). The velocity gauge `sysGauge.ylm.velocity` keeps its own shapes:
+`sysGauge.fem.length`, `sysGauge.prolate.length`
+(`SysGauge_Length_FieldAmplitude`; tests T_SysGauge_Fem_Length and the Fem
+length-gauge tests of Method). The velocity gauge `sysGauge.ylm.velocity`
+keeps its own shapes:
 its envelope sits on A(t) = −(E0/ω) sin²(π t_rel/T) sin(ω (t_rel − T/2) + cep),
 or, with envelope `field`, on E(t) with the uncentered carrier
 cos(ω t_rel + cep).
@@ -312,6 +311,7 @@ A2(i1, i2, j1, j2) ≡ ⟨Ψ| a†_{i1} a†_{i2} a_{j2} a_{j1} |Ψ⟩
 | `RdmAlgebra_FillSymProduct`      | Compute A0 ⊙ A1 (bosonic symmetric product)           |
 | `RdmAlgebra_FillSingletPart`     | Extract S=0 (singlet) component of α-β 2-RDM          |
 | `RdmAlgebra_FillTripletPart`     | Extract S=1 (triplet) component of α-β 2-RDM          |
+| `RdmAlgebra_AddCommutatorH2ab`   | dD2ab += 2 [W_ab, D2ab] as two ZGEMMs                 |
 
 ### Mathematical Background
 
@@ -430,6 +430,7 @@ G²(i,j,k,l) = δ_kl*D¹_ij + D²(i,l,j,k)
 
 Key subroutines:
 - `RdmHole_FillQrdm2ab` — Q-RDM for α-β block
+- `RdmHole_MinEigenvaluesDQab` — minimal eigenvalues of the α-β blocks of D and Q
 - `RdmHole_FillQrdm2` — Q-RDM for full tensor
 - `RdmHole_FillGrdm2` — G-RDM (particle-hole RDM)
 - `RdmHole_FillQrdm1a` — 1-body hole density (q = 1 - γ)
@@ -449,7 +450,12 @@ Key subroutines:
 - `RdmCumulants_FillCumul3` — Extract 3-body cumulant
 - `RdmCumulants_FillCumulFreePartM2` — Free-particle 2-RDM
 - `RdmCumulants_FillCumulFreePartM3` — Free-particle 3-RDM
-- `RdmCumulants_AddNyCumulantM3aab` — Nakatsuji-Yasuda 3-RDM correction
+- `RdmCumulants_FillCumulFreePartM3aab` — Free-particle αα-β 3-RDM of a singlet
+  (every element, OpenMP)
+- `RdmCumulants_AddNyCumulantM3aab` — Nakatsuji-Yasuda 3-cumulant: the eight
+  products are permutations of three sums over one index, formed per j3 slice
+  (one thread per slice with BLAS inside the parallel region, n^5 memory per
+  thread)
 
 ---
 
@@ -513,6 +519,15 @@ The RDM algebra utilities are used throughout the TD-2RDM propagation pipeline:
 4. **Loop ordering**: Fortran is column-major. Current loop orderings (j2,j1,i2,i1
    outer-to-inner) are memory-friendly for the result tensor but access input
    in non-contiguous patterns. Profile before optimizing.
+
+5. **3-RDM blocks**: rdm3aab holds n^6 values (120 MB at n = 14); the NY
+   cumulant and the collision operator cost O(n^7).
+
+6. **BLAS inside OpenMP regions**: the NY cumulant, the transition RDMs of
+   Coeffs and the per-l eigen-decompositions call BLAS/LAPACK inside parallel
+   regions. This needs the OpenMP build of OpenBLAS (as thirdParty builds it),
+   which runs such calls single-threaded; a pthreads build oversubscribes the
+   cores.
 
 ---
 

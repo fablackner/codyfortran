@@ -29,6 +29,9 @@ contains
 
     call Say_Fabricate("reconstruction")
 
+    Reconstruction_Setup => NoOpProcedures_Setup
+    Reconstruction_SetOrbitals => NoOpProcedures_SetOrbitals
+
     !------------------------------------
     ! set values and procedure pointers
     !------------------------------------

@@ -1,11 +1,5 @@
 # Reconstruction Module
 
-> **Note:** The neural-network-based closures documented below (`NnCholesky`,
-> `MlpFullCop`, `CnnFullCop`, `CnnCorrelCop`) and `M_Utils_FtorchInference` depend on
-> FTorch/libtorch, which is not enabled on `main`. That code lives on the
-> `neural-recon` branch until FTorch is enabled here. On `main`, only the
-> `Valdemoro` and `Ny` (Nakatsuji-Yasuda) closures are available.
-
 ## Purpose
 
 The Reconstruction module implements **BBGKY hierarchy closure** for time-dependent
@@ -34,14 +28,11 @@ M_Reconstruction (root interface)
 ├── Singlet/           ← spin-singlet (S=0) implementations
 │   ├── Valdemoro/     ← Valdemoro for α-β blocks
 │   ├── Ny/            ← Nakatsuji-Yasuda (cumulant products via R = 2 P_occ - 1)
-│   └── NnCholesky/    ← neural-network via Cholesky features
+│   └── Anchor/        ← optional extension of the closure (own A_*.md)
 │
 └── SingletTr0/        ← trace-free singlet state representation
     ├── Valdemoro/     ← Valdemoro on trace-free 2-RDM
-    ├── Ny/            ← Nakatsuji-Yasuda (cumulant products via R = 2 P_occ - 1)
-    ├── MlpFullCop/    ← neural-network on packed features
-    ├── CnnFullCop/    ← convolutional NN on 4D tensors
-    └── CnnCorrelCop/  ← CNN correction to Valdemoro collision operator
+    └── Ny/            ← Nakatsuji-Yasuda (cumulant products via R = 2 P_occ - 1)
 ```
 
 ## Key Concepts
@@ -72,19 +63,39 @@ Reconstruction_AddCollisionOp => AddCollisionOp   ! bound in submodule
 | Scheme        | Method | Description |
 |---------------|--------|-------------|
 | **Valdemoro** | Classical | Sets 3-cumulant C³=0, reconstructs D³ from free-particle products |
-| **Nakatsuji-Yasuda (NY)** | Classical | Adds particle-number-dependent corrections to C³ |
-| **NnCholesky** | ML | Neural network maps Cholesky-decomposed 2-RDM → 3-RDM Cholesky vectors |
-| **MlpFullCop** | ML | Neural network maps packed trace-free 2-RDM → collision operator |
-| **CnnFullCop** | ML | Convolutional NN processes local periodic blocks with real/imag channel axis |
-| **CnnCorrelCop** | ML | CNN predicts correction to Valdemoro collision operator from the 2-RDM cumulant |
+| **Nakatsuji-Yasuda (NY)** | Classical | 3-cumulant from products of two 2-cumulants contracted through R = 2 P_occ - 1 |
+
+### Singlet Driver
+
+A singlet scheme fabricate binds only the closure
+`Reconstruction_Singlet_FillRdm3aab` (`M_Reconstruction_Singlet`: every
+element of the ket-first rdm3aab from rdm1a and rdm2ab, no contraction
+consistency). The family (`S_Reconstruction_Singlet`) reads `<scheme>.ccQ`
+and binds `Reconstruction_AddCollisionOp`, which
+
+1. unpacks rdm2ab and forms rdm1a;
+2. reconstructs rdm3aab = R(rdm2ab) with the closure of the scheme;
+3. enforces the contraction consistency (ccQ, `RdmEnforceTraceM3aab_Apply`);
+4. adds Tr3[W, D3] (`RdmCollisionOp_FillCollisionOp2ab`, one ZGEMM);
+5. packs the derivative.
+
+Steps 2 and 3 are `Reconstruction_Singlet_ReconstructRdm3aab`. Extensions
+wrap the closure pointer (and, if needed, the collision operator) instead of
+changing the driver: `Singlet/Anchor/` is one.
+
+The Generic and SingletTr0 schemes bind their own AddCollisionOp. Cost per
+derivative (NY with ccQ, static orbitals, ethylene, 14 orbitals, 8 threads):
+0.23 s, 0.18 s without ccQ. SingletTr0 has no ccQ; for its accuracy see the
+ethylene section of `app/README.md`.
 
 ## Public Interface
 
 ```fortran
 ! From M_Reconstruction:
 call Reconstruction_Fabricate       ! Bind implementation from JSON
-call Reconstruction_Setup           ! Allocate workspace (if needed)
+call Reconstruction_Setup           ! Workspace, reference data (after Method_Setup)
 call Reconstruction_AddCollisionOp(dD2, D2, h2)  ! Add [Ŵ,D³] to dD²/dt
+call Reconstruction_SetOrbitals(orbs)  ! orbitals of the 2-RDM (moving-orbital methods; default no-op)
 ```
 
 ### `Reconstruction_AddCollisionOp(dTwoRdmState, twoRdmState, h2)`
@@ -98,6 +109,8 @@ call Reconstruction_AddCollisionOp(dD2, D2, h2)  ! Add [Ŵ,D³] to dD²/dt
 | `h2`            | `complex(R64)(:,:,:,:)` IN | Two-body Hamiltonian tensor |
 
 ## JSON Configuration
+
+A family block takes exactly one scheme, for example:
 
 ```json
 {
@@ -113,9 +126,7 @@ call Reconstruction_AddCollisionOp(dD2, D2, h2)  ! Add [Ŵ,D³] to dD²/dt
 {
   "reconstruction": {
     "singlet": {
-      "valdemoro": { "ccQ": false },
-      "singletNy": { "ccQ": true },
-      "nnCholesky": { "modelFile": "model.pt" }
+      "singletNy": { "ccQ": true }
     }
   }
 }
@@ -125,16 +136,7 @@ call Reconstruction_AddCollisionOp(dD2, D2, h2)  ! Add [Ŵ,D³] to dD²/dt
 {
   "reconstruction": {
     "singletTr0": {
-      "valdemoro": {},
-      "mlpFullCop": { "modelFile": "model.pt", "natOrbTransQ": true },
-      "cnnFullCop": {
-        "modelFile": "model.pt",
-        "r": 3
-      },
-      "cnnCorrelCop": {
-        "modelFile": "model.pt",
-        "r": 3
-      }
+      "ny": {}
     }
   }
 }
@@ -144,55 +146,18 @@ call Reconstruction_AddCollisionOp(dD2, D2, h2)  ! Add [Ŵ,D³] to dD²/dt
 
 | Path | Type | Default | Description |
 |------|------|---------|-------------|
-| `*.valdemoro.ccQ` | bool | false | Apply contraction-consistent trace constraints |
-| `*.nnCholesky.modelFile` | string | "model.pt" | PyTorch model file path |
-| `*.mlpFullCop.natOrbTransQ` | bool | false | Transform to natural orbital basis before inference |
-| `*.cnnFullCop.modelFile` | string | "model.pt" | Single TorchScript model for real/imag channel input |
-| `*.cnnFullCop.r` | int | 3 | Local periodic block size (must be odd) |
-| `*.cnnCorrelCop.modelFile` | string | "model.pt" | TorchScript model for Valdemoro correction |
-| `*.cnnCorrelCop.r` | int | 3 | Local periodic block size (must be odd) |
-
-## Data Flow in `AddCollisionOp`
-
-```
-twoRdmState (packed)
-       │
-       ▼
-┌──────────────────┐
-│ Unpack to rdm2ab │
-└──────────────────┘
-       │
-       ▼
-┌──────────────────┐
-│ Trace → rdm1a    │
-└──────────────────┘
-       │
-       ▼
-┌──────────────────────────────────┐
-│ Reconstruct rdm3aab from         │
-│   rdm1a, rdm2ab (or via NN)      │
-└──────────────────────────────────┘
-       │
-       ▼
-┌───────────────────────────────────┐
-│ RdmCollisionOp_FillCollisionOp2ab │
-│   collOp2ab = Tr₃[h2, rdm3aab]    │
-└───────────────────────────────────┘
-       │
-       ▼
-┌──────────────────────────────────┐
-│ (Optional) Enforce trace / project│
-│   for trace-free representations  │
-└──────────────────────────────────┘
-       │
-       ▼
-dRdm2ab += collOp2ab
-       │
-       ▼
-Pack back → dTwoRdmState
-```
+| `reconstruction.singlet.<scheme>.ccQ` | bool | false | Contraction consistency of D3 (valdemoro, singletNy) |
 
 ## Adding a New Reconstruction Scheme
+
+A singlet closure: an M_/S_ pair under `src/Reconstruction/Singlet/MyScheme/`
+whose fabricate binds only `Reconstruction_Singlet_FillRdm3aab` (the contract
+in `M_Reconstruction_Singlet`), never AddCollisionOp or Setup, and a branch
+in `Reconstruction_Singlet_Fabricate` that sets `scheme` and calls it; the
+family then reads `<scheme>.ccQ`. CMake picks up new
+files by its glob.
+
+Any other scheme (Generic, SingletTr0, or a collision operator of its own):
 
 1. **Create directory** under appropriate family:
    ```
@@ -224,13 +189,11 @@ Pack back → dTwoRdmState
    end submodule
    ```
 
-4. **Register in parent factory** (e.g., `S_Reconstruction_Singlet.f90`):
+4. **Register in parent factory** (e.g., `S_Reconstruction_SingletTr0.f90`):
    ```fortran
-   else if (Json_GetExistence("reconstruction.singlet.myScheme")) then
-     call Reconstruction_Singlet_MyScheme_Fabricate
+   else if (Json_GetExistence("reconstruction.singletTr0.myScheme")) then
+     call Reconstruction_SingletTr0_MyScheme_Fabricate
    ```
-
-5. **Update CMakeLists.txt** to include new files
 
 ## Dependencies
 
@@ -240,22 +203,23 @@ Pack back → dTwoRdmState
 | `M_Utils_RdmCollisionOp` | Compute Tr₃[Ŵ, D³] |
 | `M_Utils_RdmTrace` | Extract 1-RDM from 2-RDM |
 | `M_Utils_RdmEnforceTraceM2ab` | Project 2-RDM to trace-free subspace |
-| `M_Utils_RdmNatOrbTransform` | Natural orbital transformation |
-| `M_Utils_FtorchInference` | PyTorch model inference via FTorch |
+| `M_Utils_RdmEnforceTraceM3aab` | Contraction consistency of rdm3aab (ccQ) |
+| `M_Utils_RdmSingletRelations` | aa block from the ab block of a singlet |
 | `M_TwoRdm_*` | Pack/unpack state vectors |
 | `M_Method_Mb` | Access particle numbers |
 | `M_Method_Mb_OrbBased` | Access orbital counts |
 
 ## Testing
 
-Reconstruction is exercised in TD-2RDM propagation tests:
-```
-test/T_He1d_06_TimePropagationTd2rdm.f90
-test/T_He1d_06_TimePropagationTd2rdm.json
-```
+- `test/simulationTests/He1d/T_He1d_06_TimePropagationTd2rdm*`: TD-2RDM
+  propagation (generic and singlet, weak orbitals, split step).
+- `test/simulationTests/Be3d/T_Be3d_04_Td2rdmSpectralAnchor` pins the NY
+  closure at a correlated Be state (the anchor tests: `Singlet/Anchor/`).
+- `test/componentTests/Reconstruction/SingletTr0/T_Reconstruction_SingletTr0_Ny`,
+  `test/componentTests/Utils/T_Utils_RdmEnforceTrace` (idempotent and
+  contraction-free projections).
 
 ## References
 
 - **Valdemoro approximation**: C. Valdemoro, Phys. Rev. A 45, 4462 (1992)
 - **Nakatsuji-Yasuda**: H. Nakatsuji & K. Yasuda, Phys. Rev. Lett. 76, 1039 (1996)
-- **Neural network closures**: Project-specific ML models trained on exact RDM data

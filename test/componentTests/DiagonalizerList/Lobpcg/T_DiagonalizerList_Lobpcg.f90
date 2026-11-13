@@ -490,7 +490,7 @@ program T_DiagonalizerList_Lobpcg
     print *, "  convergedQ ", e % convergedQ, ", stalledQ ", e % stalledQ, ", nFound ", e % nFound
     print *, "  relative residuals: ", e % resNorms / max(1.0_R64, abs(dK(1:size(e % resNorms))))
     print *, "  max |Ritz value - eigenvalue of the self-adjoint part|: ", devStall
-    call check(error, .not. e % convergedQ .and. e % stalledQ, "a residual floor must end in the stagnation exit")
+    call check(error,.not. e % convergedQ .and. e % stalledQ, "a residual floor must end in the stagnation exit")
     if (allocated(error)) error stop "T_DiagonalizerList_Lobpcg failure (stagnation exit)"
     call check(error, e % nIter <= MAX_ITER_STALL, "the stagnation exit must stop the solve early")
     if (allocated(error)) error stop "T_DiagonalizerList_Lobpcg failure (stagnation exit, iterations)"

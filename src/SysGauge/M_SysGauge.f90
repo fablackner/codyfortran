@@ -10,7 +10,7 @@
 !>
 !>     H_A = A(t)·p / m + A(t)² / (2 m),
 !>
-!> or in length gauge (Fem, H_E = E(t)·r for an electron), which complements
+!> or in length gauge (Fem, Prolate: H_E = E(t)·r for an electron), which complements
 !> the external potential (SysPotential) and the kinetic operator (SysKinetic):
 !>
 !>     H = T + V_ext + H_A + W
@@ -20,11 +20,12 @@
 !> contract: a single application routine instead of a Fill/Multiply pair.
 !>
 !> No concrete physics is implemented here; procedure pointers are assigned at
-!> runtime by `SysGauge_Fabricate` based on the selected backend (Ylm, Fem)
+!> runtime by `SysGauge_Fabricate` based on the selected backend (Ylm, Fem, Prolate)
 !> and the JSON configuration. Configure only when a laser coupling is wanted.
 !> On Ylm grids length-gauge couplings (E(t)·z) remain multiplicative
-!> potentials of SysPotential (`sysPotential.ylm.coulombLaser`); on Fem grids
-!> the length gauge is the SysGauge backend `sysGauge.fem.length`, so that
+!> potentials of SysPotential (`sysPotential.ylm.coulombLaser`); on Fem and
+!> Prolate grids the length gauge is the SysGauge model of M_SysGauge_Length
+!> (`sysGauge.fem.length`, `sysGauge.prolate.length`), so that
 !> SysPotential stays static and the exact field-free part
 !> (method.mb.orbBased.exactFieldFreeQ) can treat h0 = T + V_static.
 module M_SysGauge
@@ -78,7 +79,7 @@ module M_SysGauge
   !> Apply the gauge coupling to an orbital: dOrb = H_A(t) · orb.
   !>
   !> In velocity gauge the operator contains the momentum operator and is
-  !> therefore not a point-wise multiplication (in length gauge on Fem it is);
+  !> therefore not a point-wise multiplication (in length gauge it is);
   !> shapes and boundary conditions are backend-specific, matching the active
   !> grid representation.
   procedure(I_SysGauge_MultiplyWithGaugeOp), pointer :: SysGauge_MultiplyWithGaugeOp

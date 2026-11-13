@@ -18,7 +18,9 @@
 !>
 !> Output: orbXX_YY.in, coeffs.in, rdm2BtXX_YY.in (as ../mctdhf, so that the
 !>         dynamics can load either), relax.dat (iteration, energy, gradient
-!>         norm)
+!>         norm); with a program.anchor block also rdm3Bt01_01_02.in, the
+!>         up-up-down 3-RDM that anchors the TD-2RDM reconstruction
+!>         (reconstruction.singlet.anchor)
 program P_GroundMcscf
   use M_Utils_Types
   use M_Utils_Say
@@ -32,6 +34,7 @@ program P_GroundMcscf
   use M_OrbsInit
   use M_ConfigList
   use M_Coeffs
+  use M_Reconstruction_Singlet_Anchor
   use M_CoeffsInit
   use M_Method
   use M_Method_Mb_OrbBased
@@ -45,6 +48,7 @@ program P_GroundMcscf
 
   real(R64)    :: energy, energyOld, convThresh, gradThresh
   integer(I32) :: maxIter, iter, io
+  logical      :: saveAnchorQ
   real(R64), allocatable :: natOcc(:)
   complex(R64), allocatable :: rdm1(:, :), natOrbs(:, :)
   type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(1)
@@ -76,6 +80,7 @@ program P_GroundMcscf
   convThresh = Json_Get("program.convThresh", 1e-12_R64)
   gradThresh = Json_Get("program.gradThresh", 1e-6_R64)
   maxIter = Json_Get("program.maxIter", 1000)
+  saveAnchorQ = Json_GetExistence("program.anchor")
 
   call Grid_Setup
   call SysKinetic_Setup
@@ -141,6 +146,7 @@ program P_GroundMcscf
   call Orbs_SaveOrbs(Orbs_orbs)
   call Coeffs_SaveCoeffs(Coeffs_coeffs)
   call Coeffs_SaveTwoRdm(Coeffs_coeffs)
+  if (saveAnchorQ) call Reconstruction_Singlet_Anchor_SaveReference(reshape(Coeffs_coeffs, [Coeffs_nCoeffs, 1]))
 
   !==========================================
   call Say_Goodbye

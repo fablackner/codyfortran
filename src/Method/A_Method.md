@@ -160,9 +160,12 @@ Provides orbital indexing, RDM storage, and operator-application interfaces:
 | `Method_Mb_OrbBased_FillInverseRdm1` (module procedure) | Regularized spatial inverse U n/(n²+ε) U† of the 1-RDM |
 | `Method_Mb_OrbBased_ApplyCiHamiltonian` (module procedure) | dCoeffs = H coeffs with the stored `Method_Mb_OrbBased_h1`/`h2` (no refill); the CI matvec of TDCI, of every `groundSolver.mcscf` backend (`GroundSolver_Mcscf_HamiltonianAction`) and of CI start vectors in programs |
 | `Method_Mb_OrbBased_SaveRdm2Blocks` (module procedure) | Write body-type blocks `rdm2BtXX_YY.in` of a 2-RDM (read by `twoRdmInit.load`) |
-| `Method_Mb_OrbBased_H1TimeIndependentQ` (module procedure) | Whether h¹ = T̂ + V̂_ext (+ Ĥ_A if `sysGauge` is configured) is time-independent (the `*_timeIndependentQ` flags at call time); TDCI and TD-2RDM-StaticOrbs refill h¹ at every derivative otherwise |
+| `Method_Mb_OrbBased_H1TimeIndependentQ` (module procedure) | Whether h¹ = T̂ + V̂_ext (+ Ĥ_A if `sysGauge` is configured) is time-independent (the `*_timeIndependentQ` flags at call time) and there is no adiabatic switching; TDCI and TD-2RDM-StaticOrbs refill h¹ at every derivative otherwise |
+| `Method_Mb_OrbBased_FillH0`, `Method_Mb_OrbBased_RefillStaticH1` (module procedures) | h⁰ = ⟨T̂ + V̂_ext⟩ of the orbitals (the static h¹ of the static-orbital setups); the h¹ refill of the static-orbital methods: nothing if h¹ is time-independent, the static part (h¹ at the first call after `Method_Mb_OrbBased_Setup`: h⁰, or what a program stored) plus the gauge coupling if T and V are static, `Method_Mb_OrbBased_FillH1` otherwise, then the switching reference (N2 TD-2RDM in a pulse, one thread: the refill drops from about 0.05 to 0.02 s per derivative) |
 | `Method_Mb_OrbBased_FillOneBodyMatrix` (module procedure) | h¹(i,j) = ⟨φ_i\|hφ_j⟩ of a one-body operator from its action on the stored orbitals (equal body types, nOrbsSum layout, restricted: both spin blocks); the matrix of `FillH1` and of the mean-field reference |
 | `Method_Mb_OrbBased_SetupFieldFreeMeanField`, `_BuildFieldFreeMeanField`, `_ApplyFieldFreeMeanField`, `_ApplyFieldFreeMeanFieldOnOrb`, `_FieldFreeMeanFieldBuiltQ` (module procedures, `S_Method_Mb_OrbBased_FieldFreeMeanField`) | Frozen mean-field reference U = J0 − K0 of the Cayley exact part (`exactFieldFreeMeanFieldQ`): setup (releases U; called at the end of the Cayley setup), build from orbitals and 1-RDM, dOrbs += U orbs and ⟨φ\|Uφ⟩ (MCTDHX nonlinear part), dOrb += U orb per vector once built and active, a no-op otherwise (Cayley step), query; the setup and the per-vector form are internal plumbing of the Cayley exact part (called only by `S_Method_Mb_OrbBased_FieldFreeCayley`, not for programs) |
+| `T_Method_Mb_OrbBased_MeanField`, `Method_Mb_OrbBased_FillMeanField`, `_AddMeanField` (type and module procedures, `S_Method_Mb_OrbBased_FieldFreeMeanField`) | Frozen Hartree–Fock mean field U = J0 − K0 of a 1-RDM on the stored orbitals as a value (J0, ACE vectors of K0 per body type) and w += U z; the reference of the Cayley step and of the adiabatic switching |
+| `Method_Mb_OrbBased_SwitchFactor`, `_SetSwitchingReference`, `_AddSwitchingReference`, `_AddSwitchingReferenceMatrix`, `Method_Mb_OrbBased_switchTime` (`S_Method_Mb_OrbBased_Switching`) | Adiabatic switching (`adiabaticSwitching`, below): λ(t), the reference U0 of the current state (grid for moving, matrix of h2 for static orbitals; at the end of the method setups, again by programs that change the state), dOrbs += (1 − λ) U0 orbs, h1 += (1 − λ) U0 |
 | `Method_Mb_OrbBased_SetupFieldFree`, `_PropagateFieldFree`, `_ApplyFieldFreePhi`, `_ProjectBelowFieldFreeCut` | Exact field-free part (pointers bound at fabricate with `exactFieldFreeQ`: `*Eigen` on Ylm grids, `*Cayley` setup/propagation on grids with `SysKinetic_SolveShifted`, phi and cut null there; all four null without `exactFieldFreeQ`); the setup is called only by `Method_Mb_OrbBased_Setup` when `Method_PropagateExactPart` is bound (error stop if the setup pointer is null then) |
 | `Method_Mb_OrbBased_ApplySingleBodyOp`         | Combined T̂ + V̂_ext                         |
 | `Method_Mb_OrbBased_TimeDerivativeOrbsLin`     | Linear (static-orbital) time derivative    |
@@ -573,6 +576,70 @@ orthogonal to the orbital space). H2 with `absorber.fem.cosinus` and
 `keepOrthonormalQ` at Δt = 0.05: N and the dipole agree with the plain split
 to 1e-11 and 4e-6 (relative) over 1 a.u.
 
+### Adiabatic Switching (`adiabaticSwitching`)
+
+**What.** `"adiabaticSwitching": {"switchTime": T}` in `method.mb.orbBased`
+propagates for −T < t < 0
+
+```
+H(t) = h + (1 − λ) U0 + λ W,   λ = sin²(π (t + T) / (2T))
+```
+
+and from t = 0 on the physical H = h + W (λ = 0 before −T,
+`Method_Mb_OrbBased_SwitchFactor`). U0 is the frozen Hartree–Fock mean field
+J0 − K0 of the initial state (`Method_Mb_OrbBased_SetSwitchingReference`, at
+the end of the method setup). For a Hartree–Fock determinant h + U0 is its
+Fock operator: at t = −T the determinant is an eigenstate, the closures of
+TD-2RDM are exact for it and the collision operator (linear in W) vanishes,
+and a slow switch carries it into the correlated ground state of the method.
+For TD-2RDM this is the ground state of the TD-2RDM equations themselves,
+without any CI (`twoRdmInit.excited` in the Hartree–Fock orbitals plus
+correlating orbitals): app/atoms/ne/groundstate/td2rdm (moving orbitals) and
+app/molecules/c2h4/dynamics/td2rdm (static orbitals, h2 from a file).
+
+**Where.** Each term enters in one place, so every method built from the
+shared operators follows without code of its own (TDHX, MCTDHX, TD-2RDM,
+TD-2RDM-StaticOrbs; not TDCI, which reads the stored h2 in Coeffs, and not
+TDKS, which has no W):
+- λ W scales the source of every pair potential (`ApplyInteraction`,
+  `FillPairPotentialsYlmNodes`): h2, the correlation and Hartree–Fock
+  operators. The setups at t = 0 store the physical h2; TD-2RDM-StaticOrbs
+  multiplies its h2 terms (commutator and collision operator, both linear in
+  h2) by λ.
+- (1 − λ) U0 is part of the one-body operator: for moving orbitals the grid
+  operator (`T_Method_Mb_OrbBased_MeanField`, J0 and the ACE vectors of K0,
+  the same frozen mean field as the Cayley reference) in `ApplySingleBodyOp`
+  and, with `exactFieldFreeQ`, in the linear split-step part (`ApplyDrivingOp`
+  = gauge coupling + reference); for static orbitals the matrix
+  U0(i,j) = 2 Σ_kl (h2(i,k,j,l) − h2(i,k,l,j)) rdm1(l,k) of the stored h2,
+  added by `Method_Mb_OrbBased_RefillStaticH1` (correct also for an h2 that a
+  program replaced; it then calls `SetSwitchingReference` again).
+
+Since everything at t ≥ 0 is physical, a ground-state run propagates from −T
+to 0 and a dynamics run continues from there (laser pulses start at t = 0).
+Programs that change the state after `Method_Setup` (orthonormalization of
+loaded correlating orbitals) call `Method_Mb_OrbBased_SetSwitchingReference`
+again.
+
+**Regularization.** Use `regularizationParameter` 1e-14 (default 1e-10).
+The correlating orbitals start empty, and n/(n² + ε) throttles their
+equations while n < √ε; a slow switch stays longer in that range. He1d
+MCTDHF (T_He1d_14) from the determinant of its natural orbitals: E(0) minus
+the imaginary-time ground state is 2.8e-5, 8.8e-5 and 1.5e-3 at T = 10, 20
+and 40 with ε = 1e-10, and 1.2e-5, 2.7e-6 and 2.9e-6 at T = 10, 20 and 80
+with ε = 1e-16 (the rest: the start is not the Hartree–Fock determinant of
+these orbitals). TD-2RDM (T_He1d_15, NY without ccQ) ends 3.8e-7 from that
+state.
+
+**Results.** Ne, 9 orbitals, moving orbitals (app/atoms/ne/groundstate/td2rdm,
+NY with ccQ, ε = 1e-14): E(0) = −128.67801 at T = 20 and −128.67765 at
+T = 40, 97% of the MCSCF correlation energy of these orbitals (−128.68183),
+natural occupations of the correlating orbitals within 2% of MCSCF; with ε = 1e-10 it ends at
+−128.67437 (T = 20) with 10% occupation oscillations afterwards. Ethylene, 10
+active orbitals, static orbitals (P_KickTd2rdmFem, T = 40): −32.8278729
+against FCI −32.8278135; the earlier switching of that program from the
+diagonal of the Fock matrix gave −32.8278734.
+
 ### Time-Dependent Kohn–Sham (TDKS, real-time TDDFT)
 
 `method.mb.orbBased.tdks` (`M_Method_Mb_OrbBased_Tdks`) propagates Kohn–Sham
@@ -954,6 +1021,11 @@ where P̂ is the projector onto the occupied orbital space.
 ```
 i ∂D²/∂t = [h¹, D²] + [Ŵ, D³]   (D³ approximated via reconstruction)
 ```
+
+TD-2RDM passes its current orbitals to `Reconstruction_SetOrbitals` before
+every `Reconstruction_AddCollisionOp` (full derivative and non-linear split
+part); a reconstruction that does not depend on the orbitals ignores them.
+TD-2RDM-StaticOrbs does not call it.
 
 ---
 

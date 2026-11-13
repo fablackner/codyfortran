@@ -43,7 +43,7 @@
 !> |---------------------------------|-------------------------------------------------|
 !> | `Coeffs_ApplyH1FillRdm1`        | Apply 1-body Ĥ₁; optionally fill 1-RDM         |
 !> | `Coeffs_ApplyH2FillRdm2`        | Apply 2-body Ĥ₂; optionally fill 2-RDM         |
-!> | `Coeffs_FillRdm{1,2,3}Bt`       | Compute body-type-resolved RDMs                 |
+!> | `Coeffs_FillTransitionRdm{2,3}Bt` | Module procedures: body-type blocks of (transition) RDMs, ket-first |
 !> | `Coeffs_ApplyExcitation`        | Apply \( a^\dagger_i a_j \) ladder operators    |
 !> | `Coeffs_Normalize`              | Normalize \(\langle\Psi|\Psi\rangle = 1\)       |
 !> | `Coeffs_ProjectOnSubspace`      | Project out a reference state (orthogonalize)   |
@@ -78,6 +78,30 @@ module M_Coeffs
     !> Dynamically assigns the coefficient-related procedures at runtime and
     !> sets up the coefficient system based on input parameters.
     module subroutine Coeffs_Fabricate
+    end subroutine
+
+    !> Transition 2-RDM blocks of a bra with several kets, ket-first:
+    !>   rdm2Bt(i1,i2,j1,j2,k) = <bra| a+_j1 a+_j2 a_i2 a_i1 |kets(:,k)>,
+    !> i1, j1 of body type bt1, i2, j2 of bt2 (bra = ket: the 2-RDM block). One
+    !> excitation of the bra per element and one matrix-vector product with the
+    !> kets, OpenMP over the elements.
+    module subroutine Coeffs_FillTransitionRdm2Bt(rdm2Bt, bra, kets, bt1, bt2)
+      complex(R64), intent(out), allocatable :: rdm2Bt(:, :, :, :, :)
+      complex(R64), intent(in), contiguous   :: bra(:)
+      complex(R64), intent(in), contiguous   :: kets(:, :)
+      integer(I32), intent(in) :: bt1
+      integer(I32), intent(in) :: bt2
+    end subroutine
+
+    !> Transition 3-RDM blocks, ket-first, as Coeffs_FillTransitionRdm2Bt:
+    !>   rdm3Bt(i1,i2,i3,j1,j2,j3,k) = <bra| a+_j1 a+_j2 a+_j3 a_i3 a_i2 a_i1 |kets(:,k)>.
+    module subroutine Coeffs_FillTransitionRdm3Bt(rdm3Bt, bra, kets, bt1, bt2, bt3)
+      complex(R64), intent(out), allocatable :: rdm3Bt(:, :, :, :, :, :, :)
+      complex(R64), intent(in), contiguous   :: bra(:)
+      complex(R64), intent(in), contiguous   :: kets(:, :)
+      integer(I32), intent(in) :: bt1
+      integer(I32), intent(in) :: bt2
+      integer(I32), intent(in) :: bt3
     end subroutine
   end interface
 
@@ -157,69 +181,6 @@ module M_Coeffs
       !> explicit two-body Hamiltonian tensor in the active basis.
       !> If absent, the representation provides H2 implicitly.
       complex(R64), intent(in), contiguous, optional :: h2_(:, :, :, :)
-    end subroutine
-  end interface
-
-  !> Compute a three-body reduced density matrix for selected body types.
-  procedure(I_Coeffs_FillRdm3Bt), pointer :: Coeffs_FillRdm3Bt
-  abstract interface
-    !> Compute the three-body reduced density matrix for specific body types
-    !> (e.g., spin species). Body-type conventions are representation-specific.
-    !> \[
-    !> \rho_{p,q,r,s,t,u} = \langle \Psi | a^\dagger_p a^\dagger_q a^\dagger_r a_u a_t a_s | \Psi \rangle
-    !> \]
-    subroutine I_Coeffs_FillRdm3Bt(rdm3Bt, coeffs, bt1, bt2, bt3)
-      import :: I32, R64
-      !> On exit: allocated 6D array holding the three-body RDM block.
-      complex(R64), intent(out), allocatable :: rdm3Bt(:, :, :, :, :, :)
-      !> Input CI coefficients representing the current quantum state.
-      complex(R64), intent(in), contiguous, target :: coeffs(:)
-      !> First body type index.
-      integer(I32), intent(in) :: bt1
-      !> Second body type index.
-      integer(I32), intent(in) :: bt2
-      !> Third body type index.
-      integer(I32), intent(in) :: bt3
-    end subroutine
-  end interface
-
-  !> Compute a two-body reduced density matrix for selected body types.
-  procedure(I_Coeffs_FillRdm2Bt), pointer :: Coeffs_FillRdm2Bt
-  abstract interface
-    !> Compute the two-body reduced density matrix for specific body types
-    !> (e.g., spin species). Body-type conventions are representation-specific.
-    !> \[
-    !> \rho_{p,q,r,s} = \langle \Psi | a^\dagger_p a^\dagger_q a_s a_r | \Psi \rangle
-    !> \]
-    subroutine I_Coeffs_FillRdm2Bt(rdm2Bt, coeffs, bt1, bt2)
-      import :: I32, R64
-      !> On exit: allocated 4D array holding the two-body RDM block.
-      complex(R64), intent(out), allocatable :: rdm2Bt(:, :, :, :)
-      !> Input CI coefficients representing the current quantum state.
-      complex(R64), intent(in), contiguous, target :: coeffs(:)
-      !> First body type index.
-      integer(I32), intent(in) :: bt1
-      !> Second body type index.
-      integer(I32), intent(in) :: bt2
-    end subroutine
-  end interface
-
-  !> Compute a one-body reduced density matrix for a selected body type.
-  procedure(I_Coeffs_FillRdm1Bt), pointer :: Coeffs_FillRdm1Bt
-  abstract interface
-    !> Compute the one-body reduced density matrix for a specific body type
-    !> (e.g., spin species). Body-type conventions are representation-specific.
-    !> \[
-    !> \rho_{p,q} = \langle \Psi | a^\dagger_p a_q | \Psi \rangle
-    !> \]
-    subroutine I_Coeffs_FillRdm1Bt(rdm1Bt, coeffs, bt1)
-      import :: I32, R64
-      !> On exit: allocated 2D array holding the one-body RDM block.
-      complex(R64), intent(out), allocatable :: rdm1Bt(:, :)
-      !> Input CI coefficients representing the current quantum state.
-      complex(R64), intent(in), contiguous, target :: coeffs(:)
-      !> Body type index.
-      integer(I32), intent(in) :: bt1
     end subroutine
   end interface
 

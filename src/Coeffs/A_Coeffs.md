@@ -171,8 +171,7 @@ act with the transposed index order internally; the packing helpers
 (`FillH1Lin`, `FillH2Lin`, `FillRdm{1,2}FromRdm{1,2}Lin`) translate. The
 distinction only matters for complex orbitals or Hamiltonians (e.g., the
 velocity-gauge laser coupling), where the transposed matrices are the complex
-conjugates. The body-type-resolved `FillRdm{1,2,3}Bt` keep their documented
-a†-first ordering.
+conjugates.
 
 These are the performance-critical routines. They simultaneously:
 1. Compute `dCoeffs = H|coeffs⟩` for time propagation
@@ -180,11 +179,9 @@ These are the performance-critical routines. They simultaneously:
 
 ### RDM Computation
 
-| Procedure | Output | Use case |
-|-----------|--------|----------|
-| `Coeffs_FillRdm1Bt` | ρ_{pq} = ⟨a†_p a_q⟩ | Natural orbitals, occupations |
-| `Coeffs_FillRdm2Bt` | ρ_{pqrs} = ⟨a†_p a†_q a_s a_r⟩ | Pair correlations |
-| `Coeffs_FillRdm3Bt` | ρ_{pqrstu} = ⟨a†_p a†_q a†_r a_u a_t a_s⟩ | BBGKY closure |
+The 1- and 2-RDM come with `Coeffs_ApplyH1FillRdm1` and
+`Coeffs_ApplyH2FillRdm2`; body-type blocks of 2- and 3-RDMs and transition
+RDMs from `Coeffs_FillTransitionRdm{2,3}Bt` (below).
 
 ### Ladder Operators
 
@@ -319,10 +316,25 @@ call Coeffs_Normalize(coeffs)
 2. Create `S_Coeffs_MyBackend.f90` implementing all required procedures
 3. Add JSON branch in `S_Coeffs.f90::Coeffs_Fabricate`
 
-### Debug RDM computation
+### Excitation-based RDM blocks
 
-Use the body-type-resolved routines (`FillRdm1Bt`, etc.) which are simple
-brute-force loops. Compare against the optimized `ApplyH1FillRdm1` output.
+One private worker backs every excitation-based block: one excitation of
+the bra per element, one matrix-vector product with the kets, OpenMP over
+the elements (`Coeffs_ApplyExcitation` must be thread-safe; the buffer of the
+generic backend is threadprivate). The cost is n^(2R) excitations of the CI
+vector plus the nKets products per element (N2, 10 orbitals, 14 400
+coefficients: the reference and 12 transition 3-RDMs in 80 s on three
+threads).
+
+| Routine | Convention |
+|---------|------------|
+| `Coeffs_FillTransitionRdm2Bt(rdm2, bra, kets, bt1, bt2)` | ket-first, rdm2(i1,i2,j1,j2,k) = <bra\| a†_j1 a†_j2 a_i2 a_i1 \|kets(:,k)> (the layout of TwoRdm and `Coeffs_ApplyH2FillRdm2`) |
+| `Coeffs_FillTransitionRdm3Bt(rdm3, bra, kets, bt1, bt2, bt3)` | ket-first, as above with three indices each |
+
+To debug, compare a block with bra = ket against `Coeffs_ApplyH2FillRdm2`
+(`T_Coeffs_Generic_Sector` does it for a complex vector with fermions and
+bosons). The Hubbard spin-exchange sectors (plusSpinSym, minusSpinSym) have
+no excitations: an excitation of one spin species leaves the sector.
 
 ### Checkpoint/restart
 

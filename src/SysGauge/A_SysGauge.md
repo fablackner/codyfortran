@@ -12,7 +12,8 @@ units) in a linearly polarized laser pulse:
   Ĥ_A = A(t)·p̂ / m + A(t)² / (2m)
   ```
 
-- **length gauge** (Fem, any polarization e_pol, see below):
+- **length gauge** (Fem, any polarization e_pol; Prolate, along the
+  molecular axis; see below):
 
   ```
   Ĥ_E = E(t) (e_pol · r)
@@ -31,9 +32,10 @@ SysPotential contract (`FillExternalPotential` + point-wise
 potentials. Instead SysGauge follows the SysKinetic operator contract: a
 single application routine `SysGauge_MultiplyWithGaugeOp(dOrb, orb, time, bt_)`.
 On Ylm grids length-gauge couplings (E(t)·z) remain multiplicative and belong
-to SysPotential (see `SysPotential/Ylm/CoulombLaser`). On Fem grids the
-length gauge is a SysGauge backend (`sysGauge.fem.length`) although it is
-diagonal: see [Fem: length gauge](#fem-length-gauge-dipole-coupling).
+to SysPotential (see `SysPotential/Ylm/CoulombLaser`). On Fem and Prolate
+grids the length gauge is a SysGauge model (`sysGauge.fem.length`,
+`sysGauge.prolate.length`) although it is diagonal: see
+[Length gauge](#length-gauge-fem-prolate).
 
 The uniform A²/(2m) term only contributes a global time-dependent phase; it
 is included so that the operator is exactly (p̂ + A)²/2m − p̂²/2m.
@@ -49,11 +51,11 @@ The module follows the CodyFortran fabrication pattern:
 │  - SysGauge_Setup                → capture grid data (pointer) │
 │  - SysGauge_MultiplyWithGaugeOp  → apply Ĥ_A·ψ (pointer)       │
 ├────────────────────────────────────────────────────────────────┤
-│              Ylm                          Fem                  │
-│ (spherical harmonics, z-polarized)  (3D spectral elements)     │
-│               │                             │                  │
-│           Velocity                       Length                │
-│ (sin²-envelope A, Δl = ±1 coupling)  (E(t) e_pol·r, diagonal)  │
+│              Ylm                      Fem       Prolate        │
+│ (spherical harmonics, z-polarized)       │           │         │
+│               │                          └─ Length ──┘         │
+│           Velocity                  (E(t) e_pol·r, diagonal;   │
+│ (sin²-envelope A, Δl = ±1 coupling)  coordinates of the grid)  │
 │          │         │                                           │
 │        Fedvr    FedvrEcs                                       │
 │  (radial d/dr) (d/dz on ECS contour)                           │
@@ -65,14 +67,17 @@ The module follows the CodyFortran fabrication pattern:
 ```
 SysGauge/
 ├── M_SysGauge.f90            # Public facade: pointers, flags, Fabricate
-├── S_SysGauge.f90            # Dispatch to grid backends (Ylm, Fem)
+├── S_SysGauge.f90            # Dispatch to grid backends (Ylm, Fem, Prolate)
 ├── A_SysGauge.md             # This file
+├── Length/
+│   ├── M_SysGauge_Length.f90 # Pulse, polarization, E(t), coordinate hook
+│   └── S_SysGauge_Length.f90 # e_pol·r cache, point-wise operator
 ├── Fem/
 │   ├── M_SysGauge_Fem.f90    # Family: checks grid.fem, dispatch (length)
 │   ├── S_SysGauge_Fem.f90
-│   └── Length/
-│       ├── M_SysGauge_Fem_Length.f90   # Pulse, polarization, E(t)
-│       └── S_SysGauge_Fem_Length.f90   # e_pol·r cache, point-wise operator
+├── Prolate/
+│   ├── M_SysGauge_Prolate.f90  # Family: checks grid.prolate, dispatch (length)
+│   └── S_SysGauge_Prolate.f90
 └── Ylm/
     ├── M_SysGauge_Ylm.f90    # Radial building blocks: first-derivative
     │                         #   pointer + (complex) radial coordinates
@@ -143,10 +148,10 @@ On the ECS contour, derivatives and the ±k/z terms use the complex contour
 points, matching the analytic continuation of the ECS kinetic operator
 (c-product metric).
 
-### Fem: Length Gauge (Dipole Coupling)
+### Length Gauge (Fem, Prolate)
 
-On `grid.fem` orbitals are nodal values, so the length-gauge dipole coupling
-of an electron in the field E(t) e_pol,
+The orbitals of `grid.fem` and `grid.prolate` are nodal values, so the
+length-gauge dipole coupling of an electron in the field E(t) e_pol,
 
 ```
 Ĥ_E(t) = E(t) (e_pol · r),
@@ -154,17 +159,23 @@ E(t)   = E0 sin²(π tRel/T) cos(ω (tRel − T/2) + cep),   tRel = t − tStart
 T      = 2π nCycles/ω,   E(t) = 0 outside [tStart, tStart + T],
 ```
 
-is a diagonal (point-wise) operator: e_pol·r is cached at the nodes in Setup
-(`Grid_Fem_FillNodeCoordinate`, r measured from the coordinate origin) and
-`SysGauge_MultiplyWithGaugeOp` returns dOrb = E(t)(e_pol·r) orb (exactly zero
-outside the pulse). The pulse is that of `sysPotential.ylm.coulombLaser`
-(carrier centered on the envelope maximum), both evaluated by
-`Pulse_Sin2Field` (`M_Utils_Pulse`); e_pol is normalized from the
-`polarization` 3-vector. Hermitian in the grid metric (real diagonal), the
-same for every body type (`bt_` ignored).
+is a diagonal (point-wise) operator, one model for both grids
+(`M_SysGauge_Length`): the family passes its coordinate filler to
+`SysGauge_Length_Fabricate(path, FillCoordinate)` (the pattern of
+`SysXc_Libxc_Fabricate(path)`), Setup caches e_pol·r at the nodes
+(`Grid_Fem_FillNodeCoordinate`, r from the coordinate origin;
+`Grid_Prolate_FillNodeCoordinate`, z = (R/2) ξ η, polarization along z only)
+and `SysGauge_MultiplyWithGaugeOp` returns dOrb = E(t)(e_pol·r) orb (exactly
+zero outside the pulse). On the prolate grid z keeps every azimuthal channel
+m and multiplies the stored values directly, also those of the axis-adapted
+odd-m basis (its factor √((ξ²−1)(1−η²)) commutes with z). The pulse is that of
+`sysPotential.ylm.coulombLaser` (carrier centered on the envelope maximum),
+both evaluated by `Pulse_Sin2Field` (`M_Utils_Pulse`); e_pol is normalized
+from the `polarization` 3-vector. Hermitian in the grid metric (real
+diagonal), the same for every body type (`bt_` ignored).
 
 **Why SysGauge and not SysPotential.** Keeping the laser out of SysPotential
-keeps `sysPotential.fem` static (time- and body-type-independent), so the exact
+keeps the potential static (time- and body-type-independent), so the exact
 field-free part of Method (`method.mb.orbBased.exactFieldFreeQ`) can treat
 h0 = T + V_static exactly (on Fem a Crank–Nicolson/Cayley step preconditioned
 by `SysKinetic_SolveShifted` with the shift −2i/dt, A_Method.md "Exact
@@ -195,12 +206,14 @@ diagonal E(t) e_pol·r through the existing `ApplyLinOp => gauge` wiring.
 | `nCycles` | real | 3.0 | Cycles under the sin² envelope, > 0 |
 | `cep` | real | 0.0 | Carrier-envelope phase (rad) |
 | `tStart` | real | 0.0 | Pulse start (a.u.) |
-| `polarization` | real(3) | [0, 0, 1] | Polarization direction, normalized, must be nonzero |
+| `polarization` | real(3) | [0, 0, 1] | Polarization direction, normalized, must be nonzero (prolate: along z) |
 
-Flags: `SysGauge_timeIndependentQ = .false.`,
-`SysGauge_bodyTypeIndependentQ = .true.`. Printers read the field with
-`SysGauge_Fem_Length_FieldAmplitude(time)` and the unit vector
-`SysGauge_Fem_Length_polarization(3)`.
+The same keys under `sysGauge.prolate.length`. Flags:
+`SysGauge_timeIndependentQ = .false.`, `SysGauge_bodyTypeIndependentQ =
+.true.`. Printers read the field with `SysGauge_Length_FieldAmplitude(time)`
+and the unit vector `SysGauge_Length_polarization(3)`. Used on the prolate
+grid by `app/molecules/n2/dynamics/staticOrbs` (N2 in a pulse, TDCI and
+TD-2RDM in the MCSCF orbitals).
 
 ## Usage
 
@@ -270,9 +283,9 @@ with `sysGauge.fem.length`.
 | `SysGauge_Ylm_radialCoordinates` | `complex(:)` | r (Fedvr) or z(r) (ECS) |
 | `SysGauge_Ylm_Velocity_VectorPotentialAmplitude` | function | A(t) of the pulse |
 | `SysGauge_Ylm_Velocity_FieldAmplitude` | function | E(t) = −dA/dt of the pulse |
-| `SysGauge_Fem_Length_FieldAmplitude` | function | E(t) of the Fem length-gauge pulse |
-| `SysGauge_Fem_Length_polarization` | `real(3)` | Unit polarization vector e_pol |
-| `SysGauge_Fem_Length_fieldStrength`, `_omega`, `_nCycles`, `_cep`, `_tStart` | `real` | Pulse parameters |
+| `SysGauge_Length_FieldAmplitude` | function | E(t) of the length-gauge pulse (Fem, Prolate) |
+| `SysGauge_Length_polarization` | `real(3)` | Unit polarization vector e_pol |
+| `SysGauge_Length_fieldStrength`, `_omega`, `_nCycles`, `_cep`, `_tStart` | `real` | Pulse parameters |
 
 ## Tests
 
@@ -284,6 +297,8 @@ with `sysGauge.fem.length`.
   pulse (to 7e-18), E(t)(e_pol·r) orb at every node for the oblique
   polarization (1, 2, −2)/3 (3e-16 relative), zero outside the pulse, Hermiticity
   in the grid metric (2e-16), independence of `bt_`.
+- `test/componentTests/Grid/Prolate/T_Grid_Prolate`: the coordinate of the
+  prolate length gauge (<z> of a 1s on a focus is −R/2).
 - `test/simulationTests/Ne3d/T_Ne3d_08_TimePropagationMctdhxLaserVelocity`:
   velocity-gauge companion of the length-gauge T_Ne3d_07; checks the
   ground state is unaffected (A(0) = 0), norm conservation through SIL,
@@ -304,7 +319,8 @@ with `sysGauge.fem.length`.
 
 - `M_Grid_Ylm`, `M_Grid_Ylm_Fedvr`, `M_Grid_Ylm_FedvrEcs`: channel layout,
   derivative contexts, radial/contour points
-- `M_Grid_Fem`: node coordinates (`Grid_Fem_FillNodeCoordinate`, Fem length gauge)
-- `M_Utils_Pulse`: sin² pulse `Pulse_Sin2Field` (Fem length gauge)
+- `M_Grid_Fem`, `M_Grid_Prolate`: node coordinates (`Grid_Fem_FillNodeCoordinate`,
+  `Grid_Prolate_FillNodeCoordinate`, length gauge)
+- `M_Utils_Pulse`: sin² pulse `Pulse_Sin2Field` (length gauge)
 - `M_Utils_DerivativeFedvr`, `M_Utils_DerivativeFedvrEcs`: first derivative
 - `M_Utils_Json`, `M_Utils_Say`, `M_Utils_Types`, `M_Utils_Constants`

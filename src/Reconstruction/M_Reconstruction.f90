@@ -75,10 +75,21 @@ module M_Reconstruction
     !> - Allocate persistent work arrays (e.g., rdm3, collOp2)
     !> - Precompute index maps or symmetry factors
     !> - Read scheme-specific JSON options
-    !> - Load ML model files for neural-network schemes
     !>
     !> Schemes that do not require setup may leave the default no-op.
     subroutine I_Reconstruction_Setup
+    end subroutine
+  end interface
+
+  !> The orbitals (Orbs_orbs layout) the 2-RDM of the next
+  !> Reconstruction_AddCollisionOp refers to: methods with moving orbitals call
+  !> it before every AddCollisionOp. Defaults to a no-op; a reconstruction with
+  !> a kernel in fixed orbitals transports it with them.
+  procedure(I_Reconstruction_SetOrbitals), pointer :: Reconstruction_SetOrbitals => NoOpProcedures_SetOrbitals
+  abstract interface
+    subroutine I_Reconstruction_SetOrbitals(orbs)
+      import :: R64
+      complex(R64), intent(in), contiguous :: orbs(:, :)
     end subroutine
   end interface
 
@@ -91,7 +102,7 @@ module M_Reconstruction
     !>
     !> @details
     !> Computes the BBGKY collision term Tr₃[Ŵ, D³] where D³ is reconstructed
-    !> from D¹ and D² using the active scheme (Valdemoro, NY, neural network, etc.).
+    !> from D¹ and D² using the active scheme (Valdemoro, NY).
     !>
     !> **Important**: This routine ADDS to `dTwoRdmState`; it does not overwrite.
     !> The tensor layouts follow project-wide conventions:

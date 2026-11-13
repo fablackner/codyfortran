@@ -60,7 +60,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> @brief Build the mask M = m_x(x) m_y(y) m_z(z) at the interior nodes.
   subroutine Setup
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Utils_Say
     use M_Grid
     use M_Grid_Fem
@@ -131,7 +131,7 @@ contains
   !>
   !> @param[in,out] orbs  Orbitals (Grid_nPoints, nOrbitals).
   subroutine ApplyAbsorber(orbs)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(inout), contiguous :: orbs(:, :)
 

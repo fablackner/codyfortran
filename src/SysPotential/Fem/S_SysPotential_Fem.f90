@@ -58,7 +58,7 @@ contains
   !> inside the OpenMP loops of Method, parallel over the nodes when called
   !> outside a parallel region (e.g. by the Cayley exact part of Method).
   subroutine MultiplyWithExternalPotential(dOrb, externalPotential, orb)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(out), contiguous :: dOrb(:)
     complex(R64), intent(in), contiguous  :: externalPotential(:)

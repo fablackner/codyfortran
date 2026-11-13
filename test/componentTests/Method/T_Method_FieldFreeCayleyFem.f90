@@ -128,7 +128,7 @@ program T_Method_FieldFreeCayleyFem
   print *
   write (*, '(1X, A, I0, A, I0, A, I0)') "mesh N = ", Grid_nPoints, ", restarted runs: Krylov dimension ", &
     restartKrylovDim, ", restarts ", restartMaxRestarts
-  write (*, '(1X, A)') "    dt   iterations/solve (Krylov 30, bound; restarted, bound)   CN residual   " // &
+  write (*, '(1X, A)') "    dt   iterations/solve (Krylov 30, bound; restarted, bound)   CN residual   "// &
     "unitarity   Cayley(-dt)Cayley(dt)-1   restarted - one cycle"
   do iDt = 1, nDt
     write (*, '(1X, F8.4, 4(1X, I6), 4(1X, ES12.3))') timeSteps(iDt), iterationsOneCycle(iDt), boundOneCycle(iDt), &

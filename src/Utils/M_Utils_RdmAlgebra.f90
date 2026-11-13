@@ -67,6 +67,7 @@ module M_Utils_RdmAlgebra
   public :: RdmAlgebra_FillSymProduct
   public :: RdmAlgebra_FillSingletPart
   public :: RdmAlgebra_FillTripletPart
+  public :: RdmAlgebra_AddCommutatorH2ab
 
 contains
 
@@ -424,6 +425,31 @@ contains
         end if
       end do
     end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> dRdm2ab += 2 [W_ab, rdm2ab] for the up-down block of a ket-first 2-RDM: with
+  !> I = (i1, i2) and H(I, K) = h2(i1, i2 + nOa, k1, k2 + nOa) (h2 in spin
+  !> orbitals, up block first), dRdm2ab += 2 (H rdm2ab - rdm2ab H) as two ZGEMMs
+  !> of (nOa nOb) x (nOa nOb) matrices (threaded BLAS: call outside parallel
+  !> regions).
+  subroutine RdmAlgebra_AddCommutatorH2ab(dRdm2ab, rdm2ab, h2)
+    use M_Utils_BlasLib
+
+    complex(R64), intent(inout), contiguous :: dRdm2ab(:, :, :, :)
+    complex(R64), intent(in), contiguous    :: rdm2ab(:, :, :, :)
+    complex(R64), intent(in), contiguous    :: h2(:, :, :, :)
+
+    complex(R64), allocatable :: hMat(:, :)
+    integer(I32) :: nOa, nOb, m
+
+    nOa = size(rdm2ab, 1)
+    nOb = size(rdm2ab, 2)
+    m = nOa * nOb
+    hMat = reshape(h2(1:nOa, nOa + 1:nOa + nOb, 1:nOa, nOa + 1:nOa + nOb), [m, m])
+    call ZGEMM('N', 'N', m, m, m, (2.0_R64, 0.0_R64), hMat, m, rdm2ab, m, (1.0_R64, 0.0_R64), dRdm2ab, m)
+    call ZGEMM('N', 'N', m, m, m, (-2.0_R64, 0.0_R64), rdm2ab, m, hMat, m, (1.0_R64, 0.0_R64), dRdm2ab, m)
 
   end subroutine
 

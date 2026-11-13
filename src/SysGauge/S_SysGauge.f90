@@ -14,6 +14,7 @@ contains
     use M_Utils_Say
     use M_SysGauge_Ylm
     use M_SysGauge_Fem
+    use M_SysGauge_Prolate
 
     implicit none
 
@@ -28,9 +29,11 @@ contains
 
     else if (Json_GetExistence("sysGauge.fem")) then
       call SysGauge_Fem_Fabricate
+    else if (Json_GetExistence("sysGauge.prolate")) then
+      call SysGauge_Prolate_Fabricate
 
     else
-      error stop "sysGauge is missing one of: ylm, fem"
+      error stop "sysGauge is missing one of: ylm, fem, prolate"
     end if
 
   end subroutine

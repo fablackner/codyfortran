@@ -59,7 +59,7 @@ program T_Utils_XcLib
     rho2(2 * i - 1:2 * i) = 0.5_R64 * rho(i)
   end do
   call XcLib_EvaluateLda(zkP, vrho2, funcP, rho2)
-  maxErr = max(maxval(abs(zkP - zk) / abs(zk)), maxval(abs(vrho2(1::2) - vrho) / abs(vrho)), &
+  maxErr = max(maxval(abs(zkP - zk)/abs(zk)), maxval(abs(vrho2(1::2) - vrho)/abs(vrho)), &
                maxval(abs(vrho2(2::2) - vrho) / abs(vrho)))
   write (*, *) "Slater exchange, polarized (equal spins) vs unpolarized, relative difference ", maxErr
   call check(error, maxErr < 1.0e-13_R64)

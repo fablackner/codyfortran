@@ -23,7 +23,7 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine SysXc_FillXcPotential(xcPot, xcEnergy, density)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(out), contiguous :: xcPot(:, :)
     real(R64), intent(out) :: xcEnergy
@@ -146,7 +146,7 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine SysXc_FillKohnShamPotential(kohnShamPot, hartreeEnergy, xcEnergy, density, time)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(out), contiguous :: kohnShamPot(:, :)
     real(R64), intent(out) :: hartreeEnergy

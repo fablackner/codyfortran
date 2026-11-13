@@ -76,7 +76,7 @@ program T_SysKinetic_Fem_Laplacian
 
   call check(error, SysKinetic_timeIndependentQ, "kinetic operator must be time-independent")
   if (allocated(error)) error stop "T_SysKinetic_Fem_Laplacian timeIndependentQ failure"
-  call check(error, .not. SysKinetic_bodyTypeIndependentQ, "different masses must make T body-type-dependent")
+  call check(error,.not. SysKinetic_bodyTypeIndependentQ, "different masses must make T body-type-dependent")
   if (allocated(error)) error stop "T_SysKinetic_Fem_Laplacian bodyTypeIndependentQ failure"
   call check(error, associated(SysKinetic_SolveShifted), "SysKinetic_SolveShifted must be bound")
   if (allocated(error)) error stop "T_SysKinetic_Fem_Laplacian SolveShifted binding failure"

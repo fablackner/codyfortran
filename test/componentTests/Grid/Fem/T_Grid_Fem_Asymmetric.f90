@@ -364,9 +364,9 @@ program T_Grid_Fem_Asymmetric
     do iy = 1, Grid_Fem_ny
       do ix = 1, Grid_Fem_nx
         errCoordDirection = max(errCoordDirection, abs(coord(Grid_Fem_Index(ix, iy, iz)) - &
-                                dot_product(coordDirection, [Grid_Fem_axes(1) % points(ix), &
-                                                             Grid_Fem_axes(2) % points(iy), &
-                                                             Grid_Fem_axes(3) % points(iz)])))
+                                                       dot_product(coordDirection, [Grid_Fem_axes(1) % points(ix), &
+                                                                                    Grid_Fem_axes(2) % points(iy), &
+                                                                                    Grid_Fem_axes(3) % points(iz)])))
       end do
     end do
   end do

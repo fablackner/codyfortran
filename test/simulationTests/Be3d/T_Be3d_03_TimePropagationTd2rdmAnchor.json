@@ -1,0 +1,114 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 1,
+            "mmax": 1,
+            "rmin": 0.0,
+            "rmax": 40.0,
+            "fedvr": {
+                "nElements": 20,
+                "nLocals": 15
+            }
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [
+                    1.0,
+                    1.0
+                ],
+                "fedvr": {}
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 4.0,
+                "stdImpl": {}
+            }
+        }
+    },
+    "sysInteraction": {
+        "ylm": {
+            "coulomb": {
+                "strength": 1.0,
+                "blockEq": {}
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [
+                2,
+                2
+            ],
+            "bodyStatistics": [
+                "f",
+                "f"
+            ],
+            "orbBased": {
+                "nOrbs": [
+                    5,
+                    5
+                ],
+                "mOfOrbs": [
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1,
+                    0,
+                    0,
+                    -1,
+                    0,
+                    1
+                ],
+                "td2rdm": {},
+                "exactFieldFreeQ": true
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "load": {}
+    },
+    "twoRdm": {
+        "fermionic": {
+            "singlet": {}
+        }
+    },
+    "twoRdmInit": {
+        "load": {}
+    },
+    "reconstruction": {
+        "singlet": {
+            "singletNy": {
+                "ccQ": true
+            },
+            "anchor": {}
+        }
+    },
+    "integratorList": {
+        "rk1": {
+            "o4Expl": {}
+        },
+        "rk2": {
+            "o4Expl": {}
+        }
+    },
+    "propagator": {
+        "splitStep": {
+            "order2": {},
+            "exactPartScheme": "strang"
+        }
+    },
+    "program": {
+        "endTime": 1.0,
+        "timeStep": 0.02
+    }
+}

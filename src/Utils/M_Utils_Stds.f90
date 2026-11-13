@@ -21,6 +21,16 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine NoOpProcedures_SetOrbitals(orbs)
+    use M_Utils_UnusedVariables
+
+    complex(R64), intent(in), contiguous :: orbs(:, :)
+
+    if (.false.) call UnusedVariables_Mark(orbs)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine NoOpProcedures_ApplyAbsorber(orbs)
     use M_Utils_UnusedVariables
 

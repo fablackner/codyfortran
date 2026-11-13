@@ -1,0 +1,10 @@
+{
+    "reconstruction": {
+        "singlet": {
+            "valdemoro": {},
+            "anchor": {
+                "nTransitions": 4
+            }
+        }
+    }
+}

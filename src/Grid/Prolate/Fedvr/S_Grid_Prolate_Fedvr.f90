@@ -62,13 +62,13 @@ contains
     ! xi = 1 is kept (sigma orbitals are nonzero on the internuclear axis),
     ! ximax is excluded (Dirichlet box boundary)
     call Fedvr_CreateCtxGraded(Grid_Prolate_Fedvr_fedvrCtx, &
-                         1.0_R64, &
-                         Grid_Prolate_ximax, &
-                         Grid_Prolate_Fedvr_nElements, &
-                         Grid_Prolate_Fedvr_nLocals, &
-                         Grid_Prolate_Fedvr_grading, &
-                         .false., &
-                         .true.)
+                               1.0_R64, &
+                               Grid_Prolate_ximax, &
+                               Grid_Prolate_Fedvr_nElements, &
+                               Grid_Prolate_Fedvr_nLocals, &
+                               Grid_Prolate_Fedvr_grading, &
+                               .false., &
+                               .true.)
 
     call DerivativeFedvr_CreateCtx(Grid_Prolate_Fedvr_derivativeCtx, Grid_Prolate_Fedvr_fedvrCtx)
 
@@ -144,10 +144,10 @@ contains
 
             do kLocal = 1, nLoc
               Grid_Prolate_xiKinMatrix(iGlobal1, iGlobal2, 0) = Grid_Prolate_xiKinMatrix(iGlobal1, iGlobal2, 0) + &
-                elementWeights(kLocal) * (elementPoints(kLocal)**2 - 1.0_R64) * &
-                dRef(kLocal, iLocal1) * dRef(kLocal, iLocal2) / element % size**2
+                                                                elementWeights(kLocal) * (elementPoints(kLocal)**2 - 1.0_R64) * &
+                                                                dRef(kLocal, iLocal1) * dRef(kLocal, iLocal2) / element % size**2
               Grid_Prolate_xiKinMatrix(iGlobal1, iGlobal2, 1) = Grid_Prolate_xiKinMatrix(iGlobal1, iGlobal2, 1) + &
-                elementWeights(kLocal) * gOdd(kLocal, iLocal1) * gOdd(kLocal, iLocal2)
+                                                                elementWeights(kLocal) * gOdd(kLocal, iLocal1) * gOdd(kLocal, iLocal2)
               Grid_Prolate_xiCentrifugalMatrix(iGlobal1, iGlobal2, 1) = &
                 Grid_Prolate_xiCentrifugalMatrix(iGlobal1, iGlobal2, 1) + &
                 elementWeights(kLocal) * vOdd(kLocal, iLocal1) * vOdd(kLocal, iLocal2)

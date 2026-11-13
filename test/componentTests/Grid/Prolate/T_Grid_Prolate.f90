@@ -13,6 +13,7 @@ program T_Grid_Prolate
   real(R64) :: volume, xi, eta, r1
   complex(R64) :: norm, ovlp
   complex(R64), allocatable :: orb1s(:), orbSet(:, :), src(:)
+  real(R64), allocatable :: z(:)
   type(error_type), allocatable :: error
   character(len=:), allocatable :: jsonFileName
 
@@ -71,6 +72,11 @@ program T_Grid_Prolate
   norm = Grid_InnerProduct(orb1s, orb1s)
   call check(error, real(norm, kind=R64), 1.0_R64, thr=1e-8_R64)
   if (allocated(error)) error stop "T_Grid_Prolate 1s norm failure"
+
+  ! its density is centered on the focus: <z> = -a (Grid_Prolate_FillNodeCoordinate)
+  call Grid_Prolate_FillNodeCoordinate(z, [0.0_R64, 0.0_R64, 1.0_R64])
+  call check(error, real(Grid_InnerProduct(orb1s, z * orb1s), kind=R64), -Grid_Prolate_a, thr=1e-8_R64)
+  if (allocated(error)) error stop "T_Grid_Prolate <z> of 1s failure"
 
   !------------------------------------
   ! orthonormalization via the shared Gram-Schmidt

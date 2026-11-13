@@ -62,7 +62,7 @@ contains
 !> @param[in]  ind  Orbital index (1..OrbsInit_Fem_nOrbitals).
 !> @param[in]  bt_  Optional body type (absent for method.sb), passed through.
   subroutine InitializeOrb(orb, ind, bt_)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Grid
     use M_Grid_Fem
 

@@ -85,6 +85,10 @@ module M_Coeffs_Hubbard
   !> Equals the binomial coefficient C(n_orb, n_dn).
   integer(I32) :: Coeffs_Hubbard_nCoeffsDN
 
+  !> The vector is stored in a spin-exchange sector (plusSpinSym,
+  !> minusSpinSym), where an excitation of one spin species cannot be stored.
+  logical :: Coeffs_Hubbard_spinSymQ = .false.
+
   !> For each up-configuration i, number of single-hop target configurations.
   !> Used to size slices in the `hoppUP`/`weightUP` tables.
   integer(I32), allocatable :: Coeffs_Hubbard_nConnectedUP(:)

@@ -247,7 +247,8 @@ program P_GroundKsFem
   write (*, '(1X, A, I0, A)') "saved ", Orbs_nOrbsInState, " orbitals (orbXX_YY.in) and femMesh.dat"
 
   if (.not. convergedQ) &
-    error stop "P_GroundKsFem: SCF not converged within program.maxIter (orbitals of the last step saved; continue with orbsInit.load)"
+    error stop "P_GroundKsFem: SCF not converged within program.maxIter (orbitals of the last step saved; "// &
+    "continue with orbsInit.load)"
 
   !==========================================
   call Say_Goodbye

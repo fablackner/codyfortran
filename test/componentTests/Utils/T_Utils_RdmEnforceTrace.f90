@@ -1,7 +1,8 @@
 !> Contraction-free projections of M_Utils_RdmEnforceTrace* for changing dimensions.
 !>
 !> Apply without traces projects on the contraction-free kernel, so a second
-!> application must not change the result. The expansion coefficients depend on
+!> application must not change the result, and for M3aab the four contractions
+!> of the result vanish. The expansion coefficients depend on
 !> the dimension and are cached; calling with nDim = 5, 6, 5 checks that they are
 !> recomputed when the dimension changes.
 program T_Utils_RdmEnforceTrace
@@ -58,6 +59,9 @@ program T_Utils_RdmEnforceTrace
       sqrt(sum(abs(m3 - m3Once)**2)) / sqrt(sum(abs(m3Once)**2))
     call check(error, sqrt(sum(abs(m3 - m3Once)**2)) / sqrt(sum(abs(m3Once)**2)) < tol)
     call Report("M3aab projection idempotent")
+    print '(A,I3,A,E12.4)', " nDim", n, "  M3aab  max |C(Px)| / max |Px|", MaxContraction(m3Once) / maxval(abs(m3Once))
+    call check(error, MaxContraction(m3Once) < tol * maxval(abs(m3Once)))
+    call Report("M3aab projection contraction-free")
   end do
 
 contains
@@ -69,6 +73,28 @@ contains
       error stop "T_Utils_RdmEnforceTrace failed"
     end if
   end subroutine
+
+  !> max over (i1,i2,j1,j2) of the four contractions over k that the M3aab projection removes
+  function MaxContraction(m) result(res)
+    complex(R64), intent(in) :: m(:, :, :, :, :, :)
+    real(R64) :: res
+    complex(R64) :: c(4)
+    integer(I32) :: i1, i2, j1, j2, k
+    res = 0.0_R64
+    do j2 = 1, size(m, 1)
+      do j1 = 1, size(m, 1)
+        do i2 = 1, size(m, 1)
+          do i1 = 1, size(m, 1)
+            c = 0.0_R64
+            do k = 1, size(m, 1)
+              c = c + [m(k, i1, i2, k, j1, j2), m(i1, k, i2, j1, j2, k), m(i1, i2, k, j1, k, j2), m(i1, i2, k, j1, j2, k)]
+            end do
+            res = max(res, maxval(abs(c)))
+          end do
+        end do
+      end do
+    end do
+  end function
 
   function Diff4(a, b) result(res)
     complex(R64), intent(in) :: a(:, :, :, :), b(:, :, :, :)

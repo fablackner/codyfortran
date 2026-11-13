@@ -373,14 +373,14 @@ contains
     use M_Grid
     use M_Utils_LapackLib
 
-    complex(R64), intent(in), contiguous  :: orbsOld(:,:), evecs(:,:)
-    real(R64),    intent(in)  :: alpha
-    complex(R64), intent(out), contiguous :: orbsOut(:,:)
-    real(R64),    intent(out), allocatable :: lambdaDiscarded(:)
+    complex(R64), intent(in), contiguous  :: orbsOld(:, :), evecs(:, :)
+    real(R64), intent(in)  :: alpha
+    complex(R64), intent(out), contiguous :: orbsOut(:, :)
+    real(R64), intent(out), allocatable :: lambdaDiscarded(:)
 
     integer(I32) :: n, i, j, k
-    complex(R64), allocatable :: A(:,:), G(:,:), G_evecs(:,:)
-    real(R64),    allocatable :: lambda(:)
+    complex(R64), allocatable :: A(:, :), G(:, :), G_evecs(:, :)
+    real(R64), allocatable :: lambda(:)
 
     n = size(orbsOld, 2)
     allocate (A(size(orbsOld, 1), 2 * n))

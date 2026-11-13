@@ -8,6 +8,9 @@ lintbuild/
 *.save
 *.zip
 *.pt
+*.bin
+*.npz
+runs/
 *.log
 *.png
 !assets/*.png

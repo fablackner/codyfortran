@@ -60,6 +60,40 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> Minimal eigenvalues of the Hermitian parts of the up-down blocks of D,
+  !> reshape(rdm2ab, [n^2, n^2]), and of its 2-hole matrix Q
+  !> (RdmHole_FillQrdm2ab): the N-representability check of a singlet 2-RDM.
+  subroutine RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2ab)
+    use M_Utils_LapackLib
+
+    real(R64), intent(out) :: minD
+    real(R64), intent(out) :: minQ
+    complex(R64), intent(in), contiguous :: rdm2ab(:, :, :, :)
+
+    complex(R64), allocatable :: qrdm2ab(:, :, :, :)
+
+    call RdmHole_FillQrdm2ab(qrdm2ab, rdm2ab)
+    minD = MinEigenvalue(rdm2ab)
+    minQ = MinEigenvalue(qrdm2ab)
+
+  contains
+
+    function MinEigenvalue(x) result(res)
+      complex(R64), intent(in) :: x(:, :, :, :)
+      real(R64) :: res
+
+      complex(R64), allocatable :: mat(:, :), evecs(:, :)
+      real(R64), allocatable :: evals(:)
+
+      mat = reshape(x, [size(x, 1) * size(x, 2), size(x, 3) * size(x, 4)])
+      call LapackLib_DiagonalizeGeneric(evals, evecs, 0.5_R64 * (mat + conjg(transpose(mat))), .false.)
+      res = minval(evals)
+
+    end function
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine RdmHole_FillGrdm2ab(grdm2ab, rdm2ab)
 
     complex(R64), intent(out), allocatable :: grdm2ab(:, :, :, :)

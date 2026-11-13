@@ -68,7 +68,7 @@ program T_Ne3d_14_TimePropagationMctdhxUndeclaredM
   print *, "final dipole: ", dipole
   print *, "max. deviation from the declared run: ", maxDev
 
-  call check(error, .not. Method_Mb_OrbBased_definiteMQ)
+  call check(error,.not. Method_Mb_OrbBased_definiteMQ)
   if (allocated(error)) error stop "T_Ne3d_14_TimePropagationMctdhxUndeclaredM failure: mOfOrbs declared"
 
   ! Same physics, different operators and eigen-decompositions: round-off

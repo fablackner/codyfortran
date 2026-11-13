@@ -58,7 +58,8 @@
 !> - `h1Lin(nO²)`: Linearized 1-body Hamiltonian for fast lookup
 !> - `h2Lin(nO⁴)`: Linearized 2-body Hamiltonian (symmetry-adapted storage)
 !> - `rdm1Lin/rdm2Lin`: Thread-local accumulators (linearized)
-!> - `coeffsBuffer`: Module-level buffer for excitation operations
+!> - `coeffsBuffer`: Module-level buffer for excitation operations (threadprivate,
+!>   so that ApplyExcitation may run in parallel regions)
 !> - `sector`, `sectorBt`: CI sector and the buckets of its connections (see above)
 submodule(M_Coeffs_Generic) S_Coeffs_Generic
   use M_ConfigList, only: T_ConfigList_Excitation
@@ -82,6 +83,7 @@ submodule(M_Coeffs_Generic) S_Coeffs_Generic
 
   !> Reusable buffer for ApplyExcitation to avoid repeated allocation
   complex(R64), allocatable, save :: coeffsBuffer(:)
+  !$omp threadprivate(coeffsBuffer)
 
   !> coeffs.generic.totalM declared, and its value (0 if not)
   logical, save      :: sectorQ
@@ -181,7 +183,7 @@ contains
             do i = 1, Method_Mb_OrbBased_nOrbs(bt)
               call e % ExciteConfiguration(iCNew, occupation, [i], [i], iC)
               if (iCNew .ne. 0) bts(bt) % mOfConfig(iC) = bts(bt) % mOfConfig(iC) + &
-                                                         nint(occupation) * Method_Mb_OrbBased_mOfOrb(shift + i)
+                                                          nint(occupation) * Method_Mb_OrbBased_mOfOrb(shift + i)
             end do
           end do
         end if
@@ -548,6 +550,8 @@ contains
 !> based on particle statistics:
 !> - Fermions: rdm2(i1,i2,j1,j2) = -rdm2(i2,i1,j1,j2) = -rdm2(i1,i2,j2,j1) = +rdm2(i2,i1,j2,j1)
 !> - Bosons:   rdm2(i1,i2,j1,j2) = +rdm2(i2,i1,j1,j2) = +rdm2(i1,i2,j2,j1) = +rdm2(i2,i1,j2,j1)
+!>   (each repeated index pair, i1 = i2 or j1 = j2, halves the value: the
+!>   four writes then reach an element twice, or four times if both repeat)
 !>
 !> Inter-body terms (different body types) use antisymmetric convention via
 !> Klein transformation for consistent handling of distinguishable particles.
@@ -562,6 +566,7 @@ contains
     complex(R64), intent(out), contiguous  :: rdm2(:, :, :, :)
     complex(R64), intent(in), contiguous   :: rdm2Lin(:)
 
+    complex(R64) :: value
     integer(I32) :: i1, i2, j1, j2, i1bt, i2bt, j1bt, j2bt
     integer(I32) :: nO, orbCode
 
@@ -600,14 +605,15 @@ contains
                 rdm2(j2, j1, i2, i1) = rdm2(j2, j1, i2, i1) + rdm2Lin(orbCode)
 
               else if (Method_Mb_bodyStatistics(i1bt) .eq. 'b') then
-                ! Bosonic symmetry (with diagonal correction)
-                rdm2(j1, j2, i1, i2) = rdm2(j1, j2, i1, i2) + rdm2Lin(orbCode)
-                rdm2(j1, j2, i2, i1) = rdm2(j1, j2, i2, i1) + rdm2Lin(orbCode)
-                rdm2(j2, j1, i1, i2) = rdm2(j2, j1, i1, i2) + rdm2Lin(orbCode)
-                rdm2(j2, j1, i2, i1) = rdm2(j2, j1, i2, i1) + rdm2Lin(orbCode)
-
-                if (i1 .eq. i2) rdm2(j1, j2, i1, i2) = rdm2(j1, j2, i1, i2) / 2.0_R64
-                if (j1 .eq. j2) rdm2(j1, j2, i1, i2) = rdm2(j1, j2, i1, i2) / 2.0_R64
+                ! Bosonic symmetry; each repeated pair (i1 = i2, j1 = j2) halves
+                ! the value, as the four writes then reach an element repeatedly
+                value = rdm2Lin(orbCode)
+                if (i1 .eq. i2) value = 0.5_R64 * value
+                if (j1 .eq. j2) value = 0.5_R64 * value
+                rdm2(j1, j2, i1, i2) = rdm2(j1, j2, i1, i2) + value
+                rdm2(j1, j2, i2, i1) = rdm2(j1, j2, i2, i1) + value
+                rdm2(j2, j1, i1, i2) = rdm2(j2, j1, i1, i2) + value
+                rdm2(j2, j1, i2, i1) = rdm2(j2, j1, i2, i1) + value
 
               else
                 error stop "Method_Mb_bodyStatistics not implemented"
@@ -753,7 +759,8 @@ contains
 !> and phase via `configList(bt)%ExciteConfiguration`, then scatter values using
 !> precomputed strides.
 !>
-!> Uses a module-level buffer (`coeffsBuffer`) for efficiency; resized if needed.
+!> Copies the vector into the threadprivate buffer `coeffsBuffer` (reallocated
+!> when the size changes).
 !>
 !> @param[inout] coeffs   CI coefficients (modified in-place)
 !> @param[in]    creates  Orbital indices for creation operators
@@ -773,13 +780,6 @@ contains
     integer(I32) :: c, cNew, k, ibt_loop
     integer(I32) :: offsetOld, offsetNew, loopIndex
     real(R64)  :: factor
-
-    ! Reuse buffer to avoid reallocation
-    if (.not. allocated(coeffsBuffer)) allocate (coeffsBuffer(size(coeffs)))
-    if (size(coeffsBuffer) .ne. size(coeffs)) then
-      deallocate (coeffsBuffer)
-      allocate (coeffsBuffer(size(coeffs)))
-    end if
 
     coeffsBuffer = coeffs
 

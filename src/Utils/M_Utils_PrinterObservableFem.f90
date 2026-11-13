@@ -145,7 +145,7 @@ contains
 !> One pass over the nodes, O(nOS^2) per node; the node coordinates come from
 !> Grid_Fem_FillNodeCoordinate (three real arrays of Grid_nPoints).
   subroutine FillDensityMoments(moments, rdm1, orbs)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Grid_Fem
     use M_Orbs
     use M_Method_Mb_OrbBased, only: Method_Mb_OrbBased_FillSpatialRdm1

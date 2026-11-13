@@ -39,7 +39,7 @@ contains
   !> src = rho w); time, bt1_ and bt2_ are ignored (Method passes -1 for
   !> body-type-independent interactions).
   subroutine FillInteractionPotential(interactionPotential, src, time, bt1_, bt2_)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Utils_UnusedVariables
     use M_Grid
     use M_Grid_Fem

@@ -2,10 +2,10 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> unitarily invariant decomposition utilities for third-order tensors (M3) in RDM theory.
-!>
-!> Supplies routines to enforce one-fold trace conditions and assemble the
-!> M3 decomposition with precomputed expansion coefficients.
+!> Contraction consistency of the up-up-down block of a 3-RDM (ccQ): the
+!> unitarily invariant decomposition of an M3aab tensor into its contractions
+!> and a contraction-free kernel, with expansion coefficients precomputed per
+!> dimension.
 module M_Utils_RdmEnforceTraceM3aab
   use M_Utils_Types
 
@@ -22,6 +22,13 @@ module M_Utils_RdmEnforceTraceM3aab
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> m3aab <- A(m3aab + K(t - C(m3aab))): C the four onefold contractions
+  !> (sums over k of m3aab(k,i1,i2,k,j1,j2), m3aab(i1,k,i2,j1,j2,k),
+  !> m3aab(i1,i2,k,j1,k,j2), m3aab(i1,i2,k,j1,j2,k)), K the Kronecker
+  !> expansion with C(K(x)) = x, A the antisymmetric completion from i1 < i2,
+  !> j1 < j2. t = onefoldTraces_ (absent: zero, the projection of a change on
+  !> the contraction-free kernel), returned as t - C(input). The input must be
+  !> antisymmetric in (i1,i2) and (j1,j2); needs nDim > 4.
   subroutine RdmEnforceTraceM3aab_Apply(m3aab, onefoldTraces_)
 
     complex(R64), intent(inout), contiguous                   :: m3aab(:, :, :, :, :, :)
@@ -43,75 +50,58 @@ contains
       onefoldTraces => onefoldTracesTmp
     end if
 
+    !$omp parallel do collapse(2) private(i2, i1, k)
     do j2 = 1, nDim
       do j1 = 1, nDim
         do i2 = 1, nDim
           do i1 = 1, nDim
-
             do k = 1, nDim
-
               onefoldTraces(i1, i2, j1, j2, 1) = onefoldTraces(i1, i2, j1, j2, 1) - m3aab(k, i1, i2, k, j1, j2)
               onefoldTraces(i1, i2, j1, j2, 2) = onefoldTraces(i1, i2, j1, j2, 2) - m3aab(i1, k, i2, j1, j2, k)
               onefoldTraces(i1, i2, j1, j2, 3) = onefoldTraces(i1, i2, j1, j2, 3) - m3aab(i1, i2, k, j1, k, j2)
               onefoldTraces(i1, i2, j1, j2, 4) = onefoldTraces(i1, i2, j1, j2, 4) - m3aab(i1, i2, k, j1, j2, k)
-
             end do
           end do
         end do
       end do
     end do
+    !$omp end parallel do
 
     call AddKroneckerTermsM3aab(m3aab, onefoldTraces)
-
-    if (allocated(onefoldTracesTmp)) deallocate (onefoldTracesTmp)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> m3aab <- A(m3aab + K(onefoldTraces)). Term (ip, jp) of K is
+  !> delta(i(p1), j(q1)) x(i(p2), i(p3), j(q2), j(q3)), p = perm(ip, :),
+  !> q = perm(jp, :), with x the onefold traces combined by pc; the twofold
+  !> (pb, perm(ip, 1) < perm(ip, 2)) and threefold (pa, ip = 1) terms of the
+  !> same (ip, jp) are this form with x on its diagonals. Each term is added on
+  !> its hyperplane, at i1 < i2, j1 < j2; for fixed (k, l) = (j(q2), j(q3)) an
+  !> element is reached by one i only, so the (k, l) slices are independent.
   subroutine AddKroneckerTermsM3aab(m3aab, onefoldTraces)
 
-    complex(R64), intent(inout), contiguous  :: m3aab(:, :, :, :, :, :)
-    complex(R64), intent(in), contiguous  :: onefoldTraces(:, :, :, :, :)
+    complex(R64), intent(inout), contiguous :: m3aab(:, :, :, :, :, :)
+    complex(R64), intent(in), contiguous    :: onefoldTraces(:, :, :, :, :)
 
-    complex(R64), allocatable :: twofoldTraces(:, :, :)
-    complex(R64), allocatable :: threefoldTraces(:)
-
-    integer(I32), allocatable :: delta(:, :)
-    integer(I32) :: perm(6, 3)
-
-    integer(I32) :: i1, j1, i2, j2, i3, j3, k, t1, t2, t3
-    integer(I32) :: ip, jp, count
-    integer(I32) :: nOnefoldTraces
-    integer(I32) :: nTwofoldTraces
-    integer(I32) :: nThreefoldTraces
-
-    integer(I32) :: i(3), j(3)
-
-    integer(I32) :: nDim
+    integer(I32), parameter :: perm(6, 3) = reshape([1, 1, 2, 2, 3, 3, 2, 3, 1, 3, 1, 2, 3, 2, 3, 1, 2, 1], [6, 3])
+    complex(R64) :: twofoldTraces(size(m3aab, 1), size(m3aab, 1), 5), threefoldTraces(2)
+    complex(R64) :: twofold(size(m3aab, 1), size(m3aab, 1)), slice(size(m3aab, 1), size(m3aab, 1)), value
+    integer(I32) :: nDim, i1, i2, i3, j1, j2, j3, k, l, t, ip, jp, row2, i(3), j(3)
 
     nDim = size(m3aab, 1)
 
     call Setup(nDim)
 
-    nOnefoldTraces = 4
-    nTwofoldTraces = 5
-    nThreefoldTraces = 2
-
-    allocate (twofoldTraces(nDim, nDim, nTwofoldTraces))
-    allocate (threefoldTraces(nThreefoldTraces))
-
     twofoldTraces(:, :, :) = 0.0_R64
     do i1 = 1, nDim
       do j1 = 1, nDim
-
         do k = 1, nDim
-
           twofoldTraces(i1, j1, 1) = twofoldTraces(i1, j1, 1) + onefoldTraces(k, i1, k, j1, 1)
           twofoldTraces(i1, j1, 2) = twofoldTraces(i1, j1, 2) + onefoldTraces(i1, k, j1, k, 2)
           twofoldTraces(i1, j1, 3) = twofoldTraces(i1, j1, 3) + onefoldTraces(i1, k, j1, k, 1)
           twofoldTraces(i1, j1, 4) = twofoldTraces(i1, j1, 4) + onefoldTraces(i1, k, k, j1, 1)
           twofoldTraces(i1, j1, 5) = twofoldTraces(i1, j1, 5) + onefoldTraces(k, i1, j1, k, 1)
-
         end do
       end do
     end do
@@ -122,101 +112,64 @@ contains
       threefoldTraces(2) = threefoldTraces(2) + twofoldTraces(k, k, 2)
     end do
 
-    allocate (delta(nDim, nDim))
+    row2 = 0
+    do ip = 1, 6
+      do jp = 1, 6
+        twofold = 0.0_R64
+        if (perm(ip, 1) < perm(ip, 2)) then
+          row2 = row2 + 1
+          do t = 1, 5
+            twofold = twofold + pb(row2, t) * twofoldTraces(:, :, t)
+          end do
+        end if
+        value = 0.0_R64
+        if (ip .eq. 1) value = sum(pa(jp, :) * threefoldTraces(:))
 
-    perm(1, :) = [1, 2, 3]
-    perm(2, :) = [1, 3, 2]
-    perm(3, :) = [2, 1, 3]
-    perm(4, :) = [2, 3, 1]
-    perm(5, :) = [3, 1, 2]
-    perm(6, :) = [3, 2, 1]
-
-    delta(:, :) = 0
-    do i1 = 1, nDim
-      delta(i1, i1) = 1
-    end do
-
-    do j3 = 1, nDim
-      do j2 = 1, nDim
-        do j1 = 1, nDim
-          if (j1 < j2) then
+        !$omp parallel do collapse(2) private(slice, t, i1, i2, i3, i, j)
+        do l = 1, nDim
+          do k = 1, nDim
+            slice = 0.0_R64
+            do t = 1, 4
+              slice = slice + pc(6 * (ip - 1) + jp, t) * onefoldTraces(:, :, k, l, t)
+            end do
+            slice(k, :) = slice(k, :) + twofold(:, l)
+            slice(k, l) = slice(k, l) + value
             do i3 = 1, nDim
               do i2 = 1, nDim
-                do i1 = 1, nDim
-                  if (i1 < i2) then
-
-                    i(1) = i1
-                    i(2) = i2
-                    i(3) = i3
-
-                    j(1) = j1
-                    j(2) = j2
-                    j(3) = j3
-
-                    do t3 = 1, nThreefoldTraces
-                      do jp = 1, 6
-                        ! delta(i1, j(perm(jp, 1))) * delta(i2, j(perm(jp, 2))) * delta(i3, j(perm(jp, 3)))
-                        if (i1 .eq. j(perm(jp, 1)) .and. i2 .eq. j(perm(jp, 2)) .and. i3 .eq. j(perm(jp, 3))) then
-                          m3aab(i1, i2, i3, j1, j2, j3) = m3aab(i1, i2, i3, j1, j2, j3) + &
-                                                          pa(jp, t3) * &
-                                                          threefoldTraces(t3)
-                        end if
-                      end do
-                    end do
-
-                    do t2 = 1, nTwofoldTraces
-                      count = 0
-                      do ip = 1, 6
-                        do jp = 1, 6
-                          if (perm(ip, 1) < perm(ip, 2)) then
-                            count = count + 1
-
-                            ! delta(i(perm(ip, 1)), j(perm(jp, 1))) * delta(i(perm(ip, 2)), j(perm(jp, 2)))
-                            if (i(perm(ip, 1)) .eq. j(perm(jp, 1)) .and. i(perm(ip, 2)) .eq. j(perm(jp, 2))) then
-                              m3aab(i1, i2, i3, j1, j2, j3) = m3aab(i1, i2, i3, j1, j2, j3) + &
-                                                              pb(count, t2) * &
-                                                              twofoldTraces(i(perm(ip, 3)), j(perm(jp, 3)), t2)
-                            end if
-
-                          end if
-                        end do
-                      end do
-                    end do
-
-                    do t1 = 1, nOnefoldTraces
-                      count = 0
-                      do ip = 1, 6
-                        do jp = 1, 6
-                          count = count + 1
-
-                          ! delta(i(perm(ip, 1)), j(perm(jp, 1)))
-                          if (i(perm(ip, 1)) .eq. j(perm(jp, 1))) then
-                            m3aab(i1, i2, i3, j1, j2, j3) = m3aab(i1, i2, i3, j1, j2, j3) + &
-                                                            pc(count, t1) * &
-                                                            onefoldTraces(i(perm(ip, 2)), &
-                                                                          i(perm(ip, 3)), &
-                                                                          j(perm(jp, 2)), &
-                                                                          j(perm(jp, 3)), &
-                                                                          t1)
-                          end if
-
-                        end do
-                      end do
-                    end do
-
-                    m3aab(i2, i1, i3, j1, j2, j3) = -m3aab(i1, i2, i3, j1, j2, j3)
-                    m3aab(i1, i2, i3, j2, j1, j3) = -m3aab(i1, i2, i3, j1, j2, j3)
-                    m3aab(i2, i1, i3, j2, j1, j3) = m3aab(i1, i2, i3, j1, j2, j3)
-
-                  end if
+                do i1 = 1, i2 - 1
+                  i = [i1, i2, i3]
+                  j(perm(jp, 1)) = i(perm(ip, 1))
+                  j(perm(jp, 2)) = k
+                  j(perm(jp, 3)) = l
+                  if (j(1) < j(2)) m3aab(i1, i2, i3, j(1), j(2), j(3)) = m3aab(i1, i2, i3, j(1), j(2), j(3)) + &
+                                                                         slice(i(perm(ip, 2)), i(perm(ip, 3)))
                 end do
-
               end do
             end do
-          end if
+          end do
+        end do
+        !$omp end parallel do
+      end do
+    end do
+
+    !$omp parallel do collapse(2) private(j1, i1, i2, i3, value)
+    do j3 = 1, nDim
+      do j2 = 1, nDim
+        do j1 = 1, j2 - 1
+          do i3 = 1, nDim
+            do i2 = 1, nDim
+              do i1 = 1, i2 - 1
+                value = m3aab(i1, i2, i3, j1, j2, j3)
+                m3aab(i2, i1, i3, j1, j2, j3) = -value
+                m3aab(i1, i2, i3, j2, j1, j3) = -value
+                m3aab(i2, i1, i3, j2, j1, j3) = value
+              end do
+            end do
+          end do
         end do
       end do
     end do
+    !$omp end parallel do
 
   end subroutine
 

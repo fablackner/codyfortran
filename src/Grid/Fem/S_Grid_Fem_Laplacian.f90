@@ -206,7 +206,7 @@ contains
   !> the contiguous index, the y and z stencils combine whole x rows. Only the
   !> band entries of nodes sharing an element are visited (BandRange).
   subroutine ApplyBandedLaplacian(lapF, f, bandX, bandY, bandZ, nx, ny, nz, p)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     integer(I32), intent(in)  :: nx
     integer(I32), intent(in)  :: ny
@@ -255,7 +255,7 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Grid_Fem_ApplyGradient(gradF, f)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(out), contiguous, target :: gradF(:, :)
     real(R64), intent(in), contiguous, target  :: f(:)
@@ -309,7 +309,7 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Grid_Fem_AddGradientAdjoint(f, gradF)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(inout), contiguous, target :: f(:)
     real(R64), intent(in), contiguous, target    :: gradF(:, :)
@@ -518,7 +518,7 @@ contains
   !> (nx, ny) slices (OpenMP over z) and one DGEMM along z on the (nx ny, nz)
   !> matrix (in -> out -> tmp -> out).
   subroutine ModeProducts(out, in, nx, ny, nz, transposeQ)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Utils_BlasLib, only: DGEMM
 
     integer(I32), intent(in) :: nx
@@ -577,7 +577,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> c(ix, iy, iz) = c(ix, iy, iz) / (lx(ix) + ly(iy) + lz(iz) + shift).
   subroutine DivideBySpectrum(c, shift, nx, ny, nz)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     integer(I32), intent(in) :: nx
     integer(I32), intent(in) :: ny
@@ -605,7 +605,7 @@ contains
   !> (cRe + i cIm)(ix, iy, iz) = (cRe + i cIm)(ix, iy, iz) / (lx(ix) + ly(iy) + lz(iz) + shift)
   !> for a complex shift (the coefficients are kept as two real arrays).
   subroutine DivideBySpectrumComplex(cRe, cIm, shift, nx, ny, nz)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     integer(I32), intent(in) :: nx
     integer(I32), intent(in) :: ny
@@ -635,7 +635,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> part = Re(f) or Im(f) (imagQ), times the 3D weights if weightedQ.
   subroutine ExtractPart(part, f, imagQ, weightedQ)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(out), contiguous   :: part(:)
     complex(R64), intent(in), contiguous :: f(:)
@@ -662,7 +662,7 @@ contains
   !> parts(:, 2) = Im(f) (size(parts, 2) = 1 or 2), times the 3D weights if
   !> weightedQ and times factor_ (default 1), in one pass over f.
   subroutine ExtractParts(parts, f, weightedQ, factor_)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), allocatable, intent(out)  :: parts(:, :)
     complex(R64), intent(in), contiguous :: f(:)
@@ -694,7 +694,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> f = part + 0 i.
   subroutine SetRealPart(f, part)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(out), contiguous :: f(:)
     real(R64), intent(in), contiguous     :: part(:)
@@ -712,7 +712,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> f = Re(f) + part i.
   subroutine SetImagPart(f, part)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(inout), contiguous :: f(:)
     real(R64), intent(in), contiguous       :: part(:)

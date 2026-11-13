@@ -124,6 +124,7 @@ contains
 
     ! weak natural orbitals of the initial state for the first linear step
     call Method_Mb_OrbBased_Td2rdm_RefreshWeakOrbs
+    call Method_Mb_OrbBased_SetSwitchingReference
 
   end subroutine
 
@@ -178,6 +179,7 @@ contains
 
     call TwoRdm_ApplyCommutatorH1(dTwoRdmState, twoRdmState, h1)
     call TwoRdm_ApplyCommutatorH2(dTwoRdmState, twoRdmState, h2)
+    call Reconstruction_SetOrbitals(orbs)
     call Reconstruction_AddCollisionOp(dTwoRdmState, twoRdmState, h2)
 
     call Orbs_ProjectOnSubspace(dOrbs, orbs)
@@ -288,6 +290,7 @@ contains
     call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_=h2)
 
     call TwoRdm_ApplyCommutatorH2(dTwoRdmState, twoRdmState, h2)
+    call Reconstruction_SetOrbitals(orbs)
     call Reconstruction_AddCollisionOp(dTwoRdmState, twoRdmState, h2)
 
     if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs > 0) then

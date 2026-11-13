@@ -49,7 +49,7 @@ contains
     do k = 1, n
       iBlock = blockOf(maxloc(abs(evecs(:, k)), 1))
       do i = 1, n
-        if (blockOf(i) .ne. iBlock .and. evecs(i, k) .ne. (0.0_R64, 0.0_R64)) nOutside = nOutside + 1
+        if (blockOf(i) .ne. iBlock .and. abs(evecs(i, k)) > 0.0_R64) nOutside = nOutside + 1
       end do
     end do
 
@@ -75,7 +75,7 @@ contains
     idx = pack([(i, i=1, n)], blockOf .eq. 1)
     call LapackLib_DiagonalizeHermitianBlocks(evals, evecs, a(idx, idx), [(1, i=1, size(idx))])
     call LapackLib_DiagonalizeGeneric(evalsGeneric, evecsGeneric, a(idx, idx), .true.)
-    sameGenericQ = all(evals .eq. evalsGeneric) .and. all(evecs .eq. evecsGeneric)
+    sameGenericQ = all(abs(evals - evalsGeneric) <= 0.0_R64) .and. all(abs(evecs - evecsGeneric) <= 0.0_R64)
 
     print *, "single block equals DiagonalizeGeneric: ", sameGenericQ
 

@@ -156,7 +156,7 @@ contains
   !> Σ_i c_i of the energy densities (ρ zk) and derivatives of the
   !> functionals, chunk by chunk in Libxc's interleaved layout.
   subroutine EvaluateFunctional(energyDensity, vRho, vSigma, rho, sigma)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(out), contiguous :: energyDensity(:)
     real(R64), intent(out), contiguous :: vRho(:, :)

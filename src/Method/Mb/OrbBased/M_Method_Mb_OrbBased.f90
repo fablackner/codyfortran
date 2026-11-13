@@ -13,10 +13,30 @@
 !> S_Method_Mb_OrbBased_FieldFreeMeanField (the frozen mean-field reference
 !> U) is an add-on of the Cayley variant of the exact field-free part, not a
 !> third exact-part variant next to FieldFreeEigen and FieldFreeCayley.
+!> S_Method_Mb_OrbBased_Switching switches the interaction on adiabatically
+!> (method.mb.orbBased.adiabaticSwitching) with the same frozen mean field
+!> as its reference.
 module M_Method_Mb_OrbBased
   use M_Utils_Types
 
   implicit none
+
+  !=============================================================================
+  ! types
+  !=============================================================================
+
+  !> Frozen Hartree-Fock mean field U = J0 - K0 of a 1-RDM on the grid
+  !> (Method_Mb_OrbBased_FillMeanField): the Hartree potential J0 (in the
+  !> representation of the interaction backend) and the ACE vectors of K0,
+  !> K0 v ~ sum_k zeta_k <zeta_k|v>, exact on the span of the orbitals it was
+  !> built from; the columns zetaStart(bt) .. zetaEnd(bt) act on the orbitals
+  !> of body type bt.
+  type :: T_Method_Mb_OrbBased_MeanField
+    complex(R64), allocatable :: hartree(:)
+    complex(R64), allocatable :: zeta(:, :)
+    integer(I32), allocatable :: zetaStart(:)
+    integer(I32), allocatable :: zetaEnd(:)
+  end type
 
   !=============================================================================
   ! module procedures
@@ -41,11 +61,34 @@ module M_Method_Mb_OrbBased
     !> (and of Method_Mb_OrbBased_FillH1) is time-independent: the kinetic
     !> operator, the external potential and, if bound (a sysGauge block
     !> exists), the gauge coupling all are (their *_timeIndependentQ flags,
-    !> read at call time). The methods with static orbitals (TDCI,
-    !> TD-2RDM-StaticOrbs) refill h1 at every time derivative otherwise.
+    !> read at call time), and there is no adiabatic switching. The methods
+    !> with static orbitals (TDCI, TD-2RDM-StaticOrbs) refill h1 at every time
+    !> derivative otherwise (Method_Mb_OrbBased_RefillStaticH1).
     module function Method_Mb_OrbBased_H1TimeIndependentQ() result(res)
       logical :: res
     end function
+
+    !> The one-body matrix of T + V_ext without the gauge coupling, in the
+    !> layout of Method_Mb_OrbBased_FillH1.
+    module subroutine Method_Mb_OrbBased_FillH0(h0, orbs, time)
+      complex(R64), intent(out), allocatable :: h0(:, :)
+      complex(R64), intent(in), contiguous   :: orbs(:, :)
+      real(R64), intent(in)                  :: time
+    end subroutine
+
+    !> h1 at time for static orbitals (TDCI, TD-2RDM-StaticOrbs): unchanged if
+    !> h1 is time-independent; with a static kinetic operator and external
+    !> potential the static part (h1 at the first call after
+    !> Method_Mb_OrbBased_Setup: the Method_Mb_OrbBased_FillH0 matrix of the
+    !> method setup, or what a program stored instead) plus the gauge coupling;
+    !> otherwise Method_Mb_OrbBased_FillH1; then the switching reference
+    !> (Method_Mb_OrbBased_AddSwitchingReferenceMatrix). The orbitals must not
+    !> change after the first call.
+    module subroutine Method_Mb_OrbBased_RefillStaticH1(h1, orbs, time)
+      complex(R64), intent(inout), allocatable :: h1(:, :)
+      complex(R64), intent(in), contiguous     :: orbs(:, :)
+      real(R64), intent(in)                    :: time
+    end subroutine
 
     !> Eigen variant of Method_Mb_OrbBased_SetupFieldFree (Ylm grids): builds
     !> and diagonalizes the blocks of the field-free one-body Hamiltonian
@@ -228,6 +271,79 @@ module M_Method_Mb_OrbBased
       logical :: res
     end function
 
+    !> The frozen Hartree-Fock mean field U = J0 - K0 of rdm1 on the stored
+    !> orbitals (fermions, body-type-independent interaction): J0 the
+    !> Hartree potential of the density of rdm1 (one potential solve of the
+    !> total source, SysInteraction_FillDirectPotential), K0 the exchange
+    !> operator of rdm1 within every body type (restricted storage: the
+    !> spin-up block for all stored orbitals), compressed by
+    !> SysInteraction_FillExchangeAce (n(n+1)/2 pair potentials). For a single
+    !> determinant h0 + U is its Fock operator.
+    module subroutine Method_Mb_OrbBased_FillMeanField(mf, orbs, rdm1, time, nPairSolves_)
+      !> Output: the mean field.
+      type(T_Method_Mb_OrbBased_MeanField), intent(out) :: mf
+      !> Stored orbitals (nPoints x nOrbsInState).
+      complex(R64), intent(in), contiguous :: orbs(:, :)
+      !> One-body reduced density matrix (nOrbsSum x nOrbsSum,
+      !> rdm1(i, j) = <a+_j a_i>).
+      complex(R64), intent(in), contiguous :: rdm1(:, :)
+      !> Time of the interaction potentials.
+      real(R64), intent(in) :: time
+      !> Optional output: number of pair potentials solved for K0.
+      integer(I32), intent(out), optional :: nPairSolves_
+    end subroutine
+
+    !> w += U z with the mean field mf of body type bt
+    !> (SysInteraction_AddMeanField; scratch: work vector of nPoints).
+    !> Reentrant; its passes are parallel when called outside a parallel
+    !> region.
+    module subroutine Method_Mb_OrbBased_AddMeanField(w, scratch, mf, z, bt)
+      complex(R64), intent(inout), contiguous :: w(:)
+      complex(R64), intent(inout), contiguous :: scratch(:)
+      type(T_Method_Mb_OrbBased_MeanField), intent(in) :: mf
+      complex(R64), intent(in), contiguous :: z(:)
+      integer(I32), intent(in) :: bt
+    end subroutine
+
+    !> Switching factor lambda(t) of the interaction
+    !> (method.mb.orbBased.adiabaticSwitching, S_Method_Mb_OrbBased_Switching):
+    !> sin^2(pi (t + T) / (2 T)) for -T < t < 0 (T = switchTime), 0 before,
+    !> 1 from t = 0 on and without switching. The Hamiltonian of the method is
+    !> h + (1 - lambda) U0 + lambda W.
+    module function Method_Mb_OrbBased_SwitchFactor(time) result(res)
+      real(R64), intent(in) :: time
+      real(R64) :: res
+    end function
+
+    !> Builds the reference U0 of the switching from the current state
+    !> (Method_state, Orbs_orbs): the frozen mean field of its 1-RDM, on the
+    !> grid for moving orbitals (Method_Mb_OrbBased_FillMeanField), as a matrix
+    !> of Method_Mb_OrbBased_h2 for static orbitals. A no-op without
+    !> switching. Called at the end of the setup of every method that
+    !> supports switching; programs that change the state (orthonormalization)
+    !> or the static Hamiltonian (Method_Mb_OrbBased_h2) after Method_Setup
+    !> call it again before the propagation.
+    module subroutine Method_Mb_OrbBased_SetSwitchingReference
+    end subroutine
+
+    !> dOrbs(:, i) += (1 - lambda(time)) U0 orbs(:, i) with the grid reference
+    !> (moving orbitals); a no-op if it is not built or lambda = 1. Part of
+    !> the one-body operator (Method_Mb_OrbBased_ApplySingleBodyOp and the
+    !> linear part with exactFieldFreeQ).
+    module subroutine Method_Mb_OrbBased_AddSwitchingReference(dOrbs, orbs, time)
+      complex(R64), intent(inout), contiguous :: dOrbs(:, :)
+      complex(R64), intent(in), contiguous :: orbs(:, :)
+      real(R64), intent(in) :: time
+    end subroutine
+
+    !> h1 += (1 - lambda(time)) U0 with the matrix reference (static
+    !> orbitals, Method_Mb_OrbBased_RefillStaticH1); a no-op if it is not
+    !> built or lambda = 1.
+    module subroutine Method_Mb_OrbBased_AddSwitchingReferenceMatrix(h1, time)
+      complex(R64), intent(inout), contiguous :: h1(:, :)
+      real(R64), intent(in) :: time
+    end subroutine
+
     !> Eigen variant of Method_Mb_OrbBased_ApplyFieldFreePhi (Ylm grids):
     !> orbs = sum_m phi_m(-i h0 dt) orbsList(:, :, m), evaluated in the
     !> h0 eigenbasis (kept eigenvectors only) (S_Method_Mb_OrbBased_FieldFreeEigen).
@@ -301,6 +417,14 @@ module M_Method_Mb_OrbBased
   !> Method_Mb_OrbBased_h1(i,j) = \(\langle i| H_1 |j\rangle\) representing
   !> kinetic energy and external potentials.
   complex(R64), allocatable :: Method_Mb_OrbBased_h1(:, :)
+
+  !> Switching time T of method.mb.orbBased.adiabaticSwitching (0: no
+  !> switching; Method_Mb_OrbBased_SwitchFactor).
+  real(R64) :: Method_Mb_OrbBased_switchTime = 0.0_R64
+
+  !> Whether the method keeps the orbitals static (TDCI, TD-2RDM-StaticOrbs;
+  !> set by their fabricate): h1 and h2 are matrices of fixed orbitals.
+  logical :: Method_Mb_OrbBased_staticOrbsQ = .false.
 
   !> Regularization parameter for numerical stability.
   !> Used to avoid small denominators or ill-conditioned inversions.

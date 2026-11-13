@@ -55,7 +55,7 @@ contains
   !> @brief Weighted pair density src(i) = conjg(orbConjg(i)) orb(i) w(i), the
   !> Galerkin load of rho = conjg(orbConjg) orb.
   subroutine FillInteractionSrc(src, orbConjg, orb)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Grid
     use M_Grid_Fem
 
@@ -85,7 +85,7 @@ contains
   !> mean-field reference of the Cayley step, serial inside the OpenMP loops
   !> of Method).
   subroutine MultiplyWithInteractionPotential(dOrb, interactionPotential, orb)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(out), contiguous :: dOrb(:)
     complex(R64), intent(in), contiguous  :: interactionPotential(:)

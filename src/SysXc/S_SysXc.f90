@@ -76,7 +76,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> density_p += Re Σ_l conj(orbs(p, l)) weightedOrbs(p, l) on the nodes.
   subroutine AddDensityNodal(density, orbs, weightedOrbs)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(inout), contiguous, target :: density(:)
     complex(R64), intent(in), contiguous, target :: orbs(:, :)
@@ -104,7 +104,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> resOrb_p = pot_p orb_p (diagonal metric: Hermitian for real pot).
   subroutine MultiplyWithPotentialNodal(resOrb, pot, orb)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(out), contiguous, target :: resOrb(:)
     real(R64), intent(in), contiguous, target :: pot(:)

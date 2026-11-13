@@ -14,6 +14,7 @@ program T_Propagator_Exponential
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
+  use M_Utils_UnusedVariables
   use M_Method
   use M_IntegratorList
   use M_Propagator
@@ -186,6 +187,7 @@ contains
     complex(R64), intent(in), contiguous, target :: state(:)
     real(R64), intent(in) :: time
 
+    if (.false.) call UnusedVariables_Mark(time)
     dState(:) = cmplx(0.0_R64, -0.4_R64, kind=R64) * abs(state(:))**2 * state(:)
 
   end subroutine
@@ -196,6 +198,7 @@ contains
     real(R64), intent(in) :: t1
     logical, intent(in), optional :: imagTimeQ_
 
+    if (.false.) call UnusedVariables_Mark(imagTimeQ_)
     state(:) = exp(cmplx(0.0_R64, -omega * (t1 - t0), kind=R64)) * state(:)
 
   end subroutine

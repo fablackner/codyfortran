@@ -13,14 +13,11 @@
 !> - `rdm1a`: 1-RDM stored explicitly (provides the trace)
 !>
 !> This representation has fewer degrees of freedom than full singlet, making it
-!> suitable for constrained propagation and certain ML approaches.
+!> suitable for constrained propagation.
 !>
 !> **Available schemes**:
 !> - `valdemoro`: Free-cumulant approximation on trace-free representation
 !> - `ny`: Nakatsuji-Yasuda correction on trace-free representation
-!> - `mlpFullCop`: Neural network on packed trace-free features
-!> - `cnnFullCop`: Convolutional neural network on 4D tensor input
-!> - `cnnCorrelCop`: CNN correction to Valdemoro collision operator
 !>
 !> @see M_TwoRdm_Fermionic_SingletTr0 for state vector layout
 module M_Reconstruction_SingletTr0

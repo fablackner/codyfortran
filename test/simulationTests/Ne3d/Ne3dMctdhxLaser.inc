@@ -218,7 +218,7 @@ function OtherMEntries(orbs) result(res)
 
   res = 0
   do i = 1, size(orbs, 2)
-    res = res + count(Grid_Ylm_mCoord .ne. Method_Mb_OrbBased_mOfOrb(i) .and. orbs(:, i) .ne. (0.0_R64, 0.0_R64))
+    res = res + count(Grid_Ylm_mCoord .ne. Method_Mb_OrbBased_mOfOrb(i) .and. abs(orbs(:, i)) > 0.0_R64)
   end do
 
 end function

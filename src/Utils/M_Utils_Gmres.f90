@@ -326,7 +326,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> r = b - A y with A applied explicitly (the true residual).
   subroutine ApplyResidual(r, b, y, ApplyMatOnVec)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(out), contiguous :: r(:)
     complex(R64), intent(in), contiguous :: b(:)
@@ -348,7 +348,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> y = y + a x.
   subroutine Axpy(y, a, x)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(inout), contiguous :: y(:)
     complex(R64), intent(in) :: a
@@ -367,7 +367,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> y = a y.
   subroutine Scale(y, a)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(inout), contiguous :: y(:)
     real(R64), intent(in) :: a

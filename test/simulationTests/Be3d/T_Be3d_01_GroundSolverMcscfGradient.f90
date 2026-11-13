@@ -12,6 +12,9 @@
 !> regression into it fails the energy check. Also checks the orbital
 !> energy gradient at convergence and the iteration count (12 at the time of
 !> writing).
+!>
+!> Writes the state (orbXX_YY.in, coeffs.in, rdm2BtXX_YY.in and the up-up-down 3-RDM
+!> rdm3Bt01_01_02.in) for T_Be3d_03 and T_Be3d_04.
 program T_Be3d_01_GroundSolverMcscfGradient
   use M_Utils_Types
   use M_Utils_Say
@@ -24,6 +27,7 @@ program T_Be3d_01_GroundSolverMcscfGradient
   use M_OrbsInit
   use M_ConfigList
   use M_Coeffs
+  use M_Reconstruction_Singlet_Anchor
   use M_CoeffsInit
   use M_Method
   use M_DiagonalizerList
@@ -117,6 +121,11 @@ program T_Be3d_01_GroundSolverMcscfGradient
 
   call check(error, iter <= 20)
   if (allocated(error)) error stop "T_Be3d_01_GroundSolverMcscfGradient failure: more than 20 iterations"
+
+  call Orbs_SaveOrbs(Orbs_orbs)
+  call Coeffs_SaveCoeffs(Coeffs_coeffs)
+  call Coeffs_SaveTwoRdm(Coeffs_coeffs)
+  call Reconstruction_Singlet_Anchor_SaveReference(reshape(Coeffs_coeffs, [Coeffs_nCoeffs, 1]))
 
   !==========================================
   call Say_Goodbye

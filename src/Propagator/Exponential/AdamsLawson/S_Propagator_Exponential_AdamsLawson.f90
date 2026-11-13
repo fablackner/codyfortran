@@ -140,7 +140,7 @@ contains
       ! interaction-picture state at t0 (vLast belongs to an older tRef after a restart)
       if (restartQ) then
         v = state
-      else if (all(state .eq. uLast)) then
+      else if (all(abs(state - uLast) <= 0.0_R64)) then
         v = vLast
       else
         v = state

@@ -364,7 +364,7 @@ contains
   !> density += Re conj(a) b (or |a|² if sameQ) point by point (a, b of
   !> rank 2 or 3 in the layout of the xc points; b unused if sameQ).
   subroutine AccumulateProduct(density, a, b, sameQ)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(inout), contiguous :: density(:)
     complex(R64), intent(in), contiguous, target :: a(..)
@@ -396,7 +396,7 @@ contains
   !> resOrb = v orb: nodes, multiplication, projection (per m block in the
   !> axial mode).
   subroutine MultiplyWithPotential(resOrb, pot, orb)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Grid_Ylm
 
     complex(R64), intent(out), contiguous, target :: resOrb(:)
@@ -442,7 +442,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> vals(:, :, k) = Σ_m f_m(r, θ_q) e^{imφ_k} of an orbital (general mode).
   subroutine OrbitalToPoints(vals, orb)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Grid_Ylm
 
     complex(R64), intent(out), contiguous :: vals(:, :, :)
@@ -547,7 +547,7 @@ contains
   !> pot += Re V on the xc points for V in the interaction layout (m = 0 in
   !> the axial mode).
   subroutine AddInteractionPotential(pot, interactionPotential)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(inout), contiguous, target :: pot(:)
     complex(R64), intent(in), contiguous, target :: interactionPotential(:)
@@ -587,7 +587,7 @@ contains
   !> gradF = (∂_r f, (1/r) ∂_θ f, (1/(r sinθ)) ∂_φ f) of a real field with
   !> angular band limit lmaxDensity, mmaxDensity (module header).
   subroutine ApplyGradient(gradF, f)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(out), contiguous, target :: gradF(:, :)
     real(R64), intent(in), contiguous, target :: f(:)
@@ -646,7 +646,7 @@ contains
   !> f += G^† gradF in the metric of the xc points: the transposed radial
   !> band, analysis with dΘ/dθ and synthesis with Θ (θ), and -∂_φ (φ).
   subroutine AddGradientAdjoint(f, gradF)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     real(R64), intent(inout), contiguous, target :: f(:)
     real(R64), intent(in), contiguous, target :: gradF(:, :)
@@ -717,7 +717,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> fAll(:, :, m) = (1/nPhi) Σ_k f(:, :, k) e^{-imφ_k}, m = 0..mD.
   subroutine FillFourierCoefficients(fAll, f3, mD)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(out), contiguous :: fAll(:, :, 0:)
     real(R64), intent(in), contiguous :: f3(:, :, :)

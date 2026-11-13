@@ -214,6 +214,9 @@ Or for trace-free singlet:
                                      - W_{k₁k₂;j₁j₂}D²_{i₁i₂;k₁k₂} )
 ```
 
+For the up-down block of the singlet backends this is 2 (W D² − D² W) of
+(nα nβ) × (nα nβ) matrices, two ZGEMMs (`RdmAlgebra_AddCommutatorH2ab`).
+
 ### Partial Trace (1-RDM from 2-RDM)
 
 ```

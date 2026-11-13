@@ -192,7 +192,7 @@ contains
     ! context, the work vectors and the step data are shared (not reentrant),
     ! the vector passes and the kinetic solves are parallel internally.
     !---------------------------------------------------------------------------
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Grid
 
     complex(R64), intent(inout), contiguous :: orbs(:, :)
@@ -209,7 +209,7 @@ contains
     if (.not. setupQ) &
       error stop "method.mb.orbBased.exactFieldFreeQ (Cayley): call Method_Setup before propagating"
     inParallelQ = .false.
-    !$ inParallelQ = omp_in_parallel()
+!$  inParallelQ = omp_in_parallel()
     if (inParallelQ) &
       error stop "method.mb.orbBased.exactFieldFreeQ (Cayley): the propagation is not reentrant &
                  &(shared work arrays); call it outside OpenMP parallel regions"
@@ -265,7 +265,7 @@ contains
   !> preconditioner of the GMRES solve (I_Gmres_ApplyPrecOnVec; dt = stepDt,
   !> bt = stepBt).
   subroutine ApplyPreconditioner(z, v)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_SysKinetic
 
     complex(R64), intent(out), contiguous :: z(:)
@@ -291,7 +291,7 @@ contains
   !> representation of the cached potential, a nodal product on grid.fem);
   !> w = 0 without sysPotential.
   subroutine ApplyStaticPotential(w, z)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_SysPotential
 
     complex(R64), intent(out), contiguous :: w(:)
@@ -333,7 +333,7 @@ contains
   !> Arnoldi operator of the GMRES solve (I_Gmres_ApplyMatOnPrecVec; dt =
   !> stepDt, body type stepBt, workScratch: work vector of U).
   subroutine ApplyPreconditionedSystem(w, v, z)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(out), contiguous :: w(:)
     complex(R64), intent(in), contiguous :: v(:)
@@ -359,7 +359,7 @@ contains
   !> (I_Gmres_ApplyMatOnVec; dt = stepDt, bt = stepBt, workScratch: work
   !> vector of U, then T z).
   subroutine ApplySystem(w, z)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_SysKinetic
 
     complex(R64), intent(out), contiguous :: w(:)
@@ -383,7 +383,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> phi <- 2 y - phi (Cayley transform from the solution of (1 + A) y = phi).
   subroutine CombineCayley(phi, y)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(inout), contiguous :: phi(:)
     complex(R64), intent(in), contiguous :: y(:)

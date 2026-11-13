@@ -30,6 +30,7 @@ contains
     !------------------------------------
 
     Method_Setup => Setup
+    Method_Mb_OrbBased_staticOrbsQ = .true.
     Method_Mb_OrbBased_FillRdm1 => FillRdm1
     Method_Mb_OrbBased_FillRdm2 => FillRdm2
     Method_TimeDerivative => TimeDerivative
@@ -67,7 +68,9 @@ contains
     Orbs_orbs(1:nG, 1:nOS) => staticComponents(1:nVals2)
     call OrbsInit_Initialize(Orbs_orbs)
 
-    call Method_Mb_OrbBased_FillH1(Method_Mb_OrbBased_h1, Orbs_orbs, 0.0_R64)
+    ! the static Hamiltonian; the time-dependent terms follow in
+    ! Method_Mb_OrbBased_RefillStaticH1
+    call Method_Mb_OrbBased_FillH0(Method_Mb_OrbBased_h1, Orbs_orbs, 0.0_R64)
     call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, Orbs_orbs, 0.0_R64)
 
   end subroutine
@@ -84,11 +87,8 @@ contains
     real(R64), intent(in)             :: time
 
     ! h1 (kinetic + external potential + gauge coupling) at this time if any
-    ! of its terms depends on time (the laser of sysGauge, e.g. the length
-    ! gauge sysGauge.fem.length or the Ylm velocity gauge, included)
-    if (.not. Method_Mb_OrbBased_H1TimeIndependentQ()) then
-      call Method_Mb_OrbBased_FillH1(Method_Mb_OrbBased_h1, Orbs_orbs, time)
-    end if
+    ! of its terms depends on time (a sysGauge laser included)
+    call Method_Mb_OrbBased_RefillStaticH1(Method_Mb_OrbBased_h1, Orbs_orbs, time)
 
     if (.not. SysInteraction_timeIndependentQ) then
       call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, Orbs_orbs, time)

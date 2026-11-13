@@ -21,7 +21,7 @@ program T_SysGauge_Fem_Length
   use M_Grid
   use M_Grid_Fem
   use M_SysGauge
-  use M_SysGauge_Fem_Length
+  use M_SysGauge_Length
   use testdrive, only: check, error_type
 
   implicit none
@@ -69,7 +69,7 @@ program T_SysGauge_Fem_Length
   if (allocated(error)) error stop "T_SysGauge_Fem_Length flags failure"
 
   polRef = [1.0_R64, 2.0_R64, -2.0_R64] / 3.0_R64
-  errPolarization = maxval(abs(SysGauge_Fem_Length_polarization - polRef))
+  errPolarization = maxval(abs(SysGauge_Length_polarization - polRef))
 
   call check(error, errPolarization, 0.0_R64, thr=1.0e-15_R64)
   if (allocated(error)) error stop "T_SysGauge_Fem_Length polarization failure"
@@ -85,21 +85,21 @@ program T_SysGauge_Fem_Length
     time = tStart + insideFractions(k) * duration
     fieldRef = fieldStrength * sin(PI * insideFractions(k))**2 * &
                cos(omega * (insideFractions(k) * duration - 0.5_R64 * duration) + cep)
-    errField = max(errField, abs(SysGauge_Fem_Length_FieldAmplitude(time) - fieldRef))
+    errField = max(errField, abs(SysGauge_Length_FieldAmplitude(time) - fieldRef))
   end do
 
   call check(error, errField, 0.0_R64, thr=1.0e-15_R64)
   if (allocated(error)) error stop "T_SysGauge_Fem_Length field amplitude failure"
 
   ! the envelope peak: E0 cos(cep)
-  call check(error, SysGauge_Fem_Length_FieldAmplitude(tStart + 0.5_R64 * duration), fieldStrength * cos(cep), &
+  call check(error, SysGauge_Length_FieldAmplitude(tStart + 0.5_R64 * duration), fieldStrength * cos(cep), &
              thr=1.0e-15_R64)
   if (allocated(error)) error stop "T_SysGauge_Fem_Length field at the envelope peak failure"
 
-  errOutside = max(abs(SysGauge_Fem_Length_FieldAmplitude(0.0_R64)), &
-                   abs(SysGauge_Fem_Length_FieldAmplitude(tStart - 0.01_R64)), &
-                   abs(SysGauge_Fem_Length_FieldAmplitude(tStart + duration + 0.01_R64)), &
-                   abs(SysGauge_Fem_Length_FieldAmplitude(tStart + 3.0_R64 * duration)))
+  errOutside = max(abs(SysGauge_Length_FieldAmplitude(0.0_R64)), &
+                   abs(SysGauge_Length_FieldAmplitude(tStart - 0.01_R64)), &
+                   abs(SysGauge_Length_FieldAmplitude(tStart + duration + 0.01_R64)), &
+                   abs(SysGauge_Length_FieldAmplitude(tStart + 3.0_R64 * duration)))
 
   call check(error, errOutside <= 0.0_R64, "the field must vanish outside the pulse")
   if (allocated(error)) error stop "T_SysGauge_Fem_Length field outside the pulse failure"
@@ -112,7 +112,7 @@ program T_SysGauge_Fem_Length
   g = Gaussian(0.6_R64, [-0.4_R64, 0.1_R64, -0.6_R64], -0.5_R64)
 
   time = tStart + 0.3_R64 * duration
-  field = SysGauge_Fem_Length_FieldAmplitude(time)
+  field = SysGauge_Length_FieldAmplitude(time)
 
   call SysGauge_MultiplyWithGaugeOp(hf, f, time, bt_=1)
 

@@ -121,7 +121,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> @brief f = factor f (OpenMP over the nodes outside parallel regions).
   subroutine ScaleField(f, factor)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
 
     complex(R64), intent(inout), contiguous :: f(:)
     real(R64), intent(in)                   :: factor

@@ -75,6 +75,8 @@ contains
     call GetOrbs(Orbs_orbs, Method_state)
     call OrbsInit_Initialize(Orbs_orbs)
 
+    call Method_Mb_OrbBased_SetSwitchingReference
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -560,7 +560,7 @@ contains
     end do
     hKnown(m + 1:m + nKeepP, m + 1:m + nKeepP) = matmul(conjg(transpose(uP_)), uTheta)
     hKnown(m + 1:m + nKeepP, m + 1:m + nKeepP) = 0.5_R64 * (hKnown(m + 1:m + nKeepP, m + 1:m + nKeepP) &
-                                                   + conjg(transpose(hKnown(m + 1:m + nKeepP, m + 1:m + nKeepP))))
+                                                            + conjg(transpose(hKnown(m + 1:m + nKeepP, m + 1:m + nKeepP))))
 
   end subroutine
 
@@ -899,7 +899,7 @@ contains
 !> deterministic for a given number of threads.
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine WeightedGram(g, a, b, wts, nRows, nA, nB)
-    !$ use omp_lib, only: omp_get_thread_num, omp_get_max_threads
+!$  use omp_lib, only: omp_get_thread_num, omp_get_max_threads
     use M_Utils_BlasLib, only: ZGEMM
 
     integer(I32), intent(in) :: nRows, nA, nB
@@ -919,14 +919,14 @@ contains
     nChunks = (nRows + CHUNK_ROWS - 1) / CHUNK_ROWS
     threadsQ = ParallelWorkQ(nRows, nA * nB)
     nThreads = 1
-    !$ if (threadsQ) nThreads = int(omp_get_max_threads(), I32)
+!$  if (threadsQ) nThreads = int(omp_get_max_threads(), I32)
 
     allocate (gParts(nA, nB, nThreads))
     gParts(:, :, :) = ZERO
 
     !$omp parallel default(shared) private(buf, iChunk, r0, nr, i, j, iThread) num_threads(nThreads) if (threadsQ)
     iThread = 1
-    !$ iThread = int(omp_get_thread_num(), I32) + 1
+!$  iThread = int(omp_get_thread_num(), I32) + 1
     allocate (buf(CHUNK_ROWS, nB))
     !$omp do schedule(static)
     do iChunk = 1, nChunks
@@ -1087,7 +1087,7 @@ contains
 !> @brief Whether a vector pass of the given size should be threaded.
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   function ParallelWorkQ(nRows, nProducts) result(res)
-    !$ use omp_lib, only: omp_in_parallel
+!$  use omp_lib, only: omp_in_parallel
     use M_Utils_UnusedVariables
 
     logical :: res
@@ -1099,7 +1099,7 @@ contains
     if (.false.) call UnusedVariables_Mark(nRows, nProducts)
 
     res = .false.
-    !$ res = (.not. omp_in_parallel()) .and. int(nRows, I64) * int(nProducts, I64) >= MIN_PARALLEL_WORK
+!$  res = (.not. omp_in_parallel()) .and. int(nRows, I64) * int(nProducts, I64) >= MIN_PARALLEL_WORK
 
   end function
 
