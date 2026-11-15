@@ -1,0 +1,10 @@
+{
+    "reconstruction": {
+        "singlet": {
+            "singletNy": {},
+            "triples": {
+                "moellerPlesset": {}
+            }
+        }
+    }
+}

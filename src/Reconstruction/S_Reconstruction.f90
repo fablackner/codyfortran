@@ -31,6 +31,7 @@ contains
 
     Reconstruction_Setup => NoOpProcedures_Setup
     Reconstruction_SetOrbitals => NoOpProcedures_SetOrbitals
+    Reconstruction_SetHamiltonian => NoOpProcedures_SetHamiltonian
 
     !------------------------------------
     ! set values and procedure pointers

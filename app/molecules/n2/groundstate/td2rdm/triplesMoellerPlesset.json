@@ -1,0 +1,105 @@
+{
+    "grid": {
+        "prolate": {
+            "R": 2.068,
+            "ximax": 12.0,
+            "mmax": 1,
+            "nEta": 80,
+            "fedvr": {
+                "nElements": 12,
+                "nLocals": 16,
+                "grading": 2.0
+            }
+        }
+    },
+    "sysKinetic": {
+        "prolate": {
+            "laplacian": {
+                "bodyMass": [
+                    1.0,
+                    1.0
+                ],
+                "fedvr": {}
+            }
+        }
+    },
+    "sysPotential": {
+        "prolate": {
+            "coulomb": {
+                "charge": 7.0
+            }
+        }
+    },
+    "sysInteraction": {
+        "prolate": {
+            "coulomb": {
+                "strength": 1.0,
+                "stdImpl": {}
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": true
+    },
+    "orbsInit": {
+        "load": {
+            "dir": "../mcscf"
+        }
+    },
+    "integratorList": {
+        "rk": {
+            "o4Expl": {}
+        }
+    },
+    "propagator": {
+        "single": {}
+    },
+    "program": {
+        "relaxTime": 10.0,
+        "outputStep": 0.2,
+        "nTimeSteps": 5,
+        "outputName": "triplesMoellerPlesset",
+        "saveQ": false
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [
+                7,
+                7
+            ],
+            "bodyStatistics": [
+                "f",
+                "f"
+            ],
+            "orbBased": {
+                "nOrbs": [
+                    10,
+                    10
+                ],
+                "td2rdmStaticOrbs": {},
+                "adiabaticSwitching": {
+                    "switchTime": 40.0
+                }
+            }
+        }
+    },
+    "twoRdm": {
+        "fermionic": {
+            "singlet": {}
+        }
+    },
+    "twoRdmInit": {
+        "excited": {}
+    },
+    "reconstruction": {
+        "singlet": {
+            "singletNy": {
+                "ccQ": true
+            },
+            "triples": {
+                "moellerPlesset": {}
+            }
+        }
+    }
+}

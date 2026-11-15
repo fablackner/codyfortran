@@ -59,4 +59,57 @@ contains
 
   end subroutine
 
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> A block of a ket-first RDM of even rank r, given in a subset of orbitals,
+  !> in all n orbitals: y(.., i, ..) = sum_k mKet(i, k) x(.., k, ..) on the r/2
+  !> ket indices (extent size(mKet, 2) in x) and conjg(mBra) on the r/2 bra
+  !> indices (extent size(mBra, 2)); y has n^r elements, n = size(mKet, 1).
+  !> With the columns of two sets of orbitals as mKet and mBra this embeds
+  !> the block that annihilates in the first and creates in the second set.
+  !> One ZGEMM per index, as RdmBasisChange_Transform, on arrays that grow
+  !> from the block to n^r.
+  subroutine RdmBasisChange_EmbedBlock(y, x, r, mKet, mBra)
+    use M_Utils_BlasLib
+    use M_Utils_Constants, only: CONE, CZERO
+
+    complex(R64), intent(out)            :: y(*)
+    complex(R64), intent(in)             :: x(*)
+    integer(I32), intent(in)             :: r
+    complex(R64), intent(in), contiguous :: mKet(:, :)
+    complex(R64), intent(in), contiguous :: mBra(:, :)
+
+    complex(R64), allocatable :: work(:), mBraConjg(:, :)
+    integer(I32) :: n, nKet, nBra, mode, nRest
+
+    if (mod(r, 2) .ne. 0) error stop "RdmBasisChange_EmbedBlock: the rank must be even"
+    n = size(mKet, 1)
+    nKet = size(mKet, 2)
+    nBra = size(mBra, 2)
+    mBraConjg = conjg(mBra)
+    allocate (work(n**r))
+
+    ! dst(rest, i) = sum_k a(i, k) src(k, rest): the leading index is
+    ! transformed and moved last; r steps (even) end in y
+    do mode = 1, r
+      if (mode <= r / 2) then
+        nRest = nKet**(r / 2 - mode) * nBra**(r / 2) * n**(mode - 1)
+        if (mode .eq. 1) then
+          call ZGEMM('T', 'T', nRest, n, nKet, CONE, x, nKet, mKet, n, CZERO, work, nRest)
+        else if (mod(mode, 2) .eq. 0) then
+          call ZGEMM('T', 'T', nRest, n, nKet, CONE, work, nKet, mKet, n, CZERO, y, nRest)
+        else
+          call ZGEMM('T', 'T', nRest, n, nKet, CONE, y, nKet, mKet, n, CZERO, work, nRest)
+        end if
+      else
+        nRest = nBra**(r - mode) * n**(mode - 1)
+        if (mod(mode, 2) .eq. 0) then
+          call ZGEMM('T', 'T', nRest, n, nBra, CONE, work, nBra, mBraConjg, n, CZERO, y, nRest)
+        else
+          call ZGEMM('T', 'T', nRest, n, nBra, CONE, y, nBra, mBraConjg, n, CZERO, work, nRest)
+        end if
+      end if
+    end do
+
+  end subroutine
+
 end module

@@ -31,6 +31,17 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine NoOpProcedures_SetHamiltonian(h1, h2)
+    use M_Utils_UnusedVariables
+
+    complex(R64), intent(in), contiguous :: h1(:, :)
+    complex(R64), intent(in), contiguous :: h2(:, :, :, :)
+
+    if (.false.) call UnusedVariables_Mark(h1, h2)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine NoOpProcedures_ApplyAbsorber(orbs)
     use M_Utils_UnusedVariables
 

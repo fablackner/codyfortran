@@ -93,6 +93,21 @@ module M_Reconstruction
     end subroutine
   end interface
 
+  !> The Hamiltonian matrices in the orbitals of the 2-RDM that the next
+  !> Reconstruction_AddCollisionOp refers to: h1 (one-body operator, all spin
+  !> orbitals) and h2 (the tensor passed to AddCollisionOp, with every factor
+  !> it carries in the Hamiltonian). Methods with static orbitals call it
+  !> before every AddCollisionOp. Defaults to a no-op; a closure that depends
+  !> on the Hamiltonian (Singlet/Triples/) keeps what it needs.
+  procedure(I_Reconstruction_SetHamiltonian), pointer :: Reconstruction_SetHamiltonian => NoOpProcedures_SetHamiltonian
+  abstract interface
+    subroutine I_Reconstruction_SetHamiltonian(h1, h2)
+      import :: R64
+      complex(R64), intent(in), contiguous :: h1(:, :)
+      complex(R64), intent(in), contiguous :: h2(:, :, :, :)
+    end subroutine
+  end interface
+
   !> @brief Pointer to the routine that accumulates the 2-body collision operator.
   !>
   !> This is the main entry point called during each time derivative evaluation.

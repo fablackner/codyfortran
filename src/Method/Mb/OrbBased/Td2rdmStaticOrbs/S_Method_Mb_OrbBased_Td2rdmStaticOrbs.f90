@@ -92,21 +92,38 @@ contains
     complex(R64), intent(in), contiguous, target  :: twoRdmState(:)
     real(R64), intent(in)             :: time
 
+    complex(R64), allocatable :: h2Switched(:, :, :, :)
     real(R64) :: lambda
 
     ! h1 at this time if any of its terms depends on time (as TDCI); h2 is
-    ! static, its terms (both linear in h2) carry the switching factor
+    ! static and enters as lambda h2 during the adiabatic switching. The
+    ! reconstruction gets the Hamiltonian it closes (a closure may depend on
+    ! it), so the collision operator carries lambda through its h2.
     call Method_Mb_OrbBased_RefillStaticH1(Method_Mb_OrbBased_h1, Orbs_orbs, time)
+    lambda = Method_Mb_OrbBased_SwitchFactor(time)
 
     dTwoRdmState(:) = 0.0_R64
 
-    call TwoRdm_ApplyCommutatorH2(dTwoRdmState, twoRdmState, Method_Mb_OrbBased_h2)
-    call Reconstruction_AddCollisionOp(dTwoRdmState, twoRdmState, Method_Mb_OrbBased_h2)
-    lambda = Method_Mb_OrbBased_SwitchFactor(time)
-    if (lambda < 1.0_R64) dTwoRdmState(:) = lambda * dTwoRdmState(:)
+    if (lambda < 1.0_R64) then
+      h2Switched = lambda * Method_Mb_OrbBased_h2
+      call AddTwoBodyTerms(h2Switched)
+    else
+      call AddTwoBodyTerms(Method_Mb_OrbBased_h2)
+    end if
     call TwoRdm_ApplyCommutatorH1(dTwoRdmState, twoRdmState, Method_Mb_OrbBased_h1)
 
     dTwoRdmState(:) = -IU * dTwoRdmState(:) ! out is the time-derivative!
+
+  contains
+
+    subroutine AddTwoBodyTerms(h2)
+      complex(R64), intent(in), contiguous :: h2(:, :, :, :)
+
+      call TwoRdm_ApplyCommutatorH2(dTwoRdmState, twoRdmState, h2)
+      call Reconstruction_SetHamiltonian(Method_Mb_OrbBased_h1, h2)
+      call Reconstruction_AddCollisionOp(dTwoRdmState, twoRdmState, h2)
+
+    end subroutine
 
   end subroutine
 

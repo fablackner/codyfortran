@@ -13,7 +13,8 @@
 !> closure Reconstruction_Singlet_FillRdm3aab, never AddCollisionOp or Setup:
 !> the family driver (S_Reconstruction_Singlet) unpacks the state, enforces
 !> the contraction consistency (`<scheme>.ccQ`) and adds the collision
-!> operator. Extensions of the closure live in subfolders (Anchor/).
+!> operator. Extensions wrap the closure and live in subfolders (Triples/,
+!> Anchor/).
 !>
 !> All RDMs are ket-first (the layout of TwoRdm):
 !>   rdm2ab(i1,i2,j1,j2)        = <a+_j1a a+_j2b a_i2b a_i1a>,

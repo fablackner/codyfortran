@@ -28,6 +28,7 @@ M_Reconstruction (root interface)
 ├── Singlet/           ← spin-singlet (S=0) implementations
 │   ├── Valdemoro/     ← Valdemoro for α-β blocks
 │   ├── Ny/            ← Nakatsuji-Yasuda (cumulant products via R = 2 P_occ - 1)
+│   ├── Triples/       ← optional extension: connected triples (own A_*.md)
 │   └── Anchor/        ← optional extension of the closure (own A_*.md)
 │
 └── SingletTr0/        ← trace-free singlet state representation
@@ -81,7 +82,14 @@ and binds `Reconstruction_AddCollisionOp`, which
 
 Steps 2 and 3 are `Reconstruction_Singlet_ReconstructRdm3aab`. Extensions
 wrap the closure pointer (and, if needed, the collision operator) instead of
-changing the driver: `Singlet/Anchor/` is one.
+changing the driver, each one wrapping the closure bound before it:
+
+- `Singlet/Triples/` (`triples`): the connected triples block of the
+  3-cumulant from the 2-cumulant, the interaction and the orbital energies
+  (`moellerPlesset`). It needs the Hamiltonian
+  (`Reconstruction_SetHamiltonian`). It improves NY for C2H4 and not for Ne
+  and N2.
+- `Singlet/Anchor/` (`anchor`): the closure error at a reference state.
 
 The Generic and SingletTr0 schemes bind their own AddCollisionOp. Cost per
 derivative (NY with ccQ, static orbitals, ethylene, 14 orbitals, 8 threads):
@@ -96,6 +104,7 @@ call Reconstruction_Fabricate       ! Bind implementation from JSON
 call Reconstruction_Setup           ! Workspace, reference data (after Method_Setup)
 call Reconstruction_AddCollisionOp(dD2, D2, h2)  ! Add [Ŵ,D³] to dD²/dt
 call Reconstruction_SetOrbitals(orbs)  ! orbitals of the 2-RDM (moving-orbital methods; default no-op)
+call Reconstruction_SetHamiltonian(h1, h2)  ! Hamiltonian of the next AddCollisionOp (td2rdmStaticOrbs; default no-op)
 ```
 
 ### `Reconstruction_AddCollisionOp(dTwoRdmState, twoRdmState, h2)`
@@ -107,6 +116,15 @@ call Reconstruction_SetOrbitals(orbs)  ! orbitals of the 2-RDM (moving-orbital m
 | `dTwoRdmState`  | `complex(R64)(:)` INOUT | Packed derivative vector; collision term **added** in-place |
 | `twoRdmState`   | `complex(R64)(:)` IN   | Packed 2-RDM state vector |
 | `h2`            | `complex(R64)(:,:,:,:)` IN | Two-body Hamiltonian tensor |
+
+### `Reconstruction_SetHamiltonian(h1, h2)`
+
+For closures that depend on the Hamiltonian (`Singlet/Triples/`): the
+one-body matrix of all spin orbitals and the h2 of the next
+`Reconstruction_AddCollisionOp`, with every factor h2 carries in the
+Hamiltonian. `td2rdmStaticOrbs` calls it before every AddCollisionOp and
+passes λ h2 to both during adiabatic switching. The TD-2RDM method with
+moving orbitals does not call it yet.
 
 ## JSON Configuration
 
@@ -147,6 +165,8 @@ A family block takes exactly one scheme, for example:
 | Path | Type | Default | Description |
 |------|------|---------|-------------|
 | `reconstruction.singlet.<scheme>.ccQ` | bool | false | Contraction consistency of D3 (valdemoro, singletNy) |
+| `reconstruction.singlet.triples.moellerPlesset` | object | absent | Connected triples (`Singlet/Triples/A_Reconstruction_Singlet_Triples.md`) |
+| `reconstruction.singlet.anchor` | object | absent | Anchored closure (`Singlet/Anchor/A_Reconstruction_Singlet_Anchor.md`) |
 
 ## Adding a New Reconstruction Scheme
 
@@ -215,6 +235,8 @@ Any other scheme (Generic, SingletTr0, or a collision operator of its own):
   propagation (generic and singlet, weak orbitals, split step).
 - `test/simulationTests/Be3d/T_Be3d_04_Td2rdmSpectralAnchor` pins the NY
   closure at a correlated Be state (the anchor tests: `Singlet/Anchor/`).
+- `test/componentTests/Reconstruction/Singlet/Triples/T_Reconstruction_Singlet_Triples`:
+  the triples cumulant (symmetries, vanishing contractions, covariance, pinned norm).
 - `test/componentTests/Reconstruction/SingletTr0/T_Reconstruction_SingletTr0_Ny`,
   `test/componentTests/Utils/T_Utils_RdmEnforceTrace` (idempotent and
   contraction-free projections).

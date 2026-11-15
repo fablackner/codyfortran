@@ -66,7 +66,7 @@ complex(R64), intent(inout), contiguous :: A2(:,:,:,:)
 | `M_Utils_RdmProjection`         | Project corrections onto energy-conserving subspaces      |
 | `M_Utils_RdmDiagonalize`        | Diagonalize RDMs to obtain natural orbitals/occupations; `RdmDiagonalize_Rdm1(..., blockOf_)` diagonalizes per block (e.g. `Orbs_blockOfOrb`) |
 | `M_Utils_RdmObservables`        | Compute expectation values from RDMs                      |
-| `M_Utils_RdmBasisChange`        | Basis change of ket-first RDMs: `RdmBasisChange_Transform(x, r, m)`, rdm ← m rdm m^+ in every particle, one ZGEMM per index (threaded BLAS: call outside parallel regions) |
+| `M_Utils_RdmBasisChange`        | Basis change of ket-first RDMs: `RdmBasisChange_Transform(x, r, m)`, rdm ← m rdm m^+ in every particle, one ZGEMM per index (threaded BLAS: call outside parallel regions); `RdmBasisChange_EmbedBlock(y, x, r, mKet, mBra)` embeds a block given in two subsets of orbitals (rectangular mKet, mBra) in all n orbitals |
 | `M_Utils_RdmCollisionOp`        | Collision operators Tr₃[Ŵ, D³] (spin-orbital, singlet aab: one ZGEMM) and Tr₂[Ŵ, D²] (1-RDM, singlet); sizes from the arguments |
 | `M_Utils_RdmSingletRelations`   | Singlet spin-symmetry relations between RDM blocks        |
 | `M_Utils_RdmEnforceTraceM2ab`   | Enforce trace constraints on α-β 2-RDM; coefficients cached per nDim and recomputed when nDim changes |

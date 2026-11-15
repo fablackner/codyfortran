@@ -35,6 +35,7 @@ molecules/
   h2/        groundstate/scfProlate            P_GroundScfProlate     RHF on the prolate spheroidal grid
   n2/        groundstate/scf                   P_GroundScfProlate     RHF on the prolate spheroidal grid
              groundstate/mcscf                 P_GroundMcscf          MCSCF, 10 orbitals, TD-2RDM anchor
+             groundstate/td2rdm                P_GroundTd2rdm         TD-2RDM by adiabatic switching in the MCSCF orbitals
              dynamics/staticOrbs               P_LaserStaticOrbs      TDCI and TD-2RDM in a pulse along the bond
   c2h4/      groundstate/scf                   P_GroundScfFem         RHF on grid.fem
              analysis/integrals                P_IntegralsFem         integrals of HF orbitals + STOs
@@ -210,6 +211,73 @@ same orbitals):
   state the closure errors of second order remain, and without purification
   the spectral anchor alone diverges after strong driving (occupations
   above 1 that grow exponentially).
+
+### N2 ground state by adiabatic switching: NY against NY plus triples
+
+`n2/groundstate/td2rdm` (`P_GroundTd2rdm`, td2rdmStaticOrbs) takes the 10
+MCSCF orbitals of `../mcscf`, rotates them to the Hartree-Fock orbitals of
+that space (E = −132.685598), starts from the determinant and switches the
+correlation on over 40 a.u. (RK4, dt 0.04), then propagates 10 a.u. without
+switching. The exact energy in these orbitals is the CI energy of the
+MCSCF, −132.836239 (E_corr −150.64 mHa; occupations 1πu 0.97099, 1πg
+0.03216, 3σu 0.00964). Inputs: `P_GroundTd2rdm.json` (NY with ccQ) and
+`triplesMoellerPlesset.json` (`./P_GroundTd2rdm.exe
+triplesMoellerPlesset.json`), which adds `reconstruction.singlet.triples`
+(`src/Reconstruction/Singlet/Triples/A_Reconstruction_Singlet_Triples.md`).
+
+| closure | E(0) − E_exact | 1πu | 1πg | 3σu | min eig D | min eig Q | run (2 threads) |
+|---|---|---|---|---|---|---|---|
+| NY + ccQ | −0.061 mHa | 0.97135 | 0.03317 | 0.00884 | +1.7e-5 | −2.4e-3 | 9 min |
+| + triples, Møller–Plesset | +0.141 mHa | 0.97180 | 0.03040 | 0.01115 | −4.5e-3 | −4.0e-3 | 20 min |
+| + triples, Epstein–Nesbet (not kept) | +0.232 mHa | 0.97201 | 0.02797 | 0.01333 | −1.4e-2 | −5.7e-3 | 20 min |
+| + triples, ladder (not kept) | +0.192 mHa | 0.97189 | 0.02950 | 0.01191 | −7.7e-3 | −4.5e-3 | 53 min |
+
+The triples make the switched ground state worse in every column. At the
+exact MCSCF 2-RDM the same Møller–Plesset term brings the closure error
+|D3 − R(D2)| from 4.5e-2 to 1.9e-2 and the error of the collision term to
+45% (the pure ooo|vvv block that NY misses holds 82% of the squared error of
+NY). The propagated state does not follow. Two more runs separate the
+reasons:
+
+| closure | switch | E(0) − E_exact | min eig D | min eig Q |
+|---|---|---|---|---|
+| NY + ccQ | 80 a.u. | −0.196 mHa | +8.9e-5 | −3.0e-3 |
+| + triples, Møller–Plesset | 80 a.u. | +0.211 mHa | −8.4e-3 | −4.8e-3 |
+| + triples, Møller–Plesset, doubles blocks only (not kept) | 40 a.u. | −0.219 mHa | −2.7e-5 | −6.0e-3 |
+
+The energy of NY itself depends on the switch time at the 0.1 mHa level. With
+the triples the negative eigenvalue of D doubles with the switch time: the
+term on the ov|vv block drives a coherence between the nearly degenerate
+pairs σu σ* and π*π*, which drains the π*π* pair population at a constant
+rate (the same rate when the propagation starts from the exact 2-RDM). With
+the triples kept in the doubles equation only D stays
+positive and the energy drops by 0.16 mHa, the triples energy of
+perturbation theory, but NY alone is already below the CI energy, so the
+result is further away, and the energy is no longer conserved (4e-5 Ha in
+20 a.u.). During the 10 a.u. after the switching the energy is conserved to
+2e-10 with the full term and the occupations drift by about 1e-3 with every
+closure (Epstein–Nesbet: D down to −2.3e-2 and an occupation of 1.0014).
+
+Other systems, same test (energy error in mHa after a switch of 40 / 80 a.u.;
+Møller–Plesset triples; C2H4 with `P_KickTd2rdmFem`, Ne and Be with the N2
+program on their MCSCF orbitals):
+
+| system | E_corr | NY + ccQ | + triples | + triples, doubles blocks only (not kept) |
+|---|---|---|---|---|
+| C2H4, 10 orbitals | −22.7 | −0.059 / −0.063 | −0.049 / −0.052 | −0.066 / −0.070 |
+| C2H4, 12 orbitals | −28.0 | −0.095 / −0.105 | −0.047 / −0.052 | −0.112 / −0.129 |
+| Ne, 9 orbitals | −136.0 | −0.009 / −0.009 | +0.016 / +0.016 | −0.007 / −0.007 |
+| N2, 10 orbitals | −150.6 | −0.061 / −0.196 | +0.141 / +0.211 | −0.219 / |
+| Be, 5 orbitals | −44.5 | −0.102 / −0.155 | no triples (parity) | |
+
+The run times of the N2 table are those of the first, spin-orbital
+implementation; the triples now cost less than the NY closure. Variants
+marked "not kept" were removed from the code
+(`A_Reconstruction_Singlet_Triples.md`). The full term raises the energy in every system; it helps where NY is too
+low by more than that (C2H4: the error halves at 12 orbitals, and min
+eigenvalues of D and Q improve by a quarter at 40 a.u.) and overshoots in Ne
+and N2. D stays positive to 5e-6 in Ne; the drain of N2 is special to its
+nearly degenerate pairs.
 
 ## Ethylene: TD-2RDM in a fixed active space beyond CI dynamics
 

@@ -17,6 +17,7 @@ contains
     use M_Reconstruction
     use M_Reconstruction_Singlet_Ny
     use M_Reconstruction_Singlet_Valdemoro
+    use M_Reconstruction_Singlet_Triples
     use M_Reconstruction_Singlet_Anchor
 
     character(len=:), allocatable :: scheme
@@ -38,7 +39,9 @@ contains
 
     Reconstruction_AddCollisionOp => AddCollisionOp
 
-    ! optional extension of the closure (Anchor/)
+    ! optional extensions, each wrapping the closure bound before it
+    ! (Triples/, Anchor/)
+    if (Json_GetExistence("reconstruction.singlet.triples")) call Reconstruction_Singlet_Triples_Fabricate
     if (Json_GetExistence("reconstruction.singlet.anchor")) call Reconstruction_Singlet_Anchor_Fabricate
 
   end subroutine
