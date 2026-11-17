@@ -1,3 +1,11 @@
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> The SingletTr0 NY collision operator (reconstruction.singletTr0.ny) of a
+!> fixed state: 3 + 3 orbitals, one electron per spin, a trace-free (up,down)
+!> 2-RDM with a diagonal 1-RDM, and an interaction with a full (up,down) block,
+!> h2(p, q, r, s) = 0.1 / (1 + |p - r| + |q - s|) (symmetric under the
+!> exchange of the particles and real symmetric). Checks that the operator is
+!> finite and pins the norm of its packed result, computed by the code before
+!> the SingletTr0 schemes became closures of a family driver.
 program T_Reconstruction_SingletTr0_Ny
   use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
   use M_Utils_Types
@@ -21,6 +29,11 @@ program T_Reconstruction_SingletTr0_Ny
   complex(R64), allocatable :: twoRdmState(:)
   complex(R64), allocatable :: dTwoRdmState(:)
   complex(R64), allocatable :: h2(:, :, :, :)
+  real(R64) :: norm
+
+  !> Norm of the packed collision operator of this state (the code before the
+  !> closure refactoring)
+  real(R64), parameter :: NORM_REFERENCE = 1.0308658237690935e-1_R64
 
   nOa = 3
   nOb = 3
@@ -67,9 +80,14 @@ program T_Reconstruction_SingletTr0_Ny
   dTwoRdmState = 0.0_R64
 
   allocate (h2(nOa + nOb, nOa + nOb, nOa + nOb, nOa + nOb))
-  h2(:, :, :, :) = 0.0_R64
-  do i1 = 1, nOa + nOb
-    h2(i1, i1, i1, i1) = 0.2_R64
+  do j2 = 1, nOa + nOb
+    do j1 = 1, nOa + nOb
+      do i2 = 1, nOa + nOb
+        do i1 = 1, nOa + nOb
+          h2(i1, i2, j1, j2) = 0.1_R64 / (1.0_R64 + abs(i1 - j1) + abs(i2 - j2))
+        end do
+      end do
+    end do
   end do
 
   jsonFileName = "test/componentTests/Reconstruction/SingletTr0/T_Reconstruction_SingletTr0_Ny.json"
@@ -80,6 +98,11 @@ program T_Reconstruction_SingletTr0_Ny
 
   call check(error, all(.not. ieee_is_nan(real(dTwoRdmState))))
   if (.not. allocated(error)) call check(error, all(.not. ieee_is_nan(aimag(dTwoRdmState))))
-  if (allocated(error)) error stop "T_Reconstruction_SingletTr0_Ny failed"
+  if (allocated(error)) error stop "T_Reconstruction_SingletTr0_Ny failure: NaN in the collision operator"
+
+  norm = sqrt(sum(abs(dTwoRdmState)**2))
+  write (*, '(A, ES24.16)') " norm of the packed collision operator: ", norm
+  call check(error, abs(norm - NORM_REFERENCE) <= 1e-12_R64 * NORM_REFERENCE)
+  if (allocated(error)) error stop "T_Reconstruction_SingletTr0_Ny failure: collision operator differs from the reference"
 
 end program T_Reconstruction_SingletTr0_Ny

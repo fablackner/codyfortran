@@ -9,7 +9,7 @@
 !> independent; the α-α and β-β blocks follow from it.
 !>
 !> **Schemes**: `valdemoro` (free-cumulant closure, 3-cumulant zero) and
-!> `singletNy` (Nakatsuji-Yasuda 3-cumulant). A scheme fabricate binds only the
+!> `ny` (Nakatsuji-Yasuda 3-cumulant). A scheme fabricate binds only the
 !> closure Reconstruction_Singlet_FillRdm3aab, never AddCollisionOp or Setup:
 !> the family driver (S_Reconstruction_Singlet) unpacks the state, enforces
 !> the contraction consistency (`<scheme>.ccQ`) and adds the collision

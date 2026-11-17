@@ -16,14 +16,11 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_OrbBased_Td2rdmStaticOrbs_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
-    use M_Orbs
-    use M_TwoRdm
     use M_Method
     use M_Method_Mb_OrbBased
 
-    call Say_Fabricate("method.mb.orbbased.td2rdmStaticOrbs")
+    call Say_Fabricate("method.mb.orbBased.td2rdmStaticOrbs")
 
     !------------------------------------
     ! set values and procedure pointers
@@ -31,6 +28,7 @@ contains
 
     Method_Setup => Setup
     Method_Mb_OrbBased_staticOrbsQ = .true.
+    Method_Mb_OrbBased_implementsSwitchingQ = .true.
     Method_Mb_OrbBased_FillRdm1 => FillRdm1
     Method_Mb_OrbBased_FillRdm2 => FillRdm2
     Method_TimeDerivative => TimeDerivative
@@ -59,7 +57,7 @@ contains
     nVals1 = nE
     nVals2 = nG * nOS
 
-    call Say_Setup("method.mb.orbbased.td2rdmStaticOrbs")
+    call Say_Setup("method.mb.orbBased.td2rdmStaticOrbs")
     call Method_Mb_OrbBased_Setup
 
     allocate (Method_state(1:nVals1))

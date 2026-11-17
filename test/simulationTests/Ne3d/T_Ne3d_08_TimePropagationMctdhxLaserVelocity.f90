@@ -90,5 +90,6 @@ program T_Ne3d_08_TimePropagationMctdhxLaserVelocity
 contains
 
   include 'Ne3dMctdhxLaser.inc'
+  include 'Ne3dMetricNorm.inc'
 
 end program

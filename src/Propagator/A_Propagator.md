@@ -20,7 +20,7 @@ The propagator determines *how* the time-evolution operator Û is approximated o
 src/Propagator/
 ├── M_Propagator.f90              # Public facade (procedure pointers + abstract interfaces)
 ├── S_Propagator.f90              # Factory logic (JSON dispatch to backends)
-├── AGENTS.md                     # This file
+├── A_Propagator.md               # This file
 ├── Single/
 │   ├── M_Propagator_Single.f90       # Single-integrator backend interface
 │   └── S_Propagator_Single.f90       # Delegates to IntegratorList(1)
@@ -39,6 +39,9 @@ src/Propagator/
 └── Exponential/
     ├── M_Propagator_Exponential.f90      # Exponential integrators: factory + shared building blocks
     ├── S_Propagator_Exponential.f90      # Scheme dispatch, Krogstad step, history helpers
+    ├── Krogstad4/
+    │   ├── M_Propagator_Exponential_Krogstad4.f90    # Exponential Runge–Kutta of order 4
+    │   └── S_Propagator_Exponential_Krogstad4.f90    # Binds the shared Krogstad step
     ├── Adams/
     │   ├── M_Propagator_Exponential_Adams.f90        # Exponential Adams PECE
     │   └── S_Propagator_Exponential_Adams.f90
@@ -103,7 +106,7 @@ Direct delegation to `IntegratorList(1)`. Use when the integrator handles the fu
     "single": { }
   },
   "integratorList": {
-    "rk4": { "nTimeSteps": 100 }
+    "rk1": { "o4Expl": { } }
   }
 }
 ```
@@ -120,8 +123,8 @@ Symmetric Strang splitting: A(½Δt) · B(Δt) · A(½Δt)
     }
   },
   "integratorList": {
-    "kineticIntegrator": { ... },
-    "potentialIntegrator": { ... }
+    "sil1": { "krylovDim": 32 },
+    "rk2": { "o4Expl": { } }
   }
 }
 ```
@@ -146,7 +149,7 @@ Yoshida composition with 7 stages and O(Δt⁴) global error:
 
 Every Â step goes through `Propagator_SplitStep_IntegrateLin` (both orders):
 if the method propagates part of Â exactly (`Method_PropagateExactPart`
-associated, e.g. `method.mb.orbBased.exactFieldFreeQ`), the step is a
+associated, e.g. with a `fieldFree` block), the step is a
 composition of exact and IntegratorList(1) substeps selected by
 `exactPartScheme`; with the default `strang` scheme it is
 exact(Δt/2) · IntegratorList(1)(Δt) · exact(Δt/2). Otherwise it is
@@ -171,8 +174,8 @@ The exact substeps carry the time; every integrator substep is centred on the
 time reached, so its midpoint evaluation of a time-dependent part (e.g. the
 vector potential) stays consistent with the symmetric composition.
 
-**Exact part on grid.fem (Cayley step).** With `exactFieldFreeQ` on grids
-without a dense h0 eigen-decomposition (grid.fem) the exact part is a
+**Exact part on grid.fem (Cayley step).** With `fieldFree.cayley` (grids
+without a dense h0 eigen-decomposition, grid.fem) the exact part is a
 GMRES-solved Crank–Nicolson (Cayley) step of h0 = T + V_static. It is unitary
 and time-reversible, Cayley(−Δt) = Cayley(Δt)⁻¹ (negative substeps are fine
 in real time), but only second order, so use `exactPartScheme: "strang"`: the
@@ -180,13 +183,13 @@ fourth-order schemes spend 2–3.5× more exact substeps without raising the
 order. Real time only (an integrator 1 with `imagTimeQ` stops in the exact
 part); a laser is the length gauge `sysGauge.fem.length` (E(t) e_pol·r),
 which integrator 1 (e.g. RK4) propagates. For molecules with heavier atoms
-(a core) also set `method.mb.orbBased.exactFieldFreeMeanFieldQ` (MCTDHX): it
+(a core) also set `fieldFree.cayley.meanFieldQ` (MCTDHX, TDKS): it
 moves a frozen Fock mean field U = J0 − K0 into the exact part and subtracts
 it in the nonlinear part, a pure change of the splitting, without which the
 split h0 | mean field needs tiny time steps there; the composition and the
-integrators stay as they are. Details: A_Method.md, "Exact Field-Free Part
-on grid.fem: Cayley Step" and "Frozen Mean-Field Reference of the Cayley
-Step" (which state to build U from, restarts); measured drifts and costs:
+integrators stay as they are. Details: src/FieldFree/A_FieldFree.md, "Cayley
+Variant" and "Frozen Mean-Field Reference" (which state to build U from,
+restarts); measured drifts and costs:
 git history of app/fem_molecules/README.md.
 
 ```json
@@ -219,7 +222,7 @@ Diagonalize once, apply phases forever. Best for time-independent Ĥ:
 
 For u' = L u + N(t, u) with L the exactly propagated part of the method
 (`Method_PropagateExactPart` and its phi functions `Method_ApplyExactPartPhi`,
-e.g. h0 with `method.mb.orbBased.exactFieldFreeQ`) and N the sum of the
+e.g. h0 with `fieldFree.eigen`) and N the sum of the
 TimeDerivative callbacks of IntegratorList(1) and IntegratorList(2) (their
 Integrate procedures are not used). There is no operator splitting between L
 and N; real time only.
@@ -230,8 +233,8 @@ and N; real time only.
 | `"adams"` | k + 1 | 2 | exponential Adams PECE, `nSteps` = k (1..6, default 4) |
 | `"adamsLawson"` | k + 1 | 2 | Adams PECE in the interaction picture of L (Auzinger et al. 2021), `nSteps` = k |
 
-Not available for the Cayley exact part of grid.fem (`exactFieldFreeQ` on
-non-Ylm grids): it has no phi functions, MCTDHX binds no
+Not available for the Cayley exact part of grid.fem (`fieldFree.cayley`):
+it has no phi functions, MCTDHX binds no
 `Method_ApplyExactPartPhi`, and `Propagator_Exponential_Fabricate` stops with a
 message pointing to `propagator.splitStep` (T_Fem_08_ExponentialUnsupported).
 
@@ -242,7 +245,7 @@ steps. A state changed between steps (absorber) is used as it is.
 They interpolate N (or, for `adamsLawson`, N in the interaction picture) in
 time, so components of N that oscillate with the phases of L limit the step:
 h times the largest exactly propagated frequency (for the spectral cut,
-h · `exactFieldFreeCut`) should stay well below 1. On the Be HHG benchmark
+h · `fieldFree.eigen.cut`) should stay well below 1. On the Be HHG benchmark
 (velocity gauge, cut 1000, dt 0.0025) Strang splitting was the most accurate;
 `adams` was stable only with a cut of 300 (1.6× faster, harmonics 21–60 about
 0.2 decades further off), `adamsLawson` stayed stable at cut 1000 (1.75×
@@ -302,7 +305,7 @@ end subroutine
 - **Single:** Default choice. Let the integrator (RK4, SIL, Expokit) handle everything.
 - **SplitStep:** When Ĥ = T̂ + V̂ where each part is cheap to apply (e.g., FFT for T̂, diagonal for V̂).
 - **EigenExpansion:** Small systems (dim ≲ 10⁴), time-independent Ĥ, need many time steps.
-- **Exponential:** The method propagates a stiff part exactly and provides its phi functions (MCTDHX with `exactFieldFreeQ`); no splitting error, but the step must resolve the exactly propagated frequencies coupled by N.
+- **Exponential:** The method propagates a stiff part exactly and provides its phi functions (MCTDHX or TDKS with `fieldFree.eigen`); no splitting error, but the step must resolve the exactly propagated frequencies coupled by N.
 
 ---
 
@@ -459,7 +462,7 @@ end program
 
 5. **Incomplete eigenbasis:** If DiagonalizerList returns `nFound < dim`, EigenExpansion will project out missing components.
 
-6. **Exact part on grid.fem:** `exactFieldFreeQ` there is a second-order Cayley step: use `splitStep` with `exactPartScheme: "strang"`; `exponential` and imaginary time stop with an error. For molecules with heavier atoms (a core) add `exactFieldFreeMeanFieldQ` (MCTDHX), otherwise the split h0 | mean field needs tiny steps.
+6. **Exact part on grid.fem:** `fieldFree.cayley` is a second-order Cayley step: use `splitStep` with `exactPartScheme: "strang"`; `exponential` and imaginary time stop with an error. For molecules with heavier atoms (a core) add `fieldFree.cayley.meanFieldQ` (MCTDHX, TDKS), otherwise the split h0 | mean field needs tiny steps.
 
 ---
 

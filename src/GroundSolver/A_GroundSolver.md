@@ -366,8 +366,8 @@ always uses the exact exchange. Construction and application are the
 grid-agnostic mean-field helpers of SysInteraction
 (`SysInteraction_FillExchangeAce` with weighted orbitals = the occupied
 orbitals, `SysInteraction_AddMeanField`; src/SysInteraction/A_SysInteraction.md),
-shared with the frozen mean-field reference of the Cayley exact part of
-Method (`exactFieldFreeMeanFieldQ`, src/Method/A_Method.md).
+shared with the frozen mean-field reference of the Cayley exact part
+(`fieldFree.cayley.meanFieldQ`, src/FieldFree/A_FieldFree.md).
 
 ### Preconditioned Eigensolver (lobpcg)
 
@@ -383,7 +383,7 @@ DiagonalizerListInput(1) % dim = Grid_nPoints
 call DiagonalizerList_Fabricate(DiagonalizerListInput)
 ...
 call Grid_Setup
-DiagonalizerList(1) % e % metricWeights = Grid_Fem_weights   ! the grid metric, e.g. Grid_Ylm_weights on Ylm
+DiagonalizerList(1) % e % metricWeights = Grid_weights   ! the grid metric (M_Grid), any grid
 ```
 
 ```json
@@ -482,10 +482,11 @@ DiagonalizerListInput(2) % dim = Grid_nPoints
 DiagonalizerListInput(2) % ApplyPrecOnVec => GroundSolver_PreconditionAction
 ```
 
-`arpackOrb.nEvals` must equal the number of spatial orbitals per spin
-(`Orbs_nOrbsInState/2`). Example application (with the `mcscf.ylmOpt`
-backend below): `app/atoms/ne/groundstate/mcscf/P_GroundMcscfYlm.f90`
-(neon MCSCF ground state with 9 spatial orbitals per spin).
+The orbital diagonalizer (`lapackOrb` here) must deliver at least as many
+eigenvectors as spatial orbitals per spin (`nEvals` ≥ `Orbs_nOrbsInState/2`;
+the backend takes the first ones). Example (with the `mcscf.ylmOpt` backend below):
+`test/simulationTests/Ne3d/T_Ne3d_06_GroundSolverMcscfYlm.f90` (neon MCSCF
+ground state with 5 spatial orbitals per spin).
 
 ### MCSCF Ylm-Optimized Implementation (mcscf.ylmOpt)
 
@@ -557,7 +558,7 @@ iteration instead of 2 s):
 "diagonalizerList": { "arpackCi": { "nEvals": 1, "which": "SR", "bmat": "I", "nKry": 30, "tol": 1e-12, "checkConvergenceQ": false } }
 ```
 
-Program: `app/atoms/be/groundstate/mcscf/P_GroundMcscf.f90` (converged when
+Program: `app/atoms/P_GroundMcscf.f90` (runs `app/atoms/{be,ne}/groundstate/mcscf`; converged when
 the change of `GroundSolver_Mcscf_Gradient_energy` is below
 `program.convThresh` and the gradient norm below `program.gradThresh`). It
 runs any atom: the Ne row above is this program with the input of
@@ -637,10 +638,18 @@ if (Json_GetExistence("groundSolver.newBackend")) then
 
 ### Implementation Checklist
 
-Your implementation must bind these procedure pointers:
-- `GroundSolver_Setup` → Allocate working arrays
-- `GroundSolver_Approach` → One SCF iteration
+Your implementation binds these procedure pointers (`GroundSolver_Fabricate`
+resets them before the dispatch):
+- `GroundSolver_Approach` → One SCF iteration (required)
+- `GroundSolver_Setup` → Allocate working arrays (optional, no-op default;
+  it must work when called again)
 - (Optional) Backend-specific action pointer(s) for the diagonalizer(s)
+
+and sets the flags of the options it implements:
+`GroundSolver_implementsDeclaredMQ` (keeps the declared orbital m of
+`method.mb.orbBased.mOfOrbs`) and `GroundSolver_implementsKohnShamQ`
+(builds the Kohn–Sham mean field of a `sysXc` block). `GroundSolver_Fabricate`
+refuses a configured option whose flag the backend did not set.
 
 `GroundSolver_PreconditionAction` is bound by `GroundSolver_Fabricate`
 itself, before the dispatch, so every backend gets it.

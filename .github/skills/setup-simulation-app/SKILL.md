@@ -18,6 +18,13 @@ e.g. `dynamics/mctdhf/weak4c/`. Programs run in their folder; a dynamics
 input reads the ground state from its folder with `orbsInit.load.dir`
 (and `coeffsInit.load.dir`, `twoRdmInit.load.dir`).
 
+A program that several runs share is not copied: its `P_*.f90` lies once in
+the common parent folder of those runs, and each run folder holds only its
+`P_*.json`. The build then puts `P_*.exe` into every such run folder from the
+nearest `P_*.f90` above it (`create_executables_from_dir` in `CMakeLists.txt`).
+Before adding a new program, check whether a parent folder already has one
+that fits; then only the folder and the JSON input are needed.
+
 Analysis scripts (`*.py`) of a system go to `app/<category>/<system>/analysis/`.
 
 ## Required References

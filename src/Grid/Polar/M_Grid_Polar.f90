@@ -36,10 +36,6 @@ module M_Grid_Polar
   !> Maximum radial coordinate value rmax.
   real(R64) :: Grid_Polar_rmax
 
-  !> Total integration weights for each (r,phi) grid point in flattened order.
-  !> Combines radial and angular quadrature as used by the inner product.
-  real(R64), allocatable :: Grid_Polar_weights(:)
-
   !> Polar coordinates (component-wise views) for each (r,phi) grid point.
   real(R64), allocatable :: Grid_Polar_rCoord(:)
   real(R64), allocatable :: Grid_Polar_phiCoord(:)

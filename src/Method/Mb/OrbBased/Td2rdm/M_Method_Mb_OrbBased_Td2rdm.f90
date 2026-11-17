@@ -27,9 +27,10 @@ module M_Method_Mb_OrbBased_Td2rdm
     !> - Method_Mb_OrbBased_FillRdm1, Method_Mb_OrbBased_FillRdm2
     !> - Method_Mb_OrbBased_TimeDerivativeOrbsLin
     !> - Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin
-    !> - Method_PropagateExactPart if method.mb.orbBased.exactFieldFreeQ
+    !> - Method_PropagateExactPart with an exact field-free part (a
+    !>   "fieldFree" block, M_FieldFree)
     !> Reads method.mb.orbBased.td2rdm.nWeakOrbs (0 <= nWeakOrbs < min nOrbs);
-    !> exactFieldFreeQ together with nWeakOrbs > 0 is an error.
+    !> an exact field-free part together with nWeakOrbs > 0 is an error.
     module subroutine Method_Mb_OrbBased_Td2rdm_Fabricate
     end subroutine
 

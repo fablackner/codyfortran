@@ -6,6 +6,11 @@
 !>
 !> Implements trace identities, consistency checks, and partial-trace
 !> operations used to reduce higher-order RDMs and verify constraints.
+!>
+!> The 1-RDMs are normalized to the particle number of their species, so the
+!> partial traces divide by the number of bodies traced over. The callers
+!> pass those numbers (nBodiesA and nBodiesB of the species a and b, or
+!> nBodies of all bodies): the module reads no simulation state.
 module M_Utils_RdmTrace
   use M_Utils_Types
 
@@ -14,25 +19,27 @@ module M_Utils_RdmTrace
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmTrace_FillRdm1aFromRdm2(rdm1a, rdm2, nOa, nOb)
+  subroutine RdmTrace_FillRdm1aFromRdm2(rdm1a, rdm2, nOa, nOb, nBodiesB)
 
     complex(R64), intent(out), allocatable :: rdm1a(:, :)
     complex(R64), intent(in), contiguous                :: rdm2(:, :, :, :)
     integer(I32), intent(in) :: nOa, nOb
+    integer(I32), intent(in) :: nBodiesB
 
     complex(R64), allocatable :: rdm2ab(:, :, :, :)
 
     call RdmTrace_FillRdm2abFromRdm2(rdm2ab, rdm2, nOa, nOb)
-    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab)
+    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab, nBodiesB)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab)
-    use M_Method_Mb
+  !> rdm1a(i, j) = sum_k rdm2ab(i, k, j, k) / nBodiesB.
+  subroutine RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab, nBodiesB)
 
     complex(R64), intent(out), allocatable :: rdm1a(:, :)
     complex(R64), intent(in), contiguous                :: rdm2ab(:, :, :, :)
+    integer(I32), intent(in) :: nBodiesB
 
     integer(I32) :: nOa, nOb
     integer(I32) :: i, j, k
@@ -53,30 +60,32 @@ contains
       end do
     end do
 
-    rdm1a(:, :) = rdm1a(:, :) / Method_Mb_nBodies(2)
+    rdm1a(:, :) = rdm1a(:, :) / nBodiesB
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmTrace_FillRdm1bFromRdm2(rdm1b, rdm2, nOa, nOb)
+  subroutine RdmTrace_FillRdm1bFromRdm2(rdm1b, rdm2, nOa, nOb, nBodiesA)
 
     complex(R64), intent(out), allocatable :: rdm1b(:, :)
     complex(R64), intent(in), contiguous                :: rdm2(:, :, :, :)
     integer(I32), intent(in) :: nOa, nOb
+    integer(I32), intent(in) :: nBodiesA
 
     complex(R64), allocatable :: rdm2ab(:, :, :, :)
 
     call RdmTrace_FillRdm2abFromRdm2(rdm2ab, rdm2, nOa, nOb)
-    call RdmTrace_FillRdm1bFromRdm2ab(rdm1b, rdm2ab)
+    call RdmTrace_FillRdm1bFromRdm2ab(rdm1b, rdm2ab, nBodiesA)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmTrace_FillRdm1bFromRdm2ab(rdm1b, rdm2ab)
-    use M_Method_Mb
+  !> rdm1b(i, j) = sum_k rdm2ab(k, i, k, j) / nBodiesA.
+  subroutine RdmTrace_FillRdm1bFromRdm2ab(rdm1b, rdm2ab, nBodiesA)
 
     complex(R64), intent(out), allocatable :: rdm1b(:, :)
     complex(R64), intent(in), contiguous                :: rdm2ab(:, :, :, :)
+    integer(I32), intent(in) :: nBodiesA
 
     integer(I32) :: nOa, nOb
     integer(I32) :: i, j, k
@@ -97,16 +106,17 @@ contains
       end do
     end do
 
-    rdm1b(:, :) = rdm1b(:, :) / Method_Mb_nBodies(1)
+    rdm1b(:, :) = rdm1b(:, :) / nBodiesA
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmTrace_FillRdm1FromRdm2(rdm1, rdm2)
-    use M_Method_Mb
+  !> rdm1(i, j) = sum_k rdm2(i, k, j, k) / (nBodies - 1).
+  subroutine RdmTrace_FillRdm1FromRdm2(rdm1, rdm2, nBodies)
 
     complex(R64), intent(out), allocatable :: rdm1(:, :)
     complex(R64), intent(in), contiguous                :: rdm2(:, :, :, :)
+    integer(I32), intent(in) :: nBodies
 
     integer(I32) :: nO
     integer(I32) :: i, j, k
@@ -126,15 +136,16 @@ contains
       end do
     end do
 
-    rdm1(:, :) = rdm1(:, :) / (Method_Mb_nBodiesSum - 1)
+    rdm1(:, :) = rdm1(:, :) / (nBodies - 1)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmTrace_FillRdm1FromRdm2ab(rdm1, rdm2ab)
+  subroutine RdmTrace_FillRdm1FromRdm2ab(rdm1, rdm2ab, nBodiesA, nBodiesB)
 
     complex(R64), intent(out), allocatable :: rdm1(:, :)
     complex(R64), intent(in), contiguous                :: rdm2ab(:, :, :, :)
+    integer(I32), intent(in) :: nBodiesA, nBodiesB
 
     complex(R64), allocatable :: rdm1a(:, :)
     complex(R64), allocatable :: rdm1b(:, :)
@@ -146,8 +157,8 @@ contains
     nOb = size(rdm2ab, 3)
     nO = nOa + nOb
 
-    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab)
-    call RdmTrace_FillRdm1bFromRdm2ab(rdm1b, rdm2ab)
+    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab, nBodiesB)
+    call RdmTrace_FillRdm1bFromRdm2ab(rdm1b, rdm2ab, nBodiesA)
 
     if (.not. allocated(rdm1)) allocate (rdm1(nO, nO))
 

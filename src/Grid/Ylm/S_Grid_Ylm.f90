@@ -55,7 +55,6 @@ contains
     ! Read radial grid parameters from JSON
     Grid_Ylm_rmax = Json_Get("grid.ylm.rmax", 20.0_R64)
 
-    Grid_InnerProduct => InnerProduct
     Grid_Ylm_SpatialProduct => SpatialProduct
     Grid_Ylm_GetLmComponent => GetLmComponent
     Grid_Ylm_SetLmComponent => SetLmComponent
@@ -105,8 +104,8 @@ contains
       Grid_Ylm_radialMetricWeights(:) = cmplx(Grid_Ylm_radialWeights(:), 0.0_R64, kind=R64)
     end if
 
-    ! Allocate and initialize weights for the whole grid
-    allocate (Grid_Ylm_weights(Grid_nPoints))
+    ! Grid weights: the radial weights, repeated for every (l,m) channel
+    allocate (Grid_weights(Grid_nPoints))
 
     ! Allocate grid coordinate and indexing arrays
     allocate (Grid_Ylm_rCoord(Grid_nPoints))  ! Store (r, l, m) coordinates
@@ -126,8 +125,7 @@ contains
           Grid_Ylm_lCoord(iGrid) = iL                           ! l value
           Grid_Ylm_mCoord(iGrid) = iM                           ! m value
 
-          ! Calculate weights
-          Grid_Ylm_weights(iGrid) = Grid_Ylm_radialWeights(iRad)
+          Grid_weights(iGrid) = Grid_Ylm_radialWeights(iRad)
         end do
       end do
     end do
@@ -225,18 +223,6 @@ contains
     end do
 
   end subroutine
-
-  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Computes the inner product of two fields
-  pure function InnerProduct(fConjg, f) result(res)
-
-    complex(R64), intent(in), contiguous, dimension(:) :: fConjg
-    complex(R64), intent(in), contiguous, dimension(:) :: f
-    complex(R64) :: res
-
-    res = sum(conjg(fConjg(:)) * f(:) * Grid_Ylm_weights(:))
-
-  end function
 
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Computes the spatial product of two fields

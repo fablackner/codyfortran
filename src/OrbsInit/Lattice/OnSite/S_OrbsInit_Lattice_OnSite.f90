@@ -12,14 +12,12 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> @brief Bind the InitFunction pointer for on-site orbitals.
   module subroutine OrbsInit_Lattice_OnSite_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
-    use M_OrbsInit
     use M_OrbsInit_Lattice
 
     implicit none
 
-    call Say_Fabricate("orbsInit.lattice.onsite")
+    call Say_Fabricate("orbsInit.lattice.onSite")
 
     OrbsInit_Lattice_InitFunction => InitFunction
 

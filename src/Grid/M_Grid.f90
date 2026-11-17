@@ -10,6 +10,8 @@
 !> discretizations used throughout the quantum many-body simulation framework.
 !> It exposes:
 !>   - A global scalar `Grid_nPoints` (total degrees of freedom)
+!>   - The quadrature weights `Grid_weights` of the grid points (the diagonal
+!>     metric of the inner product)
 !>   - Procedure pointers for setup, inner product, Gram–Schmidt
 !>     orthonormalization, and subspace projection
 !>
@@ -71,6 +73,15 @@ module M_Grid
   !> representations it is the flattened size used by the high-level solvers.
   integer(I32) :: Grid_nPoints
 
+  !> Real quadrature weights of the grid points (Grid_nPoints), allocated and
+  !> filled by the Setup of the active back-end. They are the diagonal metric
+  !> of the inner product, Grid_InnerProduct(f, g) = sum(conjg(f) * g * Grid_weights),
+  !> except on a c-product grid (grid.ylm.fedvrEcs with an active contour:
+  !> bilinear product with complex weights of its own). The metric of
+  !> everything that lives on the grid: metricWeights of integrators and
+  !> diagonalizers, densities, sources of potentials.
+  real(R64), allocatable :: Grid_weights(:)
+
   !=============================================================================
   ! module procedures pointers
   !=============================================================================
@@ -89,8 +100,9 @@ module M_Grid
   end interface
 
   !> Pointer to the procedure for calculating the inner product of fields.
-  !> The precise metric (e.g., quadrature weights, volume factors) is defined
-  !> by the active back-end selected via Grid_Fabricate.
+  !> Default (bound by Grid_Fabricate): the Hermitian product in the diagonal
+  !> metric Grid_weights. A back-end rebinds it only for a different metric
+  !> (c-product) or a faster evaluation (Fem, Lattice).
   procedure(I_Grid_InnerProduct), pointer :: Grid_InnerProduct
   abstract interface
     !> Calculate the inner product of two fields on the active grid.

@@ -36,7 +36,6 @@ contains
   !> @note No setup phase is needed for this initializer; the default
   !>       no-op `CoeffsInit_Setup` remains in place.
   module subroutine CoeffsInit_Unary_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
     use M_CoeffsInit
 
@@ -63,7 +62,6 @@ contains
   !> @param[out] coeffs  Complex CI coefficient vector; dimension must match
   !>                     the CI space size from ConfigList.
   subroutine Initialize(coeffs)
-    use M_Utils_DataStorage
 
     complex(R64), intent(out), contiguous  :: coeffs(:)
 

@@ -30,7 +30,7 @@
 !> | `Rk/O2Expl`     | Midpoint rule (2nd-order explicit)             |
 !> | `Rk/O2Impl`     | Implicit midpoint (2nd-order, A-stable)        |
 !> | `Rk/O4Expl`     | Classical RK4 (4th-order explicit)             |
-!> | `CrankNicolson` | Crank–Nicolson (A-stable, norm-preserving)     |
+!> | `Cn`            | Crank–Nicolson (A-stable, norm-preserving)     |
 !> | `Expokit`       | Krylov subspace matrix exponential             |
 !> | `GslOdeiv2`     | GSL adaptive steppers (rkf45, rkck, rk8pd, …)  |
 !> | `Sil`           | Short Iterative Lanczos                        |

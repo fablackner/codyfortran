@@ -1,9 +1,14 @@
 # Applications
 
-Production runs built on the CodyFortran library. Every leaf folder holds one
-program `P_X.f90` and its input `P_X.json` (and `P_X.exe` after the build);
-programs with a `make_inputs.py` take an input it wrote to `runs/` as the
-argument.
+Production runs built on the CodyFortran library. Every leaf folder is one run
+and holds the input `P_X.json` of its program `P_X` (and `P_X.exe` after the
+build); programs with a `make_inputs.py` take an input it wrote to `runs/` as
+the argument.
+The source `P_X.f90` lies in the run folder if only that run uses it. A
+program shared by several runs lies once in their common parent folder
+(`atoms/P_LaserMctdhfVelocity.f90` for the Be and Ne runs,
+`molecules/P_KickTdhfFem.f90` for H2 and H2O): the build gives every run
+folder its `P_X.exe` from the nearest `P_X.f90` above it.
 Programs are named `P_<Stage><Method><Variant>`: stage `Ground` (ground or
 initial state), `Laser` (laser pulse) or `Kick` (delta kick); method `Scf`,
 `Mcscf`, `Mctdhf`, `Td2rdm`, `Tdhf`, `Ks` (Kohn–Sham DFT) or `Tddft`; variant the gauge (`Velocity`,
@@ -12,12 +17,13 @@ programs `P_<Quantity><Grid>` (`P_IntegralsFem`, `P_StepCostFem`).
 
 ```
 atoms/
+  P_GroundScfYlm.f90  P_GroundMcscf.f90  P_GroundMctdhf.f90  P_LaserMctdhfVelocity.f90   shared by be/ and ne/
   be/  groundstate/scf                         P_GroundScfYlm         Hartree-Fock (1s, 2s)
        groundstate/mcscf                       P_GroundMcscf          MCSCF, 5 orbitals (ground solver)
        groundstate/mctdhf                      P_GroundMctdhf         MCTDHF, 5 orbitals (imaginary time)
        groundstate/td2rdm                      P_GroundTd2rdm         TD-2RDM initial state
        dynamics/{mctdhf,hf}/{weak4c,strong2c}  P_LaserMctdhfVelocity
-       dynamics/td2rdm/{weak4c,strong2c}       P_LaserTd2rdmVelocity
+       dynamics/td2rdm/{weak4c,strong2c}       P_LaserTd2rdmVelocity  source in dynamics/td2rdm/
        analysis/plot_hhg.py
   ne/  groundstate/mctdhf                      P_GroundMctdhf         MCTDHF, 9 orbitals
        groundstate/scf                         P_GroundScfYlm         Hartree-Fock
@@ -26,6 +32,7 @@ atoms/
        dynamics/mctdhf                         P_LaserMctdhfVelocity  HHG, velocity gauge
        dynamics/mctdhfLengthGauge              P_LaserMctdhfLength    from mcscf
 molecules/
+  P_GroundScfFem.f90  P_GroundKsFem.f90  P_GroundScfProlate.f90  P_KickTdhfFem.f90  P_KickTddftFem.f90   shared by the molecules
   h2/, h2o/  groundstate/scf                   P_GroundScfFem
              groundstate/dft                   P_GroundKsFem          Kohn-Sham DFT (sysXc, Libxc)
              dynamics/tdhf                     P_KickTdhfFem          absorption spectrum
@@ -117,8 +124,8 @@ own unwindowed Larmor spectrum.
   shows an aliasing floor above H95.
 - `groundstate/scf`, `groundstate/mcscf`: HF (E = −128.5470989, 0.7 s) and
   9-orbital MCSCF ground states on a small grid (lmax 1, rmax 8). The MCSCF
-  is the variational `groundSolver.mcscf.gradient` (program of
-  `atoms/be/groundstate/mcscf`): HF 1s 2s 2p of `../scf` plus hydrogen-like
+  is the variational `groundSolver.mcscf.gradient` (`atoms/P_GroundMcscf.f90`,
+  the program of the Be run): HF 1s 2s 2p of `../scf` plus hydrogen-like
   3s 3p, 12 iterations, 3.5 s, E = −128.6818315, 0.135 Ha below HF (3s 3p
   occupations 5.7e-3, 3.5e-3). `dynamics/mctdhfLengthGauge` propagates it in
   a length-gauge pulse on that grid (restricted orbitals of declared m,
@@ -434,7 +441,8 @@ the nuclei reach E ~ 10³ a.u. H2 PBE is stable at Δt 0.005 but diverges at
 state is fine at any setting; for PBE dynamics, reduce the time step by
 about 10× (more for H2O, whose O core has hMin 0.1).
 
-Background on the methods: `src/Method/A_Method.md` (exact field-free part,
-Cayley step, frozen mean-field reference) and `src/Propagator/A_Propagator.md`.
+Background on the methods: `src/FieldFree/A_FieldFree.md` (exact field-free
+part, Cayley step, frozen mean-field reference), `src/Method/A_Method.md` and
+`src/Propagator/A_Propagator.md`.
 Earlier benchmarks and timings are in the git history of `app/be/README.md`,
 `app/ne/hhg/README.md` and `app/fem_molecules/README.md`.

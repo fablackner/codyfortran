@@ -158,7 +158,7 @@ program T_Be3d_04_Td2rdmSpectralAnchor
   ! the closure at the reference against the exact 3-RDM
   allocate (rdm3Ref(n, n, n, n, n, n))
   call LoadData(rdm3Ref, "rdm3Bt01_01_02.in", storage_size(rdm3Ref))
-  call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2Ref)
+  call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2Ref, Method_Mb_nBodies(2))
   call RdmCumulants_FillCumulFreePartM3aab(rdm3, rdm1a, rdm2Ref)
   call RdmCumulants_AddNyCumulantM3aab(rdm3, Method_Mb_nBodies(1), rdm1a, rdm2Ref)
   write (*, '(A,ES16.8)') " |D3_ref - R(D2_ref)|: ", norm2(abs(rdm3 - rdm3Ref))

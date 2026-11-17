@@ -32,10 +32,6 @@ module M_Grid_Spherical
   !> Maximum radius rmax (outer boundary of the domain).
   real(R64) :: Grid_Spherical_rmax
 
-  !> Total integration weights for each (r,theta,phi) grid point in flattened order.
-  !> Combines radial and angular quadrature per the active spherical back-end.
-  real(R64), allocatable :: Grid_Spherical_weights(:)
-
   !> Spherical coordinate components (component-wise views) for each grid point.
   real(R64), allocatable :: Grid_Spherical_rCoord(:)
   real(R64), allocatable :: Grid_Spherical_thetaCoord(:)

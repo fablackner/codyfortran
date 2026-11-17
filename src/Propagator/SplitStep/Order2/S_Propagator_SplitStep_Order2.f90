@@ -24,7 +24,6 @@ contains
 !> Binds the Propagator facade to the order-2 split-step implementation.
   module subroutine Propagator_SplitStep_Order2_Fabricate
     use M_Utils_Say
-    use M_Utils_Json
     use M_Propagator
 
     call Say_Fabricate("propagator.splitStep.order2")

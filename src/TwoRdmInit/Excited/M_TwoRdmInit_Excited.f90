@@ -27,21 +27,17 @@
 !> @code{.json}
 !> {
 !>   "twoRdmInit": {
-!>     "excited": {
-!>       "creates": [3],        // Orbitals to populate (optional, default: [1])
-!>       "destroys": [1],       // Orbitals to depopulate (optional, default: [1])
-!>       "bodyType1": 1,        // Body type for creates/destroys (optional)
-!>       "bodyType2": 2         // Body type for second species (optional)
-!>     }
+!>     "excited": { }
 !>   }
 !> }
 !> @endcode
 !>
-!> @note The creates/destroys parameters are read but currently not applied
-!>       in a fully general way. The implementation builds diagonal 1-RDMs.
+!> @note The 2-RDM is that of the Hartree-Fock determinant (diagonal 1-RDMs,
+!>       the first nBodies orbitals of each body type occupied). The
+!>       excitation keys creates, destroys, bodyType1 and bodyType2 are not
+!>       implemented and stop at fabricate.
 module M_TwoRdmInit_Excited
   use M_Utils_Types
-  use M_Utils_NoOpProcedures
 
   implicit none
 
@@ -51,15 +47,11 @@ module M_TwoRdmInit_Excited
 
   interface
     !> @brief Bind `M_TwoRdmInit` procedure pointers to the excited-state
-    !>        implementation and read configuration parameters.
+    !>        implementation.
     !>
     !> @details
-    !> Reads from `"twoRdmInit.excited"`:
-    !>   - `creates`: Array of orbital indices to occupy (default: [1])
-    !>   - `destroys`: Array of orbital indices to vacate (default: [1])
-    !>   - `bodyType1`, `bodyType2`: Spin species indices (default: 1, 2)
-    !>
-    !> Binds `TwoRdmInit_InitializeBlock` -> `InitializeBlock`
+    !> Binds `TwoRdmInit_InitializeBlock` -> `InitializeBlock`; stops if
+    !> `"twoRdmInit.excited"` holds one of the unimplemented excitation keys.
     module subroutine TwoRdmInit_Excited_Fabricate
     end subroutine
   end interface

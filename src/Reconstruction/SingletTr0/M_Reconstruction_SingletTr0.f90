@@ -19,9 +19,16 @@
 !> - `valdemoro`: Free-cumulant approximation on trace-free representation
 !> - `ny`: Nakatsuji-Yasuda correction on trace-free representation
 !>
+!> A scheme fabricate binds only the closure
+!> Reconstruction_SingletTr0_FillRdm3aab (the closures of the Singlet family,
+!> I_Reconstruction_Singlet_FillRdm3aab); the family driver
+!> (S_Reconstruction_SingletTr0) unpacks the state, adds the collision
+!> operator of the 2-RDM and of the 1-RDM and packs the trace-free result.
+!>
 !> @see M_TwoRdm_Fermionic_SingletTr0 for state vector layout
 module M_Reconstruction_SingletTr0
   use M_Utils_Types
+  use M_Reconstruction_Singlet, only: I_Reconstruction_Singlet_FillRdm3aab
 
   implicit none
 
@@ -30,12 +37,8 @@ module M_Reconstruction_SingletTr0
   !=============================================================================
 
   interface
-    !> Attach the selected SingletTr0 reconstruction implementation.
-    !>
-    !> Called during initialization to wire the procedure pointers exported by
-    !> this module to a specific SingletTr0-aware scheme and to perform any
-    !> lightweight common setup. Scheme-specific heavy setup should be done in
-    !> the scheme’s own setup procedure if needed.
+    !> Binds the closure of the scheme and the family driver
+    !> (Reconstruction_AddCollisionOp).
     module subroutine Reconstruction_SingletTr0_Fabricate
     end subroutine
   end interface
@@ -47,5 +50,9 @@ module M_Reconstruction_SingletTr0
   !=============================================================================
   ! module procedures pointers
   !=============================================================================
+
+  !> The closure of the selected scheme: rdm3aab from rdm1a and a singlet
+  !> rdm2ab.
+  procedure(I_Reconstruction_Singlet_FillRdm3aab), pointer :: Reconstruction_SingletTr0_FillRdm3aab => null()
 
 end module

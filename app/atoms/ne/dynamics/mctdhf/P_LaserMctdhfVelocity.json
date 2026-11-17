@@ -3,7 +3,6 @@
         "ylm": {
             "lmax": 40,
             "mmax": 1,
-            "rmin": 0.0,
             "rmax": 160.0,
             "fedvr": {
                 "nElements": 40,
@@ -55,6 +54,11 @@
             }
         }
     },
+    "fieldFree": {
+        "eigen": {
+            "cut": 1000.0
+        }
+    },
     "method": {
         "mb": {
             "nBodyTypes": 2,
@@ -91,9 +95,7 @@
                     0,
                     1
                 ],
-                "mctdhx": {},
-                "exactFieldFreeQ": true,
-                "exactFieldFreeCut": 1000.0
+                "mctdhx": {}
             }
         }
     },

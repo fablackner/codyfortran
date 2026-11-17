@@ -27,9 +27,9 @@
 !>
 !> ## Key Points for Consumers
 !>
-!> - `TwoRdm_Setup` allocates/associates the 2‑RDM portion of the global state
-!>   and initializes module bookkeeping. It is a no‑op until `TwoRdm_Fabricate`
-!>   assigns a concrete implementation.
+!> - The backend fabricate sets `TwoRdm_nElements`; the TD-2RDM methods point
+!>   `TwoRdm_twoRdmState` into `Method_state` in their setup. `TwoRdm_Setup`
+!>   is a lifecycle no-op (no backend binds it), kept for the module pattern.
 !> - `TwoRdm_twoRdmState(:)` is the linearized storage used by all backends; its
 !>   serialization layout is backend‑defined but consistent across calls once
 !>   fabricated.
@@ -48,9 +48,9 @@
 !> ## Typical Usage
 !>
 !> ```fortran
-!> call TwoRdm_Fabricate()    ! Wire procedure pointers from JSON config
-!> call TwoRdm_Setup()        ! Allocate storage
-!> ! ... populate TwoRdm_twoRdmState ...
+!> call TwoRdm_Fabricate()    ! Wire procedure pointers, set TwoRdm_nElements
+!> call TwoRdm_Setup()        ! No-op
+!> ! ... Method_Setup points TwoRdm_twoRdmState into Method_state ...
 !> call TwoRdm_ApplyCommutatorH1(dState, state, h1)  ! Time evolution
 !> call TwoRdm_FillRdm1FromTwoRdmState(rdm1, state)  ! Extract 1-RDM
 !> ```
@@ -80,11 +80,11 @@ module M_TwoRdm
   !=============================================================================
 
   !> Total number of elements in the linearized 2‑RDM representation currently in use.
-  !> Set during setup/fabrication and consistent with `TwoRdm_twoRdmState`.
+  !> Set by the backend fabricate; the size of `TwoRdm_twoRdmState`.
   integer(I32) :: TwoRdm_nElements
 
   !> Pointer to the 2‑RDM portion of the global/state vector in linearized form.
-  !> - Association and storage are backend‑controlled (usually during `TwoRdm_Setup`).
+  !> - Associated by the setup of the TD-2RDM method (a view of `Method_state`).
   !> - When associated, its size equals `TwoRdm_nElements`.
   !> - The exact packing order is backend‑defined but stable for a given backend.
   complex(R64), contiguous, pointer :: TwoRdm_twoRdmState(:)
@@ -96,12 +96,8 @@ module M_TwoRdm
   !> Pointer to the setup procedure for initializing the 2‑RDM subsystem.
   procedure(I_TwoRdm_Setup), pointer :: TwoRdm_Setup => NoOpProcedures_Setup
   abstract interface
-    !> Initialize and/or associate 2‑RDM storage and bookkeeping.
-    !>
-    !> Expected effects:
-    !> - Set `TwoRdm_nElements`.
-    !> - Allocate/associate `TwoRdm_twoRdmState(:)` if needed.
-    !> - Prepare any backend‑specific constants/indices used by other procedures.
+    !> Prepare backend‑specific constants or indices used by the other
+    !> procedures; no backend binds it at present (no-op default).
     subroutine I_TwoRdm_Setup
     end subroutine
   end interface
@@ -196,18 +192,6 @@ module M_TwoRdm
       import :: R64
       !> In/out linearized 2‑RDM. Modified in place.
       complex(R64), intent(inout), contiguous :: twoRdmState(:)
-    end subroutine
-  end interface
-
-  !> Pointer to the procedure that persists the linearized 2‑RDM to disk or a stream.
-  procedure(I_TwoRdm_SaveTwoRdmState), pointer :: TwoRdm_SaveTwoRdmState
-  abstract interface
-    !> Persist the 2‑RDM in its linearized form. The concrete format/location is backend‑ or
-    !> application‑defined.
-    subroutine I_TwoRdm_SaveTwoRdmState(twoRdmState)
-      import :: R64
-      !> Linearized 2‑RDM to be saved.
-      complex(R64), intent(in), contiguous :: twoRdmState(:)
     end subroutine
   end interface
 

@@ -304,6 +304,7 @@ contains
     integer(I32) :: configurations(Method_Mb_nBodyTypes)
 
     nO = Method_Mb_OrbBased_nOrbsSum
+    if (present(dCoeffs_) .and. .not. present(h1_)) error stop "Coeffs_ApplyH1FillRdm1 (coeffs.generic): dCoeffs_ requires h1_"
 
     if (present(rdm1_)) allocate (rdm1Lin(nO**2))
     if (present(rdm1_)) rdm1Lin(:) = 0.0_R64
@@ -356,7 +357,7 @@ contains
     !$omp end parallel
 
     if (present(rdm1_)) then
-      if (.not. allocated(rdm1_)) allocate (rdm1_(nO, nO))
+      allocate (rdm1_(nO, nO))
       call FillRdm1FromRdm1Lin(rdm1_, rdm1Lin)
     end if
 
@@ -406,6 +407,7 @@ contains
     integer(I32) :: configurations(Method_Mb_nBodyTypes)
 
     nO = Method_Mb_OrbBased_nOrbsSum
+    if (present(dCoeffs_) .and. .not. present(h2_)) error stop "Coeffs_ApplyH2FillRdm2 (coeffs.generic): dCoeffs_ requires h2_"
 
     if (present(rdm2_)) allocate (rdm2Lin(nO**4))
     if (present(rdm2_)) rdm2Lin(:) = 0.0_R64
@@ -505,7 +507,7 @@ contains
     !$omp end parallel
 
     if (present(rdm2_)) then
-      if (.not. allocated(rdm2_)) allocate (rdm2_(nO, nO, nO, nO))
+      allocate (rdm2_(nO, nO, nO, nO))
       call FillRdm2FromRdm2Lin(rdm2_, rdm2Lin)
     end if
 
@@ -517,7 +519,6 @@ contains
 !> The accumulator at `orbCode = (i-1)*nO + j` holds ⟨a†_i a_j⟩, which is
 !> rdm1(j,i) in the public convention rdm1(i,j) = ⟨a†_j a_i⟩.
   subroutine FillRdm1FromRdm1Lin(rdm1, rdm1Lin)
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(out), contiguous  :: rdm1(:, :)
@@ -642,7 +643,6 @@ contains
 !> connection a†_i a_j of configuration iC couples to ⟨iC|Ĥ₁|jC⟩ through
 !> h1(j,i), so the transposed element is stored.
   subroutine FillH1Lin(h1Lin, h1)
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(out), contiguous  :: h1Lin(:)
@@ -768,7 +768,6 @@ contains
 !> @param[in]    bt       Body type index for this excitation
   subroutine ApplyExcitation(coeffs, creates, destroys, bt)
     use M_Coeffs
-    use M_Method_Mb
     use M_ConfigList
 
     complex(R64), intent(inout), contiguous  :: coeffs(:)

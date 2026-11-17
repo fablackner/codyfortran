@@ -110,8 +110,8 @@ Users:
   (g = φ, `factor_ = 2`) in every iteration; with `aceQ` K_ACE of the
   occupied orbitals of one spin (g = φ), and every Fock action applies J and
   K_ACE in one `AddMeanField` call;
-- the frozen mean-field reference of the Cayley exact part of Method
-  (`method.mb.orbBased.exactFieldFreeMeanFieldQ`): J of the spatial 1-RDM
+- the frozen mean-field reference of the Cayley exact part
+  (`fieldFree.cayley.meanFieldQ`): J of the spatial 1-RDM
   ρS (g = φ ρS), K_ACE per body type (g = φ R with the 1-RDM block R), built
   once and applied per vector with the ζ columns of the body type.
 
@@ -151,7 +151,7 @@ V(x) = ∫ w(|x-x'|) ρ(x') dx'
 
 **Implementations:**
 - `SoftYukawa/StdImpl`: O(N²) direct convolution
-- `SoftYukawa/Fftw3`: O(N log N) FFT convolution
+- `SoftYukawa/Fftw`: O(N log N) FFT convolution
 
 **Kernel form:**
 ```
@@ -355,7 +355,7 @@ call SysInteraction_MultiplyWithInteractionPotential(dOrb, pot, orb_k)
    - Add JSON existence check and dispatch call
 
 5. **Add tests:**
-   - Create `test/T_SysInteraction_<NewModel>.f90`
+   - Create `test/componentTests/SysInteraction/<Family>/<NewModel>/T_SysInteraction_<Family>_<NewModel>.f90`
    - Create corresponding JSON fixture
 
 ---
@@ -383,7 +383,7 @@ When `timeIndependentQ = .true.` and `bodyTypeIndependentQ = .true.`:
 |--------|-------|
 | `M_Grid*` | Grid points, weights, nPoints |
 | `M_Utils_Json` | Configuration parsing |
-| `M_Utils_Fftw3Lib` | FFT for convolution |
+| `M_Utils_FftwLib` | FFT for convolution |
 | `M_Utils_LapackLib` | LU factorization for FEDVR solvers |
 | `M_Utils_Fedvr` | Finite element DVR infrastructure |
 | `M_Utils_ConvolutionIntegral` | Direct convolution utility |

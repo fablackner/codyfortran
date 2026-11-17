@@ -106,6 +106,11 @@ twoRdmState = [ rdm1a(nα²) | rdm2abTr0(nα²×nβ²) ]
 ```
 (explicit 1-RDM + trace-free 2-RDM)
 
+The two-body commutator updates only the trace-free 2-RDM segment (the trace
+part of [W, D²_αβ] is removed). The W term of the 1-RDM equation,
+Tr[W, D²], belongs to the collision operator of the SingletTr0 reconstruction,
+which adds it to the 1-RDM segment.
+
 ---
 
 ## Core Procedures
@@ -113,8 +118,9 @@ twoRdmState = [ rdm1a(nα²) | rdm2abTr0(nα²×nβ²) ]
 ### Fabrication & Setup
 
 ```fortran
-call TwoRdm_Fabricate()  ! Wire procedure pointers from JSON
-call TwoRdm_Setup()      ! Allocate storage (backend-specific)
+call TwoRdm_Fabricate()  ! Wire procedure pointers from JSON, set TwoRdm_nElements
+call TwoRdm_Setup()      ! No-op (no backend binds it); the TD-2RDM method setup
+                         ! points TwoRdm_twoRdmState into Method_state
 ```
 
 ### Commutator Operations (for time propagation)
@@ -155,10 +161,9 @@ call TwoRdm_Normalize(twoRdmState)
 
 ### I/O
 
-```fortran
-call TwoRdm_SaveTwoRdmState(twoRdmState)
-! Write to 'twoRdmState.dat' in binary format
-```
+The 2-RDM is saved in the blocks `rdm2BtXX_YY.in` that `twoRdmInit.load`
+reads: `Method_Mb_OrbBased_SaveRdm2Blocks` (or `Coeffs_SaveTwoRdm` from a CI
+vector).
 
 ---
 
@@ -276,14 +281,12 @@ Your backend must implement:
 
 ## Testing
 
-Run module tests with:
+There is no component test of TwoRdm alone. The module is exercised by the
+TD-2RDM simulation tests (`test/simulationTests/He1d/T_He1d_06_TimePropagationTd2rdm*`,
+`Be3d/T_Be3d_03`, `Be3d/T_Be3d_04`) and, for SingletTr0, by
+`test/componentTests/Reconstruction/SingletTr0/T_Reconstruction_SingletTr0_Ny`:
 ```bash
-cd build && ctest -R T_TwoRdm
-```
-
-Or use the full test suite:
-```bash
-bash runTestsAndCov.sh
+cd build && ctest -R 'Td2rdm|SingletTr0'
 ```
 
 ---
@@ -298,4 +301,4 @@ bash runTestsAndCov.sh
 
 4. **Index convention**: This code uses physicist's convention where creation operators precede annihilation in RDM definition
 
-5. **Singlet assumption**: Singlet/SingletTr0 backends assume nα = nβ (equal α and β orbital counts)
+5. **Singlet assumption**: Singlet/SingletTr0 backends require two body types with equal orbital and particle counts (checked at fabricate)

@@ -6,7 +6,7 @@
 !>
 !> @details
 !> The xc points are the interior nodes of grid.fem (SysXc_nPoints =
-!> Grid_nPoints) with the lumped-mass weights Grid_Fem_weights; densities,
+!> Grid_nPoints) with the lumped-mass weights Grid_weights; densities,
 !> potentials and the Hartree source are the nodal defaults of SysXc
 !> (S_SysXc). Gradient functionals use the nodal gradient of
 !> Grid_Fem_ApplyGradient (element derivatives averaged at shared nodes) and

@@ -15,8 +15,7 @@
 !> once in Setup and FillExternalPotential only copies it. Laser couplings are
 !> not SysPotential terms on this grid: the length-gauge dipole coupling is the
 !> SysGauge backend sysGauge.fem.length, which keeps SysPotential static (the
-!> exact field-free part h0 = T + V can then be treated by
-!> method.mb.orbBased.exactFieldFreeQ).
+!> exact field-free part h0 = T + V can then be treated by fieldFree.cayley).
 module M_SysPotential_Fem
   use M_Utils_Types
 

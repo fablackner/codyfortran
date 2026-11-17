@@ -24,11 +24,11 @@ contains
     ! branch
     !------------------------------------
 
-    if (Json_GetExistence("reconstruction.generic.genericValdemoro")) then
+    if (Json_GetExistence("reconstruction.generic.valdemoro")) then
       call Reconstruction_Generic_Valdemoro_Fabricate
 
     else
-      error stop "reconstruction.generic is missing one of: genericValdemoro"
+      error stop "reconstruction.generic is missing one of: valdemoro"
     end if
 
   end subroutine

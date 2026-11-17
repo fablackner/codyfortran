@@ -2,7 +2,7 @@ program __PROGRAM_NAME__
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
-  use M_Utils_PrinterObservable
+  use M_Printer_Observable
   use M_Grid
   use M_SysKinetic
   use M_SysPotential
@@ -74,9 +74,9 @@ program __PROGRAM_NAME__
       t = t + timeStep
     end do
 
-    call PrinterObservable_DumpEnergy("energy.dat", .true., t)
+    call Printer_Observable_DumpEnergy("energy.dat", .true., t)
     call Coeffs_ApplyH1FillRdm1(Coeffs_coeffs, rdm1_=Method_Mb_OrbBased_rdm1)
-    call PrinterObservable_DumpNorm(Method_Mb_OrbBased_rdm1, Method_Mb_OrbBased_rdm2, Orbs_orbs, "", .true.)
+    call Printer_Observable_DumpNorm(Method_Mb_OrbBased_rdm1, Method_Mb_OrbBased_rdm2, Orbs_orbs, "", .true.)
   end do
 
   call Say_Section("printout results")

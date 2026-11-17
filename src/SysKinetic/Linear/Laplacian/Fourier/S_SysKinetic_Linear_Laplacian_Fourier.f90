@@ -66,7 +66,6 @@ contains
     use M_Utils_UnusedVariables
     use M_SysKinetic_Linear_Laplacian
     use M_Grid
-    use M_Grid_Linear
 
     complex(R64), intent(out), contiguous :: dOrb(:)
     complex(R64), intent(in), contiguous :: orb(:)

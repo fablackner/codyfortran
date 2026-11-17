@@ -39,7 +39,7 @@ program T_Grid_Fem_Asymmetric
   use M_Grid
   use M_Grid_Fem
   use testdrive, only: check, error_type
-  !$ use omp_lib, only: omp_get_max_threads
+!$ use omp_lib, only: omp_get_max_threads
 
   implicit none
 
@@ -148,7 +148,7 @@ program T_Grid_Fem_Asymmetric
 
   g = Gaussian(1.0_R64, gaussCenter, 0.0_R64)
 
-  integral = sum(Grid_Fem_weights * real(g, kind=R64))
+  integral = sum(Grid_weights * real(g, kind=R64))
   call check(error, integral, PI**1.5_R64, thr=1.0e-5_R64)
   if (allocated(error)) error stop "T_Grid_Fem_Asymmetric Gaussian quadrature failure"
 
@@ -230,7 +230,7 @@ program T_Grid_Fem_Asymmetric
 
   allocate (pot(Grid_nPoints), potRe(Grid_nPoints), potIm(Grid_nPoints))
 
-  load = Grid_Fem_weights * PI**(-1.5_R64) * g
+  load = Grid_weights * PI**(-1.5_R64) * g
   call Grid_Fem_SolvePoisson(pot, load)
 
   dist = Distances(gaussCenter)
@@ -292,7 +292,7 @@ program T_Grid_Fem_Asymmetric
   ! and imaginary parts solved separately
   !------------------------------------
 
-  load = Grid_Fem_weights * PI**(-1.5_R64) * Gaussian(1.0_R64, gaussCenter, 0.3_R64)
+  load = Grid_weights * PI**(-1.5_R64) * Gaussian(1.0_R64, gaussCenter, 0.3_R64)
   call Grid_Fem_SolvePoisson(pot, load)
   call Grid_Fem_SolvePoisson(potRe, cmplx(real(load, kind=R64), 0.0_R64, kind=R64))
   call Grid_Fem_SolvePoisson(potIm, cmplx(aimag(load), 0.0_R64, kind=R64))
@@ -307,7 +307,7 @@ program T_Grid_Fem_Asymmetric
   !------------------------------------
 
   nThreads = 1
-  !$ nThreads = omp_get_max_threads()
+!$ nThreads = omp_get_max_threads()
 
   allocate (fields(Grid_nPoints, nFields), outParallel(Grid_nPoints, nOps, nFields), work(Grid_nPoints))
   do k = 1, nFields
@@ -432,9 +432,9 @@ contains
     case (5)
       call Grid_Fem_SolveShiftedLaplacian(res, f, cmplx(1.0_R64 * k, -10.0_R64 * k, kind=R64))
     case (6)
-      call Grid_Fem_SolvePoisson(res, f * Grid_Fem_weights)
+      call Grid_Fem_SolvePoisson(res, f * Grid_weights)
     case (7)
-      call Grid_Fem_SolvePoisson(res, cmplx(real(f, kind=R64) * Grid_Fem_weights, 0.0_R64, kind=R64))
+      call Grid_Fem_SolvePoisson(res, cmplx(real(f, kind=R64) * Grid_weights, 0.0_R64, kind=R64))
     case default
       call Grid_Fem_SolvePoissonPointCharges(res, [-1.0_R64 * k, 0.5_R64], &
                                              reshape([0.11_R64 * k, -0.2_R64, 0.3_R64, 1.0_R64, 0.0_R64, -0.37_R64 * k], &

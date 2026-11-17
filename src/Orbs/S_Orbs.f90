@@ -111,6 +111,7 @@ contains
     end if
 
     ! Blocks of equal (body type, declared m), numbered by first appearance
+    if (allocated(Orbs_blockOfOrb)) deallocate (Orbs_blockOfOrb)
     allocate (Orbs_blockOfOrb(nOS))
     do i = 1, nOS
       Orbs_blockOfOrb(i) = maxval([0, Orbs_blockOfOrb(1:i - 1)]) + 1
@@ -143,6 +144,7 @@ contains
 !> round-off admixtures; error stop if more than 1e-8 of the norm, in the
 !> positive metric of the grid weights, would be removed).
   subroutine ProjectOnSymmetry(orbs)
+    use M_Grid
     use M_Grid_Ylm
     use M_Method_Mb_OrbBased
 
@@ -158,8 +160,8 @@ contains
       orbM = orbs(:, i)
       call Grid_Ylm_ProjectOnM(orbM, Method_Mb_OrbBased_mOfOrb(i))
 
-      norm = sum(Grid_Ylm_weights(:) * abs(orbs(:, i))**2)
-      normRemoved = sum(Grid_Ylm_weights(:) * abs(orbs(:, i) - orbM(:))**2)
+      norm = sum(Grid_weights(:) * abs(orbs(:, i))**2)
+      normRemoved = sum(Grid_weights(:) * abs(orbs(:, i) - orbM(:))**2)
       if (normRemoved > tolerance * norm) then
         write (*, '(A,I0,A,I0,A,ES10.3)') " orbital ", i, ": fraction of the norm outside m = ", &
           Method_Mb_OrbBased_mOfOrb(i), ": ", normRemoved / norm

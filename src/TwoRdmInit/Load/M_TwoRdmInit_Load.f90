@@ -40,7 +40,6 @@
 !>   - `rdm2Bt02_02.in` - beta-beta block
 module M_TwoRdmInit_Load
   use M_Utils_Types
-  use M_Utils_NoOpProcedures
 
   implicit none
 

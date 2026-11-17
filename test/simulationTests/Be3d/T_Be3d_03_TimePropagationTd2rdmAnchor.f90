@@ -32,6 +32,7 @@ program T_Be3d_03_TimePropagationTd2rdmAnchor
   use M_TwoRdm_Fermionic_Singlet
   use M_TwoRdmInit
   use M_Reconstruction
+  use M_FieldFree
   use M_Method
   use M_Method_Mb_OrbBased
   use M_IntegratorList
@@ -59,6 +60,7 @@ program T_Be3d_03_TimePropagationTd2rdmAnchor
   call SysKinetic_Fabricate
   call SysPotential_Fabricate
   call SysInteraction_Fabricate
+  call FieldFree_Fabricate
   call Method_Fabricate
   call TwoRdm_Fabricate
   call TwoRdmInit_Fabricate
@@ -82,6 +84,7 @@ program T_Be3d_03_TimePropagationTd2rdmAnchor
   call TwoRdmInit_Setup
   call Orbs_Setup
   call OrbsInit_Setup
+  call FieldFree_Setup
   call Method_Setup
   call Reconstruction_Setup
   call IntegratorList_Setup

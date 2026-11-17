@@ -2,7 +2,7 @@
 !> MCSCF ground state of N2 (R = 2.068) on the prolate spheroidal grid: 10
 !> restricted orbitals (the 7 occupied of ../scf plus the valence 1πg and
 !> 3σu), full CI of 14 electrons (14 400 configurations), ground solver
-!> groundSolver.mcscf.gradient (the program of app/atoms/be/groundstate/mcscf
+!> groundSolver.mcscf.gradient (the program app/atoms/P_GroundMcscf.f90
 !> plus the spectral-anchor output).
 !>
 !> Start: the Hartree-Fock orbitals of ../scf (orbsInit.load with nOrbsIn 7)

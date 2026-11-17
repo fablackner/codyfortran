@@ -31,6 +31,30 @@ module M_Method
     !>   `Method_TimeDerivative`, and `Method_GetEnergy`.
     module subroutine Method_Fabricate
     end subroutine
+
+    !> The Hamiltonian applied to a state, dState = H state: i times
+    !> Method_TimeDerivative (d|psi>/dt = -i H |psi>). The matrix-vector
+    !> product of diagonalizers (signature of their ApplyMatOnVec).
+    module subroutine Method_ApplyHamiltonian(dState, state, time)
+      !> Output: H applied to the state.
+      complex(R64), intent(out), contiguous, target :: dState(:)
+      !> Input: quantum state vector.
+      complex(R64), intent(in), contiguous, target  :: state(:)
+      !> Current time (for time-dependent Hamiltonians/operators).
+      real(R64), intent(in) :: time
+    end subroutine
+
+    !> The imaginary-time derivative, dState = -H state: -i times
+    !> Method_TimeDerivative. The TimeDerivative of an integrator that relaxes
+    !> the state toward the ground state.
+    module subroutine Method_ImagTimeDerivative(dState, state, time)
+      !> Output: -H applied to the state.
+      complex(R64), intent(out), contiguous, target :: dState(:)
+      !> Input: quantum state vector.
+      complex(R64), intent(in), contiguous, target  :: state(:)
+      !> Current time (for time-dependent Hamiltonians/operators).
+      real(R64), intent(in) :: time
+    end subroutine
   end interface
 
   !=============================================================================
@@ -45,6 +69,12 @@ module M_Method
   !> routine. Ownership lives in this module; concrete methods should allocate
   !> and resize this array as needed during setup.
   complex(R64), allocatable, target :: Method_state(:)
+
+  !> Whether the selected method is a Kohn-Sham method: its mean field is the
+  !> potential of the density functional of a sysXc block. Set by the
+  !> fabricate of the method and reset by Method_Fabricate, which refuses a
+  !> sysXc block for every other method.
+  logical :: Method_kohnShamQ = .false.
 
   !=============================================================================
   ! module procedures pointers

@@ -23,13 +23,18 @@ contains
 !> Sets TwoRdm_nElements to nα² + nα²×nβ² to accommodate the explicit 1-RDM
 !> storage plus the trace-free αβ block.
   module subroutine TwoRdm_Fermionic_SingletTr0_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
     use M_Method_Mb
     use M_Method_Mb_OrbBased
     use M_TwoRdm
 
     call Say_Fabricate("twoRdm.fermionic.singletTr0")
+
+    ! The singlet layouts store one (up,down) block: equal orbital and particle
+    ! counts of the two spins
+    if (Method_Mb_nBodyTypes .ne. 2) error stop "twoRdm.fermionic.singletTr0 requires two body types (the spins)"
+    if (Method_Mb_OrbBased_nOrbs(1) .ne. Method_Mb_OrbBased_nOrbs(2) .or. Method_Mb_nBodies(1) .ne. Method_Mb_nBodies(2)) &
+      error stop "twoRdm.fermionic.singletTr0 requires equal nOrbs and nBodies for both spins"
 
     !------------------------------------
     ! set values and procedure pointers
@@ -48,9 +53,7 @@ contains
 
     TwoRdm_Fermionic_SingletTr0_FillTwoRdmStateFromRdm2ab => FillTwoRdmStateFromRdm2ab
     TwoRdm_Fermionic_SingletTr0_FillTwoRdmStateFromRdms => FillTwoRdmStateFromRdms
-    TwoRdm_Fermionic_SingletTr0_FillRdmsFromTwoRdmState => FillRdmsFromTwoRdmState
     TwoRdm_Fermionic_SingletTr0_FillRdm2abFromTwoRdmState => FillRdm2abFromTwoRdmState
-    TwoRdm_Fermionic_SingletTr0_FillRdm1aFromTwoRdmState => FillRdm1aFromTwoRdmState
 
   end subroutine
 
@@ -68,8 +71,8 @@ contains
 !> @param[in]    twoRdmState   Input state (1-RDM + trace-free 2-RDM)
 !> @param[in]    h1            One-body Hamiltonian (spin-orbital basis)
   subroutine ApplyCommutatorH1(dTwoRdmState, twoRdmState, h1)
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
+    use M_Utils_RdmAlgebra
     use M_Utils_RdmEnforceTraceM2ab
 
     complex(R64), intent(inout), contiguous  :: dTwoRdmState(:)
@@ -80,41 +83,21 @@ contains
     complex(R64), allocatable :: dRdm2ab(:, :, :, :)
     complex(R64), allocatable :: rdm1a(:, :), drdm1a(:, :)
 
-    integer(I32) :: nOa, nOb
-    integer(I32) :: i1, i2, j1, j2, k
+    integer(I32) :: nOa
+    integer(I32) :: i1, j1, k
 
     nOa = Method_Mb_OrbBased_nOrbs(1)
-    nOb = Method_Mb_OrbBased_nOrbs(2)
 
     ! Extract 1-RDM components for explicit commutator
-    call TwoRdm_Fermionic_SingletTr0_FillRdmsFromTwoRdmState(twoRdmState, rdm1a_=rdm1a)
-    call TwoRdm_Fermionic_SingletTr0_FillRdmsFromTwoRdmState(dTwoRdmState, rdm1a_=drdm1a)
+    call FillRdm1aFromTwoRdmState(rdm1a, twoRdmState)
+    call FillRdm1aFromTwoRdmState(drdm1a, dTwoRdmState)
 
     ! Get full αβ 2-RDM (trace restored)
     call TwoRdm_Fermionic_SingletTr0_FillRdm2abFromTwoRdmState(rdm2ab, twoRdmState)
     call TwoRdm_Fermionic_SingletTr0_FillRdm2abFromTwoRdmState(dRdm2ab, dTwoRdmState)
 
     ! Compute [ĥ₁, D²_αβ]
-    do j2 = 1, nOb
-      do j1 = 1, nOa
-
-        do i2 = 1, nOb
-          do i1 = 1, nOa
-
-            do k = 1, nOa
-
-              dRdm2ab(i1, i2, j1, j2) = dRdm2ab(i1, i2, j1, j2) + h1(i1, k) * rdm2ab(k, i2, j1, j2)
-              dRdm2ab(i1, i2, j1, j2) = dRdm2ab(i1, i2, j1, j2) + h1(i2 + nOa, k + nOa) * rdm2ab(i1, k, j1, j2)
-
-              dRdm2ab(i1, i2, j1, j2) = dRdm2ab(i1, i2, j1, j2) - h1(k, j1) * rdm2ab(i1, i2, k, j2)
-              dRdm2ab(i1, i2, j1, j2) = dRdm2ab(i1, i2, j1, j2) - h1(k + nOa, j2 + nOa) * rdm2ab(i1, i2, j1, k)
-
-            end do
-
-          end do
-        end do
-      end do
-    end do
+    call RdmAlgebra_AddCommutatorH1ab(dRdm2ab, rdm2ab, h1)
 
     ! Compute [ĥ₁, D¹_α] explicitly for the 1-RDM segment
     do j1 = 1, nOa
@@ -135,8 +118,10 @@ contains
 !> @brief Accumulate [Ŵ₁₂, D²] for the trace-free representation.
 !>
 !> @details
-!> The two-body commutator only affects the 2-RDM part (the 1-RDM is unchanged
-!> by [Ŵ, D²] in the BBGKY hierarchy - that term comes from the 3-RDM closure).
+!> Only the trace-free 2-RDM segment is updated: the trace part of [Ŵ, D²_αβ]
+!> is removed here and the 1-RDM segment is left alone. The W term of the
+!> 1-RDM equation, Tr[Ŵ, D²], is added by the collision operator of the
+!> SingletTr0 reconstruction (RdmCollisionOp_FillCollisionOp1a).
 !>
 !> @param[inout] dTwoRdmState  Accumulator for time derivative
 !> @param[in]    twoRdmState   Input state (1-RDM + trace-free 2-RDM)
@@ -173,7 +158,6 @@ contains
 !> @param[out] rdm1         Allocated on output: full 1-RDM (nOrbs × nOrbs)
 !> @param[in]  twoRdmState  Input state with explicit 1-RDM segment
   subroutine FillRdm1FromTwoRdmState(rdm1, twoRdmState)
-    use M_Utils_RdmTrace
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(out), allocatable :: rdm1(:, :)
@@ -214,7 +198,6 @@ contains
 !> @param[in]  twoRdmState  Input state
   subroutine FillRdm2FromTwoRdmState(rdm2, twoRdmState)
     use M_Utils_RdmSingletRelations
-    use M_Method
 
     complex(R64), intent(out), allocatable :: rdm2(:, :, :, :)
     complex(R64), intent(in), contiguous                :: twoRdmState(:)
@@ -233,17 +216,14 @@ contains
 !> @param[in]  rdm2         Input full 2-RDM tensor
   subroutine FillTwoRdmStateFromRdm2(twoRdmState, rdm2)
     use M_Utils_RdmTrace
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(out), contiguous  :: twoRdmState(:)
     complex(R64), intent(in), contiguous   :: rdm2(:, :, :, :)
 
     complex(R64), allocatable :: rdm2ab(:, :, :, :)
-    complex(R64), allocatable :: rdm1a(:, :)
 
     call RdmTrace_FillRdm2abFromRdm2(rdm2ab, rdm2, Method_Mb_OrbBased_nOrbs(1), Method_Mb_OrbBased_nOrbs(2))
-    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab)
     call TwoRdm_Fermionic_SingletTr0_FillTwoRdmStateFromRdm2ab(twoRdmState, rdm2ab)
 
   end subroutine
@@ -260,7 +240,6 @@ contains
 !> @param[out] rdm2ab       Allocated on output: full αβ tensor
 !> @param[in]  twoRdmState  Input state
   subroutine FillRdm2abFromTwoRdmState(rdm2ab, twoRdmState)
-    use M_Utils_RdmSingletRelations
     use M_Method_Mb
     use M_Method_Mb_OrbBased
     use M_Utils_RdmEnforceTraceM2ab
@@ -343,7 +322,7 @@ contains
     nOb = Method_Mb_OrbBased_nOrbs(2)
 
     ! Extract 1-RDM via partial trace
-    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab)
+    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab, Method_Mb_nBodies(2))
 
     ! Create trace-free copy
     allocate (rdm2abTr0(nOa, nOb, nOa, nOb))
@@ -355,7 +334,7 @@ contains
     block
       complex(R64), allocatable :: testRdm1a(:, :)
       real(R64) :: maxDiff
-      call RdmTrace_FillRdm1aFromRdm2ab(testRdm1a, rdm2abTr0)
+      call RdmTrace_FillRdm1aFromRdm2ab(testRdm1a, rdm2abTr0, Method_Mb_nBodies(2))
       maxDiff = maxval(abs(testRdm1a))
       if (maxDiff > 1.0e-12_R64) then
         print *, "WARNING: FillTwoRdmStateFromRdm2ab: rdm2abTr0 is not traceless! maxDiff =", maxDiff
@@ -372,16 +351,15 @@ contains
 !> @details
 !> Flexible packing routine that can update either or both segments.
 !> If an argument is not present, the corresponding segment is skipped
-!> (offset advanced but no data written).
+!> (offset advanced but no data written; hence intent(inout)).
 !>
-!> @param[out] twoRdmState  Output state vector
+!> @param[inout] twoRdmState  State vector, the given segments overwritten
 !> @param[in]  rdm2abTr0_   Optional: trace-free αβ 2-RDM to pack
 !> @param[in]  rdm1a_       Optional: α 1-RDM to pack
   subroutine FillTwoRdmStateFromRdms(twoRdmState, rdm2abTr0_, rdm1a_)
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
 
-    complex(R64), intent(out), contiguous  :: twoRdmState(:)
+    complex(R64), intent(inout), contiguous  :: twoRdmState(:)
     complex(R64), intent(in), contiguous, optional   :: rdm2abTr0_(:, :, :, :)
     complex(R64), intent(in), contiguous, optional   :: rdm1a_(:, :)
 
@@ -420,66 +398,11 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief Extract 1-RDM and/or trace-free 2-RDM from the state vector.
-!>
-!> @details
-!> Flexible extraction routine. Only requested arrays are allocated and filled.
-!>
-!> @param[in]  twoRdmState  Input state vector
-!> @param[out] rdm2abTr0_   Optional: receives trace-free αβ 2-RDM
-!> @param[out] rdm1a_       Optional: receives α 1-RDM
-  subroutine FillRdmsFromTwoRdmState(twoRdmState, rdm2abTr0_, rdm1a_)
-    use M_Method_Mb
-    use M_Method_Mb_OrbBased
-
-    complex(R64), intent(in), contiguous   :: twoRdmState(:)
-    complex(R64), intent(out), allocatable, optional :: rdm2abTr0_(:, :, :, :)
-    complex(R64), intent(out), allocatable, optional :: rdm1a_(:, :)
-
-    integer(I32) :: nOa, nOb
-    integer(I32) :: count
-    integer(I32) :: i1, i2, j1, j2
-
-    nOa = Method_Mb_OrbBased_nOrbs(1)
-    nOb = Method_Mb_OrbBased_nOrbs(2)
-
-    count = 0
-
-    if (present(rdm1a_)) then
-      if (.not. allocated(rdm1a_)) allocate (rdm1a_(nOa, nOa))
-      do j1 = 1, nOa
-        do i1 = 1, nOa
-          count = count + 1
-          rdm1a_(i1, j1) = twoRdmState(count)
-        end do
-      end do
-    else
-      count = count + nOa * nOa
-    end if
-
-    if (present(rdm2abTr0_)) then
-      if (.not. allocated(rdm2abTr0_)) allocate (rdm2abTr0_(nOa, nOb, nOa, nOb))
-      do j2 = 1, nOb
-        do j1 = 1, nOa
-          do i2 = 1, nOb
-            do i1 = 1, nOa
-              count = count + 1
-              rdm2abTr0_(i1, i2, j1, j2) = twoRdmState(count)
-            end do
-          end do
-        end do
-      end do
-    end if
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> @brief Extract only the α 1-RDM from the state vector.
 !>
 !> @param[out] rdm1a        Allocated on output: α 1-RDM (nα × nα)
 !> @param[in]  twoRdmState  Input state vector
   subroutine FillRdm1aFromTwoRdmState(rdm1a, twoRdmState)
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(out), allocatable :: rdm1a(:, :)
@@ -491,7 +414,7 @@ contains
 
     nOa = Method_Mb_OrbBased_nOrbs(1)
 
-    if (.not. allocated(rdm1a)) allocate (rdm1a(nOa, nOa))
+    allocate (rdm1a(nOa, nOa))
 
     count = 0
     do j1 = 1, nOa

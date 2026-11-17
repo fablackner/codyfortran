@@ -17,7 +17,8 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased_Switching
   ! Where the terms enter (one place each, so every method that builds its
   ! equations from these operators follows):
   !   lambda W     the source of every pair potential of S_Method_Mb_OrbBased
-  !                (ApplyInteraction, FillPairPotentialsYlmNodes): h2, the
+  !                (ApplyInteraction) and of its child S_Method_Mb_OrbBased_YlmNodes
+  !                (FillPairPotentialsYlmNodes): h2, the
   !                correlation and Hartree-Fock operators; static orbitals
   !                use lambda h2 in their h2 terms and hand it to the
   !                reconstruction (TD-2RDM-StaticOrbs);

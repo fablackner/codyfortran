@@ -39,6 +39,11 @@
             }
         }
     },
+    "fieldFree": {
+        "cayley": {
+            "meanFieldQ": true
+        }
+    },
     "method": {
         "mb": {
             "nBodyTypes": 1,
@@ -46,8 +51,6 @@
             "bodyStatistics": [ "f" ],
             "orbBased": {
                 "nOrbs": [ 1 ],
-                "exactFieldFreeQ": true,
-                "exactFieldFreeMeanFieldQ": true,
                 "td2rdm": { }
             }
         }

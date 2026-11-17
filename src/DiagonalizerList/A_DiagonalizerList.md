@@ -286,7 +286,7 @@ Assign the weights after fabrication and before the first `Diagonalize`
 call DiagonalizerList_Fabricate(inputs)
 ...
 call Grid_Setup
-DiagonalizerList(1)%e%metricWeights = Grid_Fem_weights   ! e.g. Grid_Ylm_weights on Ylm grids
+DiagonalizerList(1)%e%metricWeights = Grid_weights   ! the grid metric (M_Grid), any grid
 ```
 
 LOBPCG sets up one weight vector per call (`metricWeights`, or unit weights
@@ -347,7 +347,7 @@ converged    =  DiagonalizerList(1)%e%convergedQ  ! all nEvals converged (defaul
 ```fortran
 ! 1. Setup fabrication input (callback + dimension)
 type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(1)
-DiagonalizerListInput(1)%ApplyMatOnVec => Actions_ApplyHamiltonian
+DiagonalizerListInput(1)%ApplyMatOnVec => Method_ApplyHamiltonian
 DiagonalizerListInput(1)%dim = Coeffs_nCoeffs
 
 ! 2. Fabricate (reads JSON, creates backends)
@@ -483,7 +483,7 @@ Relevant test files in `test/`:
   AK + iεW⁻¹S (ε = 1e-6): stops after 21 of 1000 iterations at the floor
   8.4e-6, `convergedQ` false, `nFound` 0, Ritz values within 2e-6
 - `T_Ne3d_17_GroundSolverScfLobpcgAce.f90` — LOBPCG as the SCF Fock
-  diagonalizer (`metricWeights` = `Grid_Ylm_weights`, warm starts, ACE
+  diagonalizer (`metricWeights` = `Grid_weights`, warm starts, ACE
   exchange); asserts that every solve converges (unpreconditioned, 50–482
   iterations, no false stagnation exit) and the SCF step count
 - `test/simulationTests/Fem/` — LOBPCG on finite-element grids with the

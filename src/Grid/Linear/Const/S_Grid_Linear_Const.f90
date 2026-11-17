@@ -41,13 +41,13 @@ contains
 
     call Say_Setup("grid.linear.const")
 
-    allocate (Grid_Linear_weights(Grid_nPoints))
-    Grid_Linear_weights(:) = (Grid_Linear_xmax - Grid_Linear_xmin) / (Grid_nPoints - 1)
+    allocate (Grid_weights(Grid_nPoints))
+    Grid_weights(:) = (Grid_Linear_xmax - Grid_Linear_xmin) / (Grid_nPoints - 1)
 
     ! Allocate coordinates for 1D
     allocate (Grid_Linear_xCoord(Grid_nPoints))
     do iGrid = 1, Grid_nPoints
-      Grid_Linear_xCoord(iGrid) = Grid_Linear_xmin + Grid_Linear_weights(iGrid) * (iGrid - 1)
+      Grid_Linear_xCoord(iGrid) = Grid_Linear_xmin + Grid_weights(iGrid) * (iGrid - 1)
     end do
   end subroutine
 

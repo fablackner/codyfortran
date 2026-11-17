@@ -1,12 +1,21 @@
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> 1D helium: field-free real-time TD-2RDM (singlet, Valdemoro closure) of the
+!> MCTDHF ground state written by T_He1d_04 (orb*.in, rdm2Bt*.in) after the
+!> dipole kick exp(i kick x) of every orbital. Checks energy conservation
+!> and the dipole <x> at the end time against the MCTDHF propagation
+!> T_He1d_05_TimePropagationMctdhx (N = 2: the closure is the only
+!> difference).
 program T_He1d_06_TimePropagationTd2rdm
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
-  use M_Utils_Actions
-  use M_Utils_PrinterDensityLinear
-  use M_Utils_PrinterObservable
-  use M_Utils_PrinterRdm
+  use M_Utils_Constants
+  use M_Printer_Observable_Linear
+  use M_Printer_Density_Linear
+  use M_Printer_Observable
+  use M_Printer_Rdm
   use M_Grid
+  use M_Grid_Linear
   use M_SysKinetic
   use M_SysPotential
   use M_SysInteraction
@@ -26,8 +35,8 @@ program T_He1d_06_TimePropagationTd2rdm
   implicit none
 
   real(R64) :: t, startTime, endTime, outputStep
-  integer(I32) :: iStep, nTimeSteps, innerStep
-  real(R64) :: energy, timeStep
+  integer(I32) :: iStep, nTimeSteps, innerStep, nOutputSteps, iOrb
+  real(R64) :: startEnergy, energy, timeStep, kick, dipole
   type(error_type), allocatable :: error
   character(len=:), allocatable :: jsonFileName
   type(T_IntegratorList_FabricateInput) :: IntegratorListInput(1)
@@ -61,6 +70,7 @@ program T_He1d_06_TimePropagationTd2rdm
   endTime = Json_Get("program.endTime", 1.0_R64)
   outputStep = Json_Get("program.outputStep", 2e-5_R64)
   nTimeSteps = Json_Get("program.nTimeSteps", 2)
+  kick = Json_Get("program.kick", 0.0_R64)
 
   call Grid_Setup
   call SysKinetic_Setup
@@ -81,56 +91,64 @@ program T_He1d_06_TimePropagationTd2rdm
   call Say_Section("perform action")
   !==========================================
 
-  energy = Method_GetEnergy(startTime)
+  ! The dipole kick exp(i kick x) of every orbital makes the ground state
+  ! non-stationary: a propagator that leaves the state unchanged fails the
+  ! dipole check
+  do iOrb = 1, Orbs_nOrbsInState
+    Orbs_orbs(:, iOrb) = Orbs_orbs(:, iOrb) * exp(IU * kick * Grid_Linear_xCoord(:))
+  end do
 
+  startEnergy = Method_GetEnergy(startTime)
   write (*, *)
-  write (*, *) "start energy: ", energy
+  write (*, *) "start energy: ", startEnergy
   write (*, *)
 
   t = startTime
-  iStep = 0
-  timeStep = outputStep / nTimeSteps  ! Calculate step size for each iteration
+  timeStep = outputStep / nTimeSteps
+  nOutputSteps = nint((endTime - startTime) / outputStep)
 
-  do while (t < endTime)
-    iStep = iStep + 1
-
-    ! Explicit loop to execute propagation nTimeSteps times
+  do iStep = 1, nOutputSteps
     do innerStep = 1, nTimeSteps
       call Propagator_Propagate(Method_state, t, t + timeStep)
-      t = t + timeStep  ! Update current time
-
+      t = t + timeStep
       call Absorber_ApplyAbsorber(Orbs_orbs)
       call Purification_PurifyTwoRdmState(TwoRdm_twoRdmState, Method_Mb_OrbBased_h2)
     end do
 
-    ! Print output every outputStep
     energy = Method_GetEnergy(t)
     call TwoRdm_FillRdm1FromTwoRdmState(Method_Mb_OrbBased_rdm1, TwoRdm_twoRdmState)
     call TwoRdm_FillRdm2FromTwoRdmState(Method_Mb_OrbBased_rdm2, TwoRdm_twoRdmState)
-    call PrinterRdm_DumpRdm2Symmetries(Method_Mb_OrbBased_rdm2, "rdm2Symmetries.dat", .true.)
-    call PrinterObservable_DumpNorm(Method_Mb_OrbBased_rdm1, Method_Mb_OrbBased_rdm2, Orbs_orbs, "", .true.)
-    call PrinterDensityLinear_DumpOneBodyDensityOnGrid(Method_Mb_OrbBased_rdm1, Orbs_orbs, "density.dat", .false.)
-
-    write (*, '(A,ES10.3E1,A,I0,A,E20.10)') ' time = ', t, '    iStep = ', iStep, '    energy = ', energy
+    call Printer_Rdm_DumpRdm2Symmetries(Method_Mb_OrbBased_rdm2, "rdm2Symmetries.dat", .false.)
+    call Printer_Observable_DumpNorm(Method_Mb_OrbBased_rdm1, Method_Mb_OrbBased_rdm2, Orbs_orbs, "", .true.)
+    call Printer_Density_Linear_DumpOneBodyDensityOnGrid(Method_Mb_OrbBased_rdm1, Orbs_orbs, "density.dat", .false.)
+    call Printer_Observable_Linear_DumpDipole(Method_Mb_OrbBased_rdm1, Orbs_orbs, "", .false., t, dipole_=dipole)
+    write (*, '(A,F8.4,A,I0,A,F20.14,A,ES22.14)') ' time = ', t, '    iStep = ', iStep, '    energy = ', energy, &
+      '    <x> = ', dipole
   end do
 
   !==========================================
   call Say_Section("printout results")
   !==========================================
 
-  energy = Method_GetEnergy(t)
-
   print *
+  print *, "start energy: ", startEnergy
   print *, "final energy: ", energy
+  print *, "final dipole: ", dipole
 
-  call check(error, energy, -2.4852442080454438_R64, thr=1e-7_R64)
-  if (allocated(error)) error stop "T_He1d_TimePropagationTd2rdm failure"
+  ! The Valdemoro closure without ccQ does not conserve the energy (drift
+  ! 6.5e-6 over 1 a.u., the same with dt = 0.001): pinned final energy
+  call check(error, energy, -2.4297140051271939_R64, thr=1e-8_R64)
+  if (allocated(error)) error stop "T_He1d_06_TimePropagationTd2rdm failure: energy not conserved"
+
+  ! For N = 2 the exact 3-RDM vanishes and the closure error is the only
+  ! difference to MCTDHF (measured 8.6e-5)
+  call check(error, dipole, 0.32414036926390166_R64, thr=2e-4_R64)
+  if (allocated(error)) error stop "T_He1d_06_TimePropagationTd2rdm failure: dipole off the MCTDHF reference"
 
   call TwoRdm_FillRdm1FromTwoRdmState(Method_Mb_OrbBased_rdm1, TwoRdm_twoRdmState)
-  call PrinterRdm_DumpRdm1(Method_Mb_OrbBased_rdm1, "rdm1.dat", .true.)
-
+  call Printer_Rdm_DumpRdm1(Method_Mb_OrbBased_rdm1, "rdm1.dat", .true.)
   call TwoRdm_FillRdm2FromTwoRdmState(Method_Mb_OrbBased_rdm2, TwoRdm_twoRdmState)
-  call PrinterRdm_DumpRdm2(Method_Mb_OrbBased_rdm2, "rdm2.dat", .false.)
+  call Printer_Rdm_DumpRdm2(Method_Mb_OrbBased_rdm2, "rdm2.dat", .false.)
 
   !==========================================
   call Say_Goodbye

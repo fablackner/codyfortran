@@ -105,7 +105,7 @@ contains
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  function PermutationGslLib_PermutationsSign(perm) result(res)
+  function Combinatorics_PermutationSign(perm) result(res)
 
     integer(I32) :: res
     integer(I32), intent(in), contiguous  :: perm(:)

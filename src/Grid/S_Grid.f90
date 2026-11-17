@@ -7,9 +7,9 @@
 !>
 !> @details
 !> Implements Grid_Fabricate (the top-level factory that dispatches to the
-!> appropriate back-end) and provides generic Gram–Schmidt orthonormalization
-!> and subspace projection routines that are shared across all coordinate
-!> back-ends.
+!> appropriate back-end) and provides the default inner product in the metric
+!> Grid_weights and the generic Gram–Schmidt orthonormalization and subspace
+!> projection routines that are shared across all coordinate back-ends.
 !>
 !> @par Fabrication Dispatch
 !> The JSON configuration is probed in the following order:
@@ -48,10 +48,10 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> @brief Top-level factory: parse JSON and dispatch to the appropriate back-end.
 !>
-!> Binds the generic Grid_Orthonormalize and Grid_ProjectOnSubspace pointers
-!> to the shared implementations in this submodule, then delegates to the
-!> selected coordinate family (Linear, Square, Polar, Spherical, Ylm, Prolate,
-!> Lattice, Fem).
+!> Binds the generic Grid_InnerProduct, Grid_Orthonormalize and
+!> Grid_ProjectOnSubspace pointers to the shared implementations in this
+!> submodule, then delegates to the selected coordinate family (Linear,
+!> Square, Polar, Spherical, Ylm, Prolate, Lattice, Fem).
   module subroutine Grid_Fabricate
     use M_Utils_Json
     use M_Utils_Say
@@ -70,8 +70,13 @@ contains
     ! set values and procedure pointers
     !------------------------------------
 
+    Grid_InnerProduct => InnerProduct
     Grid_Orthonormalize => Orthonormalize
     Grid_ProjectOnSubspace => ProjectOnSubspace
+
+    ! The weights of an earlier fabricate do not survive (the Setup of the
+    ! selected back-end allocates them)
+    if (allocated(Grid_weights)) deallocate (Grid_weights)
 
     !------------------------------------
     ! branch
@@ -106,6 +111,18 @@ contains
     end if
 
   end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> @brief Hermitian inner product in the diagonal metric Grid_weights.
+  pure function InnerProduct(fConjg, f) result(res)
+
+    complex(R64), intent(in), contiguous :: fConjg(:)
+    complex(R64), intent(in), contiguous :: f(:)
+    complex(R64) :: res
+
+    res = sum(conjg(fConjg(:)) * f(:) * Grid_weights(:))
+
+  end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> @brief Modified Gram–Schmidt orthonormalization using Grid_InnerProduct.

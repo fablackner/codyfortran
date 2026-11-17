@@ -10,21 +10,9 @@
 !> 2. Reconstruct 3-RDM using `RdmCumulants_FillCumulFreePartM3` (C³=0 approximation)
 !> 3. Compute collision operator collOp2 = Tr₃[h2, rdm3]
 !> 4. Add collision term to derivative and repack
-!>
-!> **Workspace**: Module-level allocatables `rdm3` and `collOp2` persist across calls
-!> to avoid repeated allocation for performance.
 submodule(M_Reconstruction_Generic_Valdemoro) S_Reconstruction_Generic_Valdemoro
 
   implicit none
-
-  !=============================================================================
-  ! local data
-  !=============================================================================
-
-  !> Reconstructed 3-RDM tensor rdm3(p,q,r,s,t,u); persists to avoid reallocation
-  complex(R64), allocatable :: rdm3(:, :, :, :, :, :)
-  !> Collision operator contribution to 2-RDM derivative
-  complex(R64), allocatable :: collOp2(:, :, :, :)
 
 contains
 
@@ -33,7 +21,7 @@ contains
     use M_Utils_Say
     use M_Reconstruction
 
-    call Say_Fabricate("reconstruction.generic.genericValdemoro")
+    call Say_Fabricate("reconstruction.generic.valdemoro")
 
     !------------------------------------
     ! set values and procedure pointers
@@ -56,6 +44,8 @@ contains
     complex(R64), allocatable :: rdm2(:, :, :, :)
     complex(R64), allocatable :: rdm1(:, :)
     complex(R64), allocatable :: dRdm2(:, :, :, :)
+    complex(R64), allocatable :: rdm3(:, :, :, :, :, :)
+    complex(R64), allocatable :: collOp2(:, :, :, :)
 
     call TwoRdm_FillRdm1FromTwoRdmState(rdm1, twoRdmState)
     call TwoRdm_FillRdm2FromTwoRdmState(rdm2, twoRdmState)

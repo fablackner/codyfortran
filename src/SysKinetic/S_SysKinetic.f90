@@ -18,7 +18,7 @@
 !> then binds the global `SysKinetic_MultiplyWithKineticOp` and `SysKinetic_Setup`
 !> procedure pointers; the optional hook `SysKinetic_SolveShifted` is nullified
 !> first and bound only by backends that provide it (Fem).
-submodule(M_SysKinetic) S_Kinetic
+submodule(M_SysKinetic) S_SysKinetic
 
   implicit none
 

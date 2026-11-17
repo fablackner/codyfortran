@@ -92,5 +92,6 @@ program T_Ne3d_13_TimePropagationMctdhxDeclaredM
 contains
 
   include 'Ne3dMctdhxLaser.inc'
+  include 'Ne3dOtherMEntries.inc'
 
 end program

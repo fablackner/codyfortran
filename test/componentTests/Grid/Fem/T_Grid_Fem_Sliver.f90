@@ -103,7 +103,7 @@ program T_Grid_Fem_Sliver
   !------------------------------------
 
   dist1 = Distances(center1)
-  load = Grid_Fem_weights * PI**(-1.5_R64) * exp(-dist1**2)
+  load = Grid_weights * PI**(-1.5_R64) * exp(-dist1**2)
   call Grid_Fem_SolvePoisson(pot, load)
 
   call check(error, all(ieee_is_finite(real(pot, kind=R64))), "non-finite potential")

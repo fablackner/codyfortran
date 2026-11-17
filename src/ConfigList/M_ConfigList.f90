@@ -101,9 +101,9 @@ module M_ConfigList
   !>   orbCode(k, iC)       → packed orbital indices defining the excitation
   !> ```
   !>
-  !> **orbCode encoding (for nOrbs total orbitals):**
-  !> - Singles: `orbCode = i * nOrbs + j` encodes a†_i a_j
-  !> - Doubles: `orbCode = ((i1 * nOrbs + j1) * nOrbs + i2) * nOrbs + j2`
+  !> **orbCode encoding (nOrbs total orbitals, global 1-based indices):**
+  !> - Singles: `orbCode = (i - 1) * nOrbs + j` encodes a†_i a_j
+  !> - Doubles: `orbCode = (((i1 - 1) * nOrbs + j1 - 1) * nOrbs + i2 - 1) * nOrbs + j2`
   !>   encodes a†_i1 a†_i2 a_j2 a_j1 (note operator ordering convention)
   !>
   !> The complex type for `factor` supports future complex Hamiltonians; real
@@ -245,9 +245,10 @@ module M_ConfigList
     !>
     !> ## Operator Ordering Convention
     !>
-    !> The operators are applied right-to-left (physics convention):
+    !> The operators are applied right-to-left (physics convention): first
+    !> a_{d_1}, last a†_{c_1},
     !> ```
-    !>   |iCNew⟩ = a†_{c_n} ... a†_{c_1} a_{d_1} ... a_{d_m} |iC⟩
+    !>   |iCNew⟩ = a†_{c_1} ... a†_{c_n} a_{d_m} ... a_{d_1} |iC⟩
     !> ```
     !> where `creates = [c_1, ..., c_n]` and `destroys = [d_1, ..., d_m]`.
     !>

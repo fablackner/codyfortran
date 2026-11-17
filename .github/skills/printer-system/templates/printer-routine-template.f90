@@ -1,5 +1,5 @@
-! Template for a new printer routine in M_Utils_Printer*.f90 modules
-subroutine PrinterX_DumpObservable(data, filename, toScreenQ, time)
+! Template for a new printer routine in the M_Printer_* modules of src/Printer
+subroutine Printer_X_DumpObservable(data, filename, toScreenQ, time)
   use M_Utils_Types
 
   complex(R64), intent(in), contiguous :: data(:, :)

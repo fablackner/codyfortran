@@ -187,9 +187,8 @@ submodule(M_GroundSolver_Scf_StdImpl) S_GroundSolver_Scf_StdImpl
   !> Linear mixing alpha for density mixing.
   real(R64) :: alphaDensity = 1.0_R64
 
-  !> Temporary array for density mixing.
+  !> Mixed occupied orbitals of density mixing (mixTarget="density" only).
   complex(R64), allocatable :: orbsTmp(:, :)
-  real(R64), allocatable :: lambdaDiscarded(:)
 
   !-----------------------------------------------------------------------------
   ! Kohn-Sham DFT (sysXc)
@@ -227,11 +226,18 @@ contains
       error stop "groundSolver.scf.stdImpl.mixTarget must be one of: orbitals, potential, density"
     end if
 
+    ! Density mixing mixes the occupied space linearly (Orbs_MixOccupiedSpace)
+    ! with the alpha of mixing.linear; a DIIS mixer would be ignored
     if (mixTarget .eq. "density") then
+      if (Json_GetExistence("mixing.diis")) &
+        error stop "groundSolver.scf.stdImpl.mixTarget = density mixes linearly with mixing.linear.alpha &
+                   &(a mixing.diis block is not used): use mixing.linear"
       alphaDensity = Json_Get("alpha", 1.0_R64, path_="mixing.linear")
+      if (.not. (alphaDensity > 0.0_R64 .and. alphaDensity <= 1.0_R64)) error stop "mixing.linear.alpha must be in (0, 1]"
     end if
 
     aceQ = Json_Get("aceQ", .false., path_="groundSolver.scf.stdImpl")
+    aceBuiltQ = .false.
 
     ! Kohn-Sham DFT: the energy functional is that of method.mb.orbBased.tdks
     kohnShamQ = Json_GetExistence("sysXc")
@@ -245,6 +251,7 @@ contains
     GroundSolver_Setup => Setup
     GroundSolver_Approach => Approach
     GroundSolver_Scf_HartreeFockAction => HartreeFockAction
+    GroundSolver_implementsKohnShamQ = .true.
 
   end subroutine
 
@@ -259,7 +266,6 @@ contains
     use M_Utils_Say
     use M_Grid
     use M_GroundSolver
-    use M_Orbs
 
     integer(I32) :: nUp
 
@@ -267,11 +273,16 @@ contains
 
     nUp = GroundSolver_NumberOfSpinUpOrbs()
 
+    ! A repeated setup starts from fresh work arrays (BuildAce sizes aceZeta)
+    if (allocated(dOrbTmp)) deallocate (dOrbTmp)
+    if (allocated(orbsRaw)) deallocate (orbsRaw)
+    if (allocated(orbsTmp)) deallocate (orbsTmp)
+    if (allocated(aceZeta)) deallocate (aceZeta)
+    aceBuiltQ = .false.
+
     allocate (dOrbTmp(Grid_nPoints))
     allocate (orbsRaw(Grid_nPoints, nUp))
-    allocate (orbsTmp(Grid_nPoints, nUp))
-    allocate (lambdaDiscarded(nUp))
-    if (aceQ) allocate (aceZeta(Grid_nPoints, nUp))
+    if (mixTarget .eq. "density") allocate (orbsTmp(Grid_nPoints, nUp))
     if (kohnShamQ) call SetupKohnSham
 
   end subroutine
@@ -364,6 +375,13 @@ contains
 
     logical :: positiveDefiniteQ
 
+    ! One ACE vector per orbital (sized here: aceQ may have been switched on
+    ! by a fabricate after the setup)
+    if (allocated(aceZeta)) then
+      if (any(shape(aceZeta) .ne. shape(orbs))) deallocate (aceZeta)
+    end if
+    if (.not. allocated(aceZeta)) allocate (aceZeta, mold=orbs)
+
     call SysInteraction_FillExchangeAce(aceZeta, positiveDefiniteQ, orbs, orbs, time)
     if (.not. positiveDefiniteQ) &
       write (*, *) "Warning: groundSolver.scf.stdImpl.aceQ: exchange matrix <phi_i|K phi_j> not positive definite, ", &
@@ -393,7 +411,6 @@ contains
   !> @param[inout] state  Packed orbital state, dimension(Grid_nPoints × nOrbsInState)
   !> @param[in]    time   Time for potential evaluation (typically 0)
   subroutine Approach(state, time)
-    use M_Mixing
     use M_Grid
     use M_DiagonalizerList
     use M_GroundSolver
@@ -401,14 +418,14 @@ contains
     use M_SysPotential
     use M_SysInteraction
     use M_SysXc
-    use M_Method_Mb_OrbBased
 
     complex(R64), intent(inout), contiguous, target :: state(:)
     real(R64), intent(in) :: time
 
     complex(R64), contiguous, pointer :: orbs(:, :)
-    complex(R64), contiguous, pointer :: orbsRawFlat(:)
-    integer(I32) :: nG, nOS, nUp, j
+    real(R64), allocatable :: lambdaDiscarded(:)
+    integer(I32) :: nG, nOS, nUp
+    logical :: exactExchangeQ
 
     nG = Grid_nPoints
     nOS = Orbs_nOrbsInState
@@ -436,7 +453,8 @@ contains
 
     ! Exchange via ACE: compress K̂ of the current orbitals once per iteration
     ! (Kohn-Sham: only for the exact exchange of a hybrid)
-    if (aceQ .and. (.not. kohnShamQ .or. abs(SysXc_exactExchangeFraction) > 0.0_R64)) call BuildAce(orbs(:, 1:nUp), time)
+    exactExchangeQ = .not. kohnShamQ .or. abs(SysXc_exactExchangeFraction) > 0.0_R64
+    if (aceQ .and. exactExchangeQ) call BuildAce(orbs(:, 1:nUp), time)
 
     ! Step 3: Diagonalize Fock operator (HartreeFockAction is the matvec callback).
     ! A diagonalizer without previous eigenvectors gets the current occupied
@@ -451,7 +469,7 @@ contains
     ! metric only up to its discretization (grid.fem: the multipole truncation
     ! of the Poisson boundary values), which can stall a metric-based solver
     ! (LOBPCG) at a residual floor; ACE is self-adjoint by construction
-    if (.not. aceQ .and. .not. DiagonalizerList(1) % e % convergedQ .and. .not. aceHintPrintedQ) then
+    if (exactExchangeQ .and. .not. aceQ .and. .not. DiagonalizerList(1) % e % convergedQ .and. .not. aceHintPrintedQ) then
       write (*, '(1X, 3A)') "hint: groundSolver.scf.stdImpl: ", DiagonalizerList(1) % e % path, &
         " did not converge with aceQ = false: the exact exchange is Hermitian only up to its discretization"
       write (*, '(1X, A)') "  (grid.fem: multipole truncation of the Poisson boundary values), which can stall an "// &
@@ -464,34 +482,17 @@ contains
     ! arbitrary per-vector phase and the arbitrary rotation within degenerate
     ! shells)
     orbsRaw = DiagonalizerList(1) % e % evecs(:, 1:nUp)
-    ! ARPACK normalizes in the Euclidean metric; alignment and mixing require
-    ! orthonormality with respect to the grid metric (Grid_InnerProduct)
-    call Grid_Orthonormalize(orbsRaw)
-    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nUp))
+    call GroundSolver_AlignOrbitals(orbsRaw, orbs(:, 1:nUp))
 
-    ! Step 5: Update the spin-up orbitals and copy spin-up → spin-down
-    if (mixTarget .eq. "orbitals") then
-      orbsRawFlat(1:nG * nUp) => orbsRaw
-      call Mixing_Mix(state(1:nG * nUp), orbsRawFlat)
-    else if (mixTarget .eq. "density") then
+    ! Steps 5 and 6: update the spin-up orbitals (mixTarget="potential": pure
+    ! replacement, damping happened in Step 2), copy spin-up → spin-down and
+    ! orthonormalize
+    if (mixTarget .eq. "density") then
       call Orbs_MixOccupiedSpace(orbs(:, 1:nUp), orbsRaw, alphaDensity, orbsTmp, lambdaDiscarded)
-      orbs(:, 1:nUp) = orbsTmp
+      call GroundSolver_StoreOrbitals(state(1:nG * nOS), orbsTmp, mixQ=.false.)
     else
-      ! mixTarget="potential": pure replacement, damping happened in Step 2
-      do j = 1, nUp
-        orbs(:, j) = orbsRaw(:, j)
-      end do
+      call GroundSolver_StoreOrbitals(state(1:nG * nOS), orbsRaw, mixQ=mixTarget .eq. "orbitals")
     end if
-
-    ! Restricted: the state holds only the shared spatial set, no copy needed
-    if (.not. Orbs_restrictedQ) then
-      do j = 1, nUp
-        orbs(:, nUp + j) = orbs(:, j)
-      end do
-    end if
-
-    ! Step 6: Gram–Schmidt orthonormalize
-    call Orbs_Orthonormalize(orbs)
 
   end subroutine
 
@@ -500,7 +501,10 @@ contains
   subroutine SetupKohnSham
     use M_SysXc
 
-    if (SysXc_nPoints .le. 0) error stop "groundSolver.scf.stdImpl: call SysXc_Fabricate and SysXc_Setup first"
+    if (SysXc_nPoints <= 0) error stop "groundSolver.scf.stdImpl: call SysXc_Fabricate and SysXc_Setup first"
+    if (allocated(kohnShamPotential)) deallocate (kohnShamPotential)
+    if (allocated(kohnShamPotentialRaw)) deallocate (kohnShamPotentialRaw)
+    if (allocated(kohnShamPotentialMixed)) deallocate (kohnShamPotentialMixed)
     allocate (kohnShamPotential(SysXc_nPoints))
     allocate (kohnShamPotentialRaw(SysXc_nPoints))
     kohnShamPotential(:) = 0.0_R64

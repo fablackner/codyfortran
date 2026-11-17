@@ -49,6 +49,10 @@ contains
 
     call Say_Setup("grid.lattice")
 
+    ! Unit weights: the lattice inner product is the plain dot product
+    allocate (Grid_weights(Grid_nPoints))
+    Grid_weights(:) = 1.0_R64
+
     allocate (Grid_Lattice_code(Grid_Lattice_xSize, Grid_Lattice_ySize, Grid_Lattice_zSize))
 
     iGrid = 0

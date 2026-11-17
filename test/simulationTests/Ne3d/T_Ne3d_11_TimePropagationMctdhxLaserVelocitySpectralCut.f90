@@ -1,6 +1,6 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> T_Ne3d_09_TimePropagationMctdhxLaserVelocityExactFieldFree with a spectral
-!> cut of h0 (method.mb.orbBased.exactFieldFreeCut = 300, keeps 20 of the 22
+!> cut of h0 (fieldFree.eigen.cut = 300, keeps 20 of the 22
 !> eigenvectors per l, eigenvalues up to 570).
 !>
 !> The exact part propagates only the eigenvectors below the cut and the
@@ -29,6 +29,7 @@ program T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut
   use M_Utils_Say
   use M_Utils_Json
   use M_Orbs
+  use M_FieldFree
   use M_Method
   use M_Method_Mb_OrbBased
   use testdrive, only: check, error_type
@@ -81,7 +82,7 @@ program T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut
   ! weight of the orbitals above the cut: ||orbs - P orbs|| (unit weights
   ! are fine for a zero check)
   projectedOrbs = Orbs_orbs
-  call Method_Mb_OrbBased_ApplySpectralCut(projectedOrbs)
+  call FieldFree_ProjectBelowCut(projectedOrbs)
   cutResidual = sqrt(sum(abs(Orbs_orbs - projectedOrbs)**2))
 
   print *
@@ -122,5 +123,7 @@ program T_Ne3d_11_TimePropagationMctdhxLaserVelocitySpectralCut
 contains
 
   include 'Ne3dMctdhxLaser.inc'
+  include 'Ne3dMetricNorm.inc'
+  include 'Ne3dOtherMEntries.inc'
 
 end program

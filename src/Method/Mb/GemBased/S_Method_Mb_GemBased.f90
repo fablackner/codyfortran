@@ -29,10 +29,9 @@ contains
     !
     ! Currently only logs initialization; no operator bindings yet.
     !---------------------------------------------------------------------------
-    use M_Utils_Json
     use M_Utils_Say
 
-    call Say_Fabricate("method.gemBased")
+    call Say_Fabricate("method.mb.gemBased")
 
     !------------------------------------
     ! set values and procedure pointers
@@ -49,7 +48,7 @@ contains
     !---------------------------------------------------------------------------
     use M_Utils_Say
 
-    call Say_Setup("method.gemBased")
+    call Say_Setup("method.mb.gemBased")
 
     ! TODO: Allocate Method_state and initialize GEM coefficients
 

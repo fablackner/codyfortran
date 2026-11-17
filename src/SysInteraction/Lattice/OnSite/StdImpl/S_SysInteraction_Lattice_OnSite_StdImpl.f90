@@ -12,7 +12,6 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> @brief Bind the standard on-site implementation.
   module subroutine SysInteraction_Lattice_OnSite_StdImpl_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
     use M_SysInteraction
 

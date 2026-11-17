@@ -13,7 +13,7 @@
 !> - preconditioner (program-local, as GroundSolver_PreconditionAction):
 !>   (T + max(−θ, σ_min))⁻¹ through the exact FDM solve
 !>   SysKinetic_SolveShifted, σ_min = program.precShiftMin
-!> - metric: the diagonal FEM mass, metricWeights = Grid_Fem_weights
+!> - metric: the diagonal FEM mass, metricWeights = Grid_weights
 !> - start vector: a normalized 1s Slater function with ζ = 1.3
 !>   (method.sb + orbsInit.fem.sto)
 !>
@@ -86,7 +86,7 @@ program T_Fem_01_HydrogenAtomLobpcg
   call DiagonalizerList_Setup
 
   ! LOBPCG works in the FEM metric (diagonal mass, BLAS-3 Gram matrices)
-  DiagonalizerList(1) % e % metricWeights = Grid_Fem_weights
+  DiagonalizerList(1) % e % metricWeights = Grid_weights
 
   ! Static nuclear potential for the program-local matvec
   call SysPotential_FillExternalPotential(externalPotential, 0.0_R64)

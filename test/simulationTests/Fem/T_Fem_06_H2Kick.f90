@@ -5,7 +5,7 @@
 !> 1e-3 along the molecular axis, then propagated field-free as in T_Fem_05
 !> (splitStep order2, Cayley exact part with exactPartScheme strang, RK4) with
 !> dt = program.timeStep = 0.02 up to program.endTime = 0.2. The dipole
-!> (<x>, <y>, <z>) is written at every step with PrinterObservableFem_DumpDipole
+!> (<x>, <y>, <z>) is written at every step with Printer_Observable_Fem_DumpDipole
 !> to dipoleKick.dat (replaced at the start, first line a header with kappa,
 !> the step parameters, E_el(0) and the mesh size), which
 !> T_Fem_07_H2KickDouble (kappa doubled) checks and reads for the linearity
@@ -16,7 +16,7 @@
 !>   <[z,[T,z]]> differs from 1/m by the discretization error, -1.3e-6 here)
 !> - TRK / Ehrenfest: d<z>/dt at t = 0+ = <p_z>/m = N kappa. The space-
 !>   discretized TDHF gives d<z>/dt = i Tr(rho [T, z]) = 4 Im<z psi|T psi>
-!>   exactly (PrinterObservableFem_DumpDipoleVelocity; V and the mean field
+!>   exactly (Printer_Observable_Fem_DumpDipoleVelocity; V and the mean field
 !>   commute with z); it matches N kappa to the discretization error
 !>   (relative 1e-5; -1.3e-6 here)
 !> - the propagated initial slope (Richardson extrapolation of the first two
@@ -32,6 +32,7 @@ program T_Fem_06_H2Kick
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
+  use M_FieldFree_Cayley
   use M_Method_Mb_OrbBased
   use testdrive, only: check, error_type
 
@@ -84,9 +85,9 @@ program T_Fem_06_H2Kick
   print *, "max |N(t) - 2|:                       ", maxNormDev
   print *, "max |<x>|, |<y>|:                     ", maxTransverse
   write (*, '(1X, A, I0, A, I0, A, F6.2, A, I0)') "Cayley GMRES during the propagation: ", &
-    Method_Mb_OrbBased_cayleyNSolves, " solves, ", Method_Mb_OrbBased_cayleyNIterations, " iterations, mean ", &
-    real(Method_Mb_OrbBased_cayleyNIterations, R64) / real(max(Method_Mb_OrbBased_cayleyNSolves, 1_I64), R64), &
-    ", max ", Method_Mb_OrbBased_cayleyMaxIterations
+    FieldFree_Cayley_nSolves, " solves, ", FieldFree_Cayley_nIterations, " iterations, mean ", &
+    real(FieldFree_Cayley_nIterations, R64) / real(max(FieldFree_Cayley_nSolves, 1_I64), R64), &
+    ", max ", FieldFree_Cayley_maxIterations
   write (*, '(1X, A, I0, A, F8.4, A)') "propagation: ", size(times) - 1, " steps, ", secondsPerStep, " s per step"
 
   call check(error, abs(kickEnergyDev) < 1e-5_R64)

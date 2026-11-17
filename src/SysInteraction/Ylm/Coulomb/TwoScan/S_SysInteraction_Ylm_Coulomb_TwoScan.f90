@@ -12,9 +12,7 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> @brief Bind the two-scan Coulomb solver.
   module subroutine SysInteraction_Ylm_Coulomb_TwoScan_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
-    use M_SysInteraction
     use M_SysInteraction_Ylm
 
     call Say_Fabricate("sysInteraction.ylm.coulomb.twoScan")

@@ -1,0 +1,54 @@
+{
+    "grid": {
+        "ylm": {
+            "lmax": 2,
+            "mmax": 2,
+            "rmax": 20.0,
+            "fedvr": {
+                "nElements": 10,
+                "nLocals": 8
+            }
+        }
+    },
+    "sysKinetic": {
+        "ylm": {
+            "laplacian": {
+                "bodyMass": [ 1.0 ],
+                "fedvr": { }
+            }
+        }
+    },
+    "sysPotential": {
+        "ylm": {
+            "coulomb": {
+                "charge": 1.0,
+                "stdImpl": { }
+            }
+        }
+    },
+    "fieldFree": {
+        "eigen": {
+            "cut": 0.0
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 1,
+            "nBodies": [ 1 ],
+            "bodyStatistics": [ "f" ],
+            "orbBased": {
+                "nOrbs": [ 3 ],
+                "mctdhx": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": false
+    },
+    "program": {
+        "timeStep": 0.05,
+        "imagTimeStep": 200.0,
+        "nImagTimeSteps": 10,
+        "cut": 50.0
+    }
+}

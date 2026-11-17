@@ -25,9 +25,8 @@
 !> }
 !> ```
 !>
-!> The `alpha` argument of `GroundSolver_Approach` mixes both the CI
-!> coefficients with the CI ground eigenvector and the orbitals with the
-!> Fock eigenvectors.
+!> `alphaCi` (default 1) mixes the phase-aligned CI ground eigenvector into
+!> the coefficients; the orbitals are mixed by the Mixing module.
 !>
 !> @see M_GroundSolver_Mcscf, M_GroundSolver_Scf_StdImpl
 module M_GroundSolver_Mcscf_StdImpl

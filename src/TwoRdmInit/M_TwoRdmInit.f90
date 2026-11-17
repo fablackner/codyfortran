@@ -69,7 +69,8 @@ module M_TwoRdmInit
     !> { "twoRdmInit": { "load": { } } }
     !> @endcode
     !>
-    !> @note Exactly one of `"load"` or `"excited"` must be specified.
+    !> @note One of `"load"` or `"excited"` must be specified; `"load"` takes
+    !>       precedence if both are.
     !>       The routine will `error stop` otherwise.
     module subroutine TwoRdmInit_Fabricate
     end subroutine
@@ -115,7 +116,7 @@ module M_TwoRdmInit
   !>   4. Packs the tensor into the linearized state vector format
   !>
   !> @par Contract
-  !>   - `twoRdmState(:)` must have length `TwoRdm_nTwoRdmState` (from M_TwoRdm)
+  !>   - `twoRdmState(:)` must have length `TwoRdm_nElements` (from M_TwoRdm)
   !>   - The array is fully overwritten on return
   !>
   !> @par Body-Type Block Structure (2-species fermionic system)
@@ -128,7 +129,7 @@ module M_TwoRdmInit
   procedure(I_TwoRdmInit_Initialize), pointer :: TwoRdmInit_Initialize
   abstract interface
     !> @brief Produce a fully-initialized 2-RDM state vector.
-    !> @param[out] twoRdmState  Linearized 2-RDM state (length TwoRdm_nTwoRdmState)
+    !> @param[out] twoRdmState  Linearized 2-RDM state (length TwoRdm_nElements)
     subroutine I_TwoRdmInit_Initialize(twoRdmState)
       import R64
       complex(R64), intent(out), contiguous :: twoRdmState(:)

@@ -15,16 +15,16 @@ contains
     use M_Grid
     use M_Grid_Spherical
 
-    call Say_Fabricate("grid.spherical.constRadial3d")
+    call Say_Fabricate("grid.spherical.const")
 
     !------------------------------------
     ! set values and procedure pointers
     !------------------------------------
 
     ! Read radial grid parameters from JSON
-    Grid_Spherical_nRadial = Json_Get("grid.spherical.constRadial3d.nRadial", 100)
-    Grid_Spherical_nTheta = Json_Get("grid.spherical.constRadial3d.nTheta", 21)
-    Grid_Spherical_nPhi = Json_Get("grid.spherical.constRadial3d.nPhi", 42)
+    Grid_Spherical_nRadial = Json_Get("grid.spherical.const.nRadial", 100)
+    Grid_Spherical_nTheta = Json_Get("grid.spherical.const.nTheta", 21)
+    Grid_Spherical_nPhi = Json_Get("grid.spherical.const.nPhi", 42)
 
     ! Set total grid size - product of radial, theta and phi points
     Grid_nPoints = Grid_Spherical_nRadial * Grid_Spherical_nTheta * Grid_Spherical_nPhi
@@ -58,7 +58,7 @@ contains
     allocate (Grid_Spherical_rCoord(Grid_nPoints))     ! Spherical coordinates (r,θ,φ)
     allocate (Grid_Spherical_thetaCoord(Grid_nPoints))     ! Spherical coordinates (r,θ,φ)
     allocate (Grid_Spherical_phiCoord(Grid_nPoints))     ! Spherical coordinates (r,θ,φ)
-    allocate (Grid_Spherical_weights(Grid_nPoints))      ! Integration weights
+    allocate (Grid_weights(Grid_nPoints))      ! Integration weights
 
     ! Allocate module arrays for radial and phi grid
     allocate (Grid_Spherical_radialPoints(Grid_Spherical_nRadial))
@@ -120,9 +120,9 @@ contains
           Grid_Spherical_zCoord(iGrid) = radialPos * cos(theta)             ! z
 
           ! Set integration weight as product of radial, theta and phi weights
-          Grid_Spherical_weights(iGrid) = Grid_Spherical_radialWeights(iRad) * &
-                                          Grid_Spherical_thetaWeights(iTheta) * &
-                                          Grid_Spherical_phiWeights(iPhi)
+          Grid_weights(iGrid) = Grid_Spherical_radialWeights(iRad) * &
+                                Grid_Spherical_thetaWeights(iTheta) * &
+                                Grid_Spherical_phiWeights(iPhi)
         end do
       end do
     end do

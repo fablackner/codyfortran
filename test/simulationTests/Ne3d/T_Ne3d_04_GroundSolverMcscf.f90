@@ -2,9 +2,7 @@ program T_Ne3d_04_GroundSolverMcscf
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
-  use M_Utils_Actions
   use M_Grid
-  use M_Grid_Ylm
   use M_SysKinetic
   use M_SysPotential
   use M_SysInteraction

@@ -86,5 +86,6 @@ program T_Ne3d_12_TimePropagationMctdhxLaserVelocityExponential
 contains
 
   include 'Ne3dMctdhxLaser.inc'
+  include 'Ne3dMetricNorm.inc'
 
 end program

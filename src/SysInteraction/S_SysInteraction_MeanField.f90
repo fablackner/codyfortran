@@ -17,9 +17,9 @@
 !> work on every grid. Users: groundSolver.scf.stdImpl (closed shell: J of
 !> 2 sum |phi_l|^2 with factor_ = 2; aceQ: K_ACE of the occupied orbitals of
 !> one spin rebuilt in every SCF iteration, applied with J in every Fock
-!> action) and the frozen mean-field reference of the Cayley exact part of
-!> Method (method.mb.orbBased.exactFieldFreeMeanFieldQ: J and K of the 1-RDM
-!> of the state, built once, applied per vector).
+!> action) and the frozen mean-field reference of the Cayley exact part
+!> (fieldFree.cayley.meanFieldQ: J and K of the 1-RDM of the state, built
+!> once, applied per vector).
 submodule(M_SysInteraction) S_SysInteraction_MeanField
 
   implicit none

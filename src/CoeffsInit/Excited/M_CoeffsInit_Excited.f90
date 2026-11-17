@@ -18,10 +18,11 @@
 !>   creates    : array of orbital indices for â† operators
 !>   destroys   : array of orbital indices for â  operators
 !>   bodyType1  : first body type (default 1)
-!>   bodyType2  : second body type (default 2)
+!>   bodyType2  : second body type (default 2, or 1 for a single body type)
 !>
 !> The same excitation is applied to both body types (e.g., α and β
-!> electrons in a spin-unrestricted calculation).
+!> electrons in a spin-unrestricted calculation), once if they are equal;
+!> the result is normalized.
 !>
 !> Wiring
 !> ------
@@ -29,7 +30,6 @@
 !> and binds `CoeffsInit_Initialize` in M_CoeffsInit.
 module M_CoeffsInit_Excited
   use M_Utils_Types
-  use M_Utils_NoOpProcedures
 
   implicit none
 
@@ -44,7 +44,8 @@ module M_CoeffsInit_Excited
     !> --------
     !> - Reads JSON arrays `creates` and `destroys` specifying the
     !>   ladder operators to apply.
-    !> - Reads optional `bodyType1` and `bodyType2` (defaults: 1, 2).
+    !> - Reads optional `bodyType1` and `bodyType2` (defaults: 1, and 2 or 1
+    !>   for a single body type); both must be body types of method.mb.
     !> - Binds `CoeffsInit_Initialize` to the excited-state builder.
     module subroutine CoeffsInit_Excited_Fabricate
     end subroutine

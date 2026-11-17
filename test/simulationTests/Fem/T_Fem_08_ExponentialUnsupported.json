@@ -39,6 +39,13 @@
             }
         }
     },
+    "fieldFree": {
+        "cayley": {
+            "tolerance": 1e-12,
+            "krylovDim": 30,
+            "maxRestarts": 20
+        }
+    },
     "method": {
         "mb": {
             "nBodyTypes": 2,
@@ -46,10 +53,6 @@
             "bodyStatistics": [ "f", "f" ],
             "orbBased": {
                 "nOrbs": [ 1, 1 ],
-                "exactFieldFreeQ": true,
-                "exactFieldFreeTol": 1e-12,
-                "exactFieldFreeKrylovDim": 30,
-                "exactFieldFreeMaxRestarts": 20,
                 "mctdhx": { }
             }
         }
@@ -92,9 +95,5 @@
         "exponential": {
             "krogstad4": { }
         }
-    },
-    "program": {
-        "timeStep": 0.01,
-        "endTime": 0.01
     }
 }

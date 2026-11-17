@@ -38,12 +38,11 @@ contains
   module subroutine Method_Mb_OrbBased_Td2rdm_Fabricate
     use M_Utils_Json
     use M_Utils_Say
-    use M_Orbs
-    use M_TwoRdm
     use M_Method
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
-    call Say_Fabricate("method.mb.orbbased.td2rdm")
+    call Say_Fabricate("method.mb.orbBased.td2rdm")
 
     !------------------------------------
     ! read parameters
@@ -58,6 +57,7 @@ contains
     !------------------------------------
 
     Method_Setup => Setup
+    Method_Mb_OrbBased_implementsSwitchingQ = .true.
     Method_Mb_OrbBased_FillRdm1 => FillRdm1
     Method_Mb_OrbBased_FillRdm2 => FillRdm2
     Method_TimeDerivative => TimeDerivative
@@ -67,9 +67,9 @@ contains
     ! With weak orbitals the linear part is H_L, not h0 plus the gauge coupling.
     ! No phi functions; unbound pointers stay null (Method_Fabricate nullifies
     ! them).
-    if (Method_Mb_OrbBased_exactFieldFreeQ) then
+    if (associated(FieldFree_Propagate)) then
       if (Method_Mb_OrbBased_Td2rdm_nWeakOrbs > 0) &
-        error stop "method.mb.orbBased.exactFieldFreeQ is not available with td2rdm.nWeakOrbs > 0"
+        error stop "fieldFree (the exact field-free part) is not available with td2rdm.nWeakOrbs > 0"
       Method_PropagateExactPart => PropagateExactPart
     end if
 
@@ -111,7 +111,7 @@ contains
     nVals1 = nE
     nVals2 = nG * nOS
 
-    call Say_Setup("method.mb.orbbased.td2rdm")
+    call Say_Setup("method.mb.orbBased.td2rdm")
     call Method_Mb_OrbBased_Setup
 
     allocate (Method_state(1:(nVals1 + nVals2)))
@@ -191,8 +191,8 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Linear split-step part: the one-body operator on the orbitals only (the
   !> 2-RDM is constant), dOrbs = -i L orbs without projection,
-  !> L = Method_Mb_OrbBased_ApplyLinOp (h, or only the gauge coupling if
-  !> exactFieldFreeQ). With weak orbitals h is replaced by H_L (header).
+  !> L = Method_Mb_OrbBased_ApplyLinOp (h, or only the gauge coupling with an
+  !> exact field-free part). With weak orbitals h is replaced by H_L (header).
   subroutine TimeDerivativeOrbsLin(dState, state, time)
     use M_Utils_Constants
     use M_Grid
@@ -224,6 +224,7 @@ contains
   !> the linear split step).
   subroutine PropagateExactPart(state, t0, t1, imagTimeQ_)
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     complex(R64), intent(inout), contiguous, target :: state(:)
     real(R64), intent(in) :: t0
@@ -237,7 +238,7 @@ contains
     if (present(imagTimeQ_)) imagTimeQ = imagTimeQ_
 
     call GetOrbs(orbs, state)
-    call Method_Mb_OrbBased_PropagateFieldFree(orbs, t1 - t0, imagTimeQ)
+    call FieldFree_Propagate(orbs, t1 - t0, imagTimeQ)
 
   end subroutine
 

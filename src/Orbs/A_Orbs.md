@@ -171,7 +171,7 @@ pointer is a NoOp.
   initialized, at the end of `OrbsInit_Initialize` (also for orbitals
   embedded from a smaller lmax, `orbsInit.load.lmaxIn`). It
   stops with an error if more than 1e-8 of an orbital's squared norm would be
-  removed (norms in the positive metric `Grid_Ylm_weights`, also on ECS
+  removed (norms in the positive metric `Grid_weights`, also on ECS
   grids); the overlaps change by at most the removed parts.
 - `Orbs_blockOfOrb(i)` labels the blocks of stored orbitals with equal body
   type (unrestricted) and equal declared m; without declaration the blocks

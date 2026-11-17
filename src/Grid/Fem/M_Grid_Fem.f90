@@ -20,7 +20,7 @@
 !> Fields are nodal values f(ix, iy, iz), flattened with x fastest:
 !>   i = ix + nx (iy - 1) + nx ny (iz - 1)          (Grid_Fem_Index)
 !> and Grid_InnerProduct(f, g) = sum_i conjg(f_i) g_i w_i with the 3D product
-!> weights w_i = Grid_Fem_weights(i).
+!> weights w_i = Grid_weights(i).
 !>
 !> Operators. With the 1D stiffness K_a(i, j) = int L_i' L_j' dx (exact GLL
 !> quadrature) the 3D stiffness is K3 = Kx(x)Wy(x)Wz + Wx(x)Ky(x)Wz + Wx(x)Wy(x)Kz
@@ -148,7 +148,7 @@ module M_Grid_Fem
     !> @brief Adds the W-adjoint of the gradient: f += Σ_a W_a^-1 B_a^T gradF(:, a).
     !>
     !> @details
-    !> The adjoint of Grid_Fem_ApplyGradient in the metric W = Grid_Fem_weights
+    !> The adjoint of Grid_Fem_ApplyGradient in the metric W = Grid_weights
     !> (Σ w u (G f) = Σ w f (G^† u) for all f, u), i.e. minus the weak
     !> divergence divided by the lumped mass.
     module subroutine Grid_Fem_AddGradientAdjoint(f, gradF)
@@ -272,9 +272,6 @@ module M_Grid_Fem
 
   !> Smallest element size at each center (nCenters).
   real(R64), allocatable :: Grid_Fem_centerHMin(:)
-
-  !> 3D product quadrature weights w = wx(ix) wy(iy) wz(iz) (Grid_nPoints).
-  real(R64), allocatable :: Grid_Fem_weights(:)
 
   !> Largest l of the multipole expansion of the Poisson boundary values.
   integer(I32) :: Grid_Fem_multipoleLmax = 0

@@ -81,13 +81,15 @@ S_Purification.f90          ← Submodule (fabrication dispatcher)
 | `purification.singlet.reduce.threshold`         | real    | -1e-5    | Eigenvalue cutoff (negative = some allowed)|
 | `purification.singlet.reduce.conserveEnergyQ`   | bool    | false    | Project corrections ⊥ to h² (energy cons.); sets `Purification_usesH2Q` |
 | `purification.singletTr0.reduce.*`              | —       | (same)   | Same parameters for SingletTr0 backend     |
-| `purification.generic.alcoba`                   | —       | —        | Enable Alcoba backend (stub)               |
+| `purification.generic.alcoba`                   | —       | —        | Placeholder, stops at fabricate            |
 
 ---
 
 ## Algorithm: Iterative Defect Reduction
 
-The "reduce" algorithm (used by both `Singlet` and `SingletTr0`) operates as follows:
+The "reduce" algorithm operates as follows; both backends call the same kernel,
+`Purification_Singlet_Reduce_PurifyRdm2ab` (in `M_Purification_Singlet_Reduce`),
+on the (up,down) block they unpack from their own state layout:
 
 ```
 1. UNPACK rdm2ab from twoRdmState
@@ -152,7 +154,7 @@ call Propagator_Propagate(state, t0, t1)
 call Purification_PurifyTwoRdmState(twoRdmState, h2)
 ```
 
-`h2` is always the full spin-orbital two-body tensor in the `Method_Mb_OrbBased_h2` layout (nOrbsSum⁴, spin-up orbitals first, then spin-down); each backend extracts the blocks it needs (Singlet/Reduce also accepts the (up,down) block alone).
+`h2` is always the full spin-orbital two-body tensor in the `Method_Mb_OrbBased_h2` layout (nOrbsSum⁴, spin-up orbitals first, then spin-down); each backend extracts the blocks it needs.
 
 `h2` is read only if `Purification_usesH2Q` (module data of `M_Purification`, set during fabrication to `conserveEnergyQ` of the active backend). Callers that propagate the orbitals refresh h2 from the current orbitals only when this flag is set (see `app/atoms/be/dynamics/td2rdm/P_LaserTd2rdmVelocity.f90`).
 
@@ -214,7 +216,7 @@ The algorithm prints progress to stdout:
 
 ## Known Limitations
 
-1. **Generic/Alcoba**: Currently a stub—does not perform any purification.
+1. **Generic/Alcoba**: A placeholder: `purification.generic.alcoba` stops at fabricate ("not implemented").
 
 2. **Thread Safety**: Module-level procedure pointers are not thread-safe. Do not call `Purification_Fabricate` from multiple threads.
 

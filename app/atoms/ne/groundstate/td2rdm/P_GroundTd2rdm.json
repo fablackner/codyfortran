@@ -2,7 +2,6 @@
     "grid": {
         "ylm": {
             "lmax": 1,
-            "rmin": 0.0,
             "rmax": 8.0,
             "fedvr": {
                 "nElements": 5,
@@ -37,6 +36,9 @@
                 "blockEq": {}
             }
         }
+    },
+    "fieldFree": {
+        "eigen": {}
     },
     "method": {
         "mb": {
@@ -75,7 +77,6 @@
                     1
                 ],
                 "td2rdm": {},
-                "exactFieldFreeQ": true,
                 "regularizationParameter": 1e-14,
                 "adiabaticSwitching": {
                     "switchTime": 20.0
@@ -125,7 +126,7 @@
     },
     "reconstruction": {
         "singlet": {
-            "singletNy": {
+            "ny": {
                 "ccQ": true
             }
         }

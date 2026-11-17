@@ -2,7 +2,7 @@
 !> Neon SCF ground state as in T_Ne3d_02_GroundSolverScf (same grid, same
 !> scf.stdImpl solver with potential mixing, same reference energy), but with
 !> - the preconditioned block eigensolver diagonalizerList.lobpcg, working in
-!>   the grid metric (metricWeights = Grid_Ylm_weights) and warm-started from
+!>   the grid metric (metricWeights = Grid_weights) and warm-started from
 !>   the current orbitals and then from the previous eigenvectors; the
 !>   orbital preconditioner GroundSolver_PreconditionAction (bound by
 !>   GroundSolver_Fabricate for every backend) is the exact (T + sigma)^-1 of
@@ -23,7 +23,6 @@ program T_Ne3d_17_GroundSolverScfLobpcgAce
   use M_Utils_Say
   use M_Utils_Json
   use M_Grid
-  use M_Grid_Ylm, only: Grid_Ylm_weights
   use M_SysKinetic
   use M_SysPotential
   use M_SysInteraction
@@ -101,7 +100,7 @@ program T_Ne3d_17_GroundSolverScfLobpcgAce
   call DiagonalizerList_Setup
 
   ! LOBPCG works in the grid metric (diagonal FEDVR quadrature weights)
-  DiagonalizerList(1) % e % metricWeights = Grid_Ylm_weights
+  DiagonalizerList(1) % e % metricWeights = Grid_weights
 
   !==========================================
   call Say_Section("perform action")

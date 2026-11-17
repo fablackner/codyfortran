@@ -15,7 +15,6 @@ contains
   module subroutine SysKinetic_Ylm_Laplacian_FedvrEcs_Fabricate
     use M_Utils_Json
     use M_Utils_Say
-    use M_SysKinetic
     use M_SysKinetic_Ylm
 
     call Say_Fabricate("sysKinetic.ylm.laplacian.fedvrEcs")

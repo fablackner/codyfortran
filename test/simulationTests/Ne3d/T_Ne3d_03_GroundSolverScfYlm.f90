@@ -2,7 +2,6 @@ program T_Ne3d_03_GroundSolverScfYlm
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
-  use M_Utils_Actions
   use M_Grid
   use M_Grid_Ylm
   use M_SysKinetic
@@ -115,7 +114,6 @@ program T_Ne3d_03_GroundSolverScfYlm
 contains
 
   subroutine ApplyMatOnVecL0(dOrbLm, orbLm, time)
-    use M_Grid_Ylm
     use M_GroundSolver_Scf
 
     complex(R64), intent(out), contiguous, target :: dOrbLm(:)
@@ -127,7 +125,6 @@ contains
   end subroutine
 
   subroutine ApplyMatOnVecL1(dOrbLm, orbLm, time)
-    use M_Grid_Ylm
     use M_GroundSolver_Scf
 
     complex(R64), intent(out), contiguous, target :: dOrbLm(:)

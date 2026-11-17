@@ -69,16 +69,13 @@ contains
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  function RdmObservables_Spin(rdm2) result(spin)
-    use M_Method_Mb
-    use M_Method_Mb_OrbBased
+  function RdmObservables_Spin(rdm2, nOa, nBodiesA) result(spin)
     complex(R64), intent(in), contiguous :: rdm2(:, :, :, :)
+    integer(I32), intent(in) :: nOa
+    integer(I32), intent(in) :: nBodiesA
     real(R64) :: spin
-    integer(I32) :: nOa, i1, i2, nBodiesUP
+    integer(I32) :: i1, i2
     complex(R64) :: cSpin
-
-    nOa = Method_Mb_OrbBased_nOrbs(1)
-    nBodiesUP = Method_Mb_nBodies(1)
 
     cSpin = 0.0_R64
     do i1 = 1, nOa
@@ -86,19 +83,17 @@ contains
         cSpin = cSpin + rdm2(i1, i2 + nOa, i2, i1 + nOa)
       end do
     end do
-    spin = real(nBodiesUP - cSpin, kind=R64)
+    spin = real(nBodiesA - cSpin, kind=R64)
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  function RdmObservables_SingletTraceCondition(rdm2) result(spinTr1)
-    use M_Method_Mb
-    use M_Method_Mb_OrbBased
+  function RdmObservables_SingletTraceCondition(rdm2, nOa, nBodiesA) result(spinTr1)
     complex(R64), intent(in), contiguous :: rdm2(:, :, :, :)
+    integer(I32), intent(in) :: nOa
+    integer(I32), intent(in) :: nBodiesA
     real(R64) :: spinTr1
-    integer(I32) :: nOa, i1, j1, i2
+    integer(I32) :: i1, j1, i2
     complex(R64) :: norm1, norm2
-
-    nOa = Method_Mb_OrbBased_nOrbs(1)
 
     spinTr1 = 0.0_R64
     do i1 = 1, nOa
@@ -109,20 +104,19 @@ contains
           norm1 = norm1 + rdm2(i1, i2 + nOa, i1, i2 + nOa)
           norm2 = norm2 + rdm2(i1, i2 + nOa, i2, i1 + nOa)
         end do
-        spinTr1 = spinTr1 + abs(norm1 - Method_Mb_nBodies(1) * norm2)
+        spinTr1 = spinTr1 + abs(norm1 - nBodiesA * norm2)
       end do
     end do
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  function RdmObservables_PermutationSymmetry(rdm2) result(permSym)
-    use M_Method_Mb_OrbBased
+  function RdmObservables_PermutationSymmetry(rdm2, nOa) result(permSym)
     complex(R64), intent(in), contiguous :: rdm2(:, :, :, :)
+    integer(I32), intent(in) :: nOa
     real(R64) :: permSym
-    integer(I32) :: nO, nOa, i1, i2, j1, j2
+    integer(I32) :: nO, i1, i2, j1, j2
 
     nO = size(rdm2, 1)
-    nOa = Method_Mb_OrbBased_nOrbs(1)
 
     permSym = 0.0_R64
     do j2 = 1, nO
@@ -141,14 +135,13 @@ contains
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  function RdmObservables_Hermiticity(rdm2) result(hermSym)
-    use M_Method_Mb_OrbBased
+  function RdmObservables_Hermiticity(rdm2, nOa) result(hermSym)
     complex(R64), intent(in), contiguous :: rdm2(:, :, :, :)
+    integer(I32), intent(in) :: nOa
     real(R64) :: hermSym
-    integer(I32) :: nO, nOa, i1, i2, j1, j2
+    integer(I32) :: nO, i1, i2, j1, j2
 
     nO = size(rdm2, 1)
-    nOa = Method_Mb_OrbBased_nOrbs(1)
 
     hermSym = 0.0_R64
     do j2 = 1, nO

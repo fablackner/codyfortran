@@ -113,11 +113,6 @@ module M_Grid_Ylm
   !> Maximum radius value rmax of the radial grid.
   real(R64) :: Grid_Ylm_rmax
 
-  !> Total integration weights for each (r,l,m) channel in flattened order.
-  !> Combines radial weights and angular quadrature/normalization as used by
-  !> the active Ylm back-end.
-  real(R64), allocatable :: Grid_Ylm_weights(:)
-
   !> Component-wise coordinates for each (r,l,m) entry in flattened order.
   real(R64), allocatable :: Grid_Ylm_rCoord(:)
   integer(I32), allocatable :: Grid_Ylm_lCoord(:)

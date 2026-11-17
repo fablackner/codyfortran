@@ -182,16 +182,16 @@ contains
     call Grid_Fem_SetupAxes
 
     ! 3D product weights in the node layout (x fastest)
-    if (allocated(Grid_Fem_weights)) deallocate (Grid_Fem_weights)
-    allocate (Grid_Fem_weights(Grid_nPoints))
+    if (allocated(Grid_weights)) deallocate (Grid_weights)
+    allocate (Grid_weights(Grid_nPoints))
 
     iGrid = 0
     do iz = 1, Grid_Fem_nz
       do iy = 1, Grid_Fem_ny
         do ix = 1, Grid_Fem_nx
           iGrid = iGrid + 1
-          Grid_Fem_weights(iGrid) = Grid_Fem_axes(1) % weights(ix) * Grid_Fem_axes(2) % weights(iy) * &
-                                    Grid_Fem_axes(3) % weights(iz)
+          Grid_weights(iGrid) = Grid_Fem_axes(1) % weights(ix) * Grid_Fem_axes(2) % weights(iy) * &
+                                Grid_Fem_axes(3) % weights(iz)
         end do
       end do
     end do
@@ -389,6 +389,7 @@ contains
   !> Inner product with the 3D product weights (plain accumulation, no
   !> temporaries).
   pure function InnerProduct(fConjg, f) result(res)
+    use M_Grid, only: Grid_weights
 
     complex(R64), intent(in), contiguous :: fConjg(:)
     complex(R64), intent(in), contiguous :: f(:)
@@ -398,7 +399,7 @@ contains
 
     res = (0.0_R64, 0.0_R64)
     do i = 1, size(f)
-      res = res + conjg(fConjg(i)) * f(i) * Grid_Fem_weights(i)
+      res = res + conjg(fConjg(i)) * f(i) * Grid_weights(i)
     end do
 
   end function

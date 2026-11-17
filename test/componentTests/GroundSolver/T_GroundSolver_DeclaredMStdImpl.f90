@@ -6,7 +6,6 @@
 !> the program stops with that error:
 !> ctest-pass-regex: mOfOrbs requires groundSolver.scf.ylmOpt, groundSolver.mcscf.ylmOpt or groundSolver.mcscf.gradient
 program T_GroundSolver_DeclaredMStdImpl
-  use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
   use M_Grid

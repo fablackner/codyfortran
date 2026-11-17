@@ -1,6 +1,7 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-! Helpers shared by the SCF tests T_Fem_03_H2ScfRhf and T_Fem_04_H2oScfRhf
-! (included after `contains`; every procedure here is used by each of them).
+! Helpers shared by the SCF tests T_Fem_03_H2ScfRhf, T_Fem_04_H2oScfRhf,
+! T_FemDft_01_HeKsLdaPbe and T_FemDft_02_H2KsLdaPbe0 (included after
+! `contains`; every procedure here is used by each of them).
 !
 ! - SetupFemScf:  fabricate and set up the restricted Hartree-Fock run of a
 !                 JSON file (method tdhx, groundSolver.scf.stdImpl and the
@@ -13,14 +14,13 @@
 !> groundSolver.scf.stdImpl gets the Fock action GroundSolver_Scf_HartreeFockAction
 !> and the preconditioner GroundSolver_PreconditionAction ((T + max(-theta,
 !> sigma_min))^-1 by the exact FDM solve), and works in the FEM metric
-!> (metricWeights = Grid_Fem_weights: diagonal mass, BLAS-3 Gram matrices).
+!> (metricWeights = Grid_weights: diagonal mass, BLAS-3 Gram matrices).
 !> With a sysXc block (Kohn-Sham DFT, method.mb.orbBased.tdks) SysXc is
 !> fabricated and set up after SysInteraction. The start orbitals are
 !> orthonormalized at the end (OrbsInit only normalizes).
 subroutine SetupFemScf(jsonFileName)
   use M_Utils_Json
   use M_Grid
-  use M_Grid_Fem
   use M_SysKinetic
   use M_SysPotential
   use M_SysInteraction
@@ -77,7 +77,7 @@ subroutine SetupFemScf(jsonFileName)
   call DiagonalizerList_Setup
 
   ! LOBPCG works in the FEM metric (diagonal mass, BLAS-3 Gram matrices)
-  DiagonalizerList(1) % e % metricWeights = Grid_Fem_weights
+  DiagonalizerList(1) % e % metricWeights = Grid_weights
 
   ! OrbsInit only normalizes: orthonormalize the start orbitals
   call Orbs_Orthonormalize(Orbs_orbs)

@@ -23,7 +23,6 @@
 !> in M_CoeffsInit to the load implementation. No setup phase is required.
 module M_CoeffsInit_Load
   use M_Utils_Types
-  use M_Utils_NoOpProcedures
 
   implicit none
 
@@ -43,12 +42,5 @@ module M_CoeffsInit_Load
     module subroutine CoeffsInit_Load_Fabricate
     end subroutine
   end interface
-
-  !=============================================================================
-  ! module data
-  !=============================================================================
-
-  !> Directory of coeffs.in (coeffsInit.load.dir, "" = working directory)
-  character(len=:), allocatable :: CoeffsInit_Load_dir
 
 end module

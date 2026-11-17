@@ -62,7 +62,7 @@ contains
 
     class(T_IntegratorList_E_Expokit), intent(inout) :: this
 
-    call Say_Fabricate(this % path//".expokit")
+    call Say_Fabricate(this % path)
 
     !------------------------------------
     ! set values and procedure pointers
@@ -77,11 +77,10 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Setup(this)
     use M_Utils_Say
-    use M_Utils_UnusedVariables
 
     class(T_IntegratorList_E_Expokit), intent(inout) :: this
 
-    call Say_Setup(this % path//".expokit")
+    call Say_Setup(this % path)
 
   end subroutine
 

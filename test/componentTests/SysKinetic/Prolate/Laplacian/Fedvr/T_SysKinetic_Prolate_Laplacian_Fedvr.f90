@@ -3,7 +3,6 @@ program T_SysKinetic_Prolate_Laplacian_Fedvr
   use M_Utils_Say
   use M_Utils_Json
   use M_Grid
-  use M_Grid_Prolate
   use M_SysKinetic
   use testdrive, only: check, error_type
 

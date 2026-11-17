@@ -49,9 +49,6 @@
             }
         }
     },
-    "orbs": {
-        "restrictedQ": false
-    },
     "diagonalizerList": {
         "arpack": {
             "nEvals": 1,

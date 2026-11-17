@@ -6,69 +6,80 @@
 !>
 !> # Purpose
 !>
-!> This module provides an optimized CI representation for the Fermi-Hubbard model
-!> on lattice grids. Instead of the general tensor-product enumeration used by
-!> Generic, configurations are encoded as bit patterns where bit j=1 indicates
-!> site j is occupied.
+!> CI for two fermion species (spin up and spin down, body types 1 and 2) in
+!> the same orbitals, whose two-body Hamiltonian is an on-site interaction
+!>   H2 = sum_s U_s n_{s,up} n_{s,dn}
+!> in the orbital basis: the Fermi-Hubbard model with the lattice sites as
+!> orbitals (orbsInit.lattice.onSite, static orbitals: method tdci). The CI
+!> vector is the matrix c(iUp, iDn) of the configurations of the two spins;
+!> H1 acts on its rows and columns separately and H2 is diagonal.
 !>
-!> # Bit Encoding
+!> # Bit encoding
 !>
-!> For N_orb lattice sites and N_up (N_dn) up-spin (down-spin) electrons:
-!> - Each spin-up config is a 64-bit integer with exactly N_up bits set
-!> - Total up-configs: C(N_orb, N_up) stored in `bitcodesUP(:)`
-!> - Total down-configs: C(N_orb, N_dn) stored in `bitcodesDN(:)`
+!> A configuration of one spin is a 64-bit integer, bit o - 1 set if orbital o
+!> is occupied (at most 62 orbitals). The configurations of N particles are
+!> numbered in increasing order of their bit pattern (colex order), so the
+!> index of a pattern is one plus its rank in the combinatorial number system,
+!> sum_t binom(position of the t-th set bit, t): no lookup table of size 2^n.
+!> Fermionic signs follow the orbital order: an operator on orbital o picks up
+!> (-1)^(occupied orbitals below o).
 !>
-!> # Hopping Graphs
+!> # Single excitations
 !>
-!> Single-electron hops (kinetic term) are precomputed during `Setup`:
-!> - `hoppUP(k, i)`: Target config index when applying k-th hop to config i
-!> - `weightUP(k, i)`: Matrix element including fermionic sign from bit counting
-!> - `nConnectedUP(i)`: Number of valid hops from config i
+!> `Coeffs_Setup` tabulates a+_c a_d |i> = sign |target> for every
+!> configuration i of each spin and every pair (c, d) with d occupied (c = d
+!> included). The tables do not depend on the Hamiltonian: H1 is built from
+!> the h1_ of each call (time-dependent h1, mean-field and basis-change
+!> operators included), and the same tables give the 1-RDM and 2-RDM.
 !>
-!> # Spin Symmetry Variants
+!> # Spin symmetry variants
 !>
-!> Three sub-backends exploit spin exchange symmetry:
+!> | Backend        | Coefficients | Stored vector                                |
+!> |----------------|--------------|----------------------------------------------|
+!> | `noSpinSym`    | n_up n_dn    | c(iUp, iDn), up index fastest                |
+!> | `plusSpinSym`  | n(n+1)/2     | (|i,k> + |k,i>)/sqrt(2) for i < k, |i,i>     |
+!> | `minusSpinSym` | n(n-1)/2     | (|i,k> - |k,i>)/sqrt(2) for i < k            |
 !>
-!> | Backend        | State space dimension | Physical interpretation          |
-!> |----------------|----------------------|----------------------------------|
-!> | `noSpinSym`    | n_up × n_dn          | Full product space               |
-!> | `plusSpinSym`  | n(n+1)/2             | Symmetric (triplet-like) sector  |
-!> | `minusSpinSym` | n(n-1)/2             | Antisymmetric (singlet-like)     |
+!> The sectors are the eigenspaces of the exchange of the two spins; they need
+!> equal particle numbers and a spin-independent h1. The basis of a sector is
+!> orthonormal, so norms and inner products of the stored vectors are those of
+!> the states.
 !>
 !> # JSON Configuration
 !>
 !> ```json
-!> "coeffs": {
-!>   "hubbard": {
-!>     "noSpinSym": { }     // or "plusSpinSym": { } or "minusSpinSym": { }
-!>   }
-!> }
+!> "coeffs": { "hubbard": { "noSpinSym": { } } }
 !> ```
+!> (or "plusSpinSym": { } or "minusSpinSym": { }); no configList is needed.
 !>
-!> # Performance Notes
-!>
-!> - Bit operations (`popcnt`, `btest`, `ibset`, `ibclr`) enable O(1) sign computation
-!> - Hopping graph is sparse: only ~2×nDim hops per config (nDim = lattice dimensions)
-!> - Interaction is diagonal: on-site U·n↑n↓ via `interactionValues` lookup
-!>
-!> @see M_Coeffs_Generic     Alternative for non-Hubbard models
-!> @see M_Grid_Lattice       Lattice geometry definitions
-!> @see M_SysKinetic_Lattice Hopping matrix construction
+!> @see M_Coeffs_Generic     General CI of any body types and Hamiltonians
 module M_Coeffs_Hubbard
   use M_Utils_Types
-
   implicit none
+
+  !=============================================================================
+  ! types
+  !=============================================================================
+
+  !> Single excitations of the configurations of one spin, by source
+  !> configuration: the entries first(i) .. first(i + 1) - 1 hold
+  !> a+_create(k) a_destroy(k) |i> = factor(k) |target(k)> (orbital indices
+  !> of the spin, 1 .. nSites; factor = +-1).
+  type :: T_Coeffs_Hubbard_Singles
+    integer(I32), allocatable :: first(:)
+    integer(I32), allocatable :: target(:)
+    integer(I32), allocatable :: create(:)
+    integer(I32), allocatable :: destroy(:)
+    real(R64), allocatable :: factor(:)
+  end type
 
   !=============================================================================
   ! module procedures
   !=============================================================================
-
   interface
-    !> Select and initialize the Hubbard coefficient representation.
-    !>
-    !> Determines array sizes and assigns `M_Coeffs` procedure pointers according to
-    !> the chosen spin-symmetry backend (no spin symmetry, plus symmetry, minus
-    !> symmetry). May delegate to the symmetry-specific modules.
+    !> Checks the many-body setting (two fermion species in the same number
+    !> of orbitals), counts the configurations of each spin, binds the
+    !> backend procedures of M_Coeffs and selects the spin-symmetry variant.
     module subroutine Coeffs_Hubbard_Fabricate
     end subroutine
   end interface
@@ -77,63 +88,30 @@ module M_Coeffs_Hubbard
   ! module data
   !=============================================================================
 
-  !> Number of distinct spin-up configurations.
-  !> Equals the binomial coefficient C(n_orb, n_up).
+  !> Number of orbitals of each spin (the lattice sites).
+  integer(I32) :: Coeffs_Hubbard_nSites
+
+  !> Number of configurations of the spin-up particles, binom(nSites, N_up).
   integer(I32) :: Coeffs_Hubbard_nCoeffsUP
 
-  !> Number of distinct spin-down configurations.
-  !> Equals the binomial coefficient C(n_orb, n_dn).
+  !> Number of configurations of the spin-down particles, binom(nSites, N_dn).
   integer(I32) :: Coeffs_Hubbard_nCoeffsDN
 
-  !> The vector is stored in a spin-exchange sector (plusSpinSym,
-  !> minusSpinSym), where an excitation of one spin species cannot be stored.
-  logical :: Coeffs_Hubbard_spinSymQ = .false.
+  !> Stored representation, set by the variant: 0 the product space
+  !> (noSpinSym), +1 or -1 the sector of that parity under the exchange of
+  !> the spins (plusSpinSym, minusSpinSym).
+  integer(I32) :: Coeffs_Hubbard_parity = 0
 
-  !> For each up-configuration i, number of single-hop target configurations.
-  !> Used to size slices in the `hoppUP`/`weightUP` tables.
-  integer(I32), allocatable :: Coeffs_Hubbard_nConnectedUP(:)
-
-  !> For each down-configuration i, number of single-hop target configurations.
-  !> Used to size slices in the `hoppDN`/`weightDN` tables.
-  integer(I32), allocatable :: Coeffs_Hubbard_nConnectedDN(:)
-
-  !> Hopping graph (spin up): target indices for single-electron hops.
-  !> `hoppUP(k,i)` gives the index (1..nCoeffsUP) of the k-th target reachable
-  !> from source configuration `i` by one allowed hop. Only the first
-  !> `nConnectedUP(i)` entries in column `i` are valid.
-  integer(I32), allocatable :: Coeffs_Hubbard_hoppUP(:, :)
-
-  !> Hopping graph (spin down): target indices for single-electron hops.
-  !> `hoppDN(k,i)` gives the index (1..nCoeffsDN) of the k-th target reachable
-  !> from source configuration `i` by one allowed hop. Only the first
-  !> `nConnectedDN(i)` entries in column `i` are valid.
-  integer(I32), allocatable :: Coeffs_Hubbard_hoppDN(:, :)
-
-  !> Hopping amplitudes (spin up): matrix elements for the kinetic operator.
-  !> `weightUP(k,i)` corresponds to the transition `i -> hoppUP(k,i)`.
-  real(R64), allocatable :: Coeffs_Hubbard_weightUP(:, :)
-
-  !> Hopping amplitudes (spin down): matrix elements for the kinetic operator.
-  !> `weightDN(k,i)` corresponds to the transition `i -> hoppDN(k,i)`.
-  real(R64), allocatable :: Coeffs_Hubbard_weightDN(:, :)
-
-  !> Bit representation of spin-up configurations (length = n_orb bits used).
-  !> Bit j set means lattice site j is occupied by an up electron.
+  !> Bit patterns of the spin-up configurations, in increasing order.
   integer(I64), allocatable :: Coeffs_Hubbard_bitcodesUP(:)
 
-  !> Bit representation of spin-down configurations (length = n_orb bits used).
-  !> Bit j set means lattice site j is occupied by a down electron.
+  !> Bit patterns of the spin-down configurations, in increasing order.
   integer(I64), allocatable :: Coeffs_Hubbard_bitcodesDN(:)
 
-  !> Onsite interaction prefactors for each (up,down) pair in the direct-product
-  !> space. Typically derived from popcount(bitcodesUP(i) AND bitcodesDN(j)).
-  !> The linearization order is consistent with the representation’s
-  !> index mapping used by `ConfigurationsFromIndex`.
-  real(R64), allocatable :: Coeffs_Hubbard_interactionValues(:)
+  !> Single excitations of the spin-up configurations.
+  type(T_Coeffs_Hubbard_Singles) :: Coeffs_Hubbard_singlesUP
 
-  !=============================================================================
-  ! module procedures pointers
-  ! (exported via `M_Coeffs` by the symmetry backends)
-  !=============================================================================
+  !> Single excitations of the spin-down configurations.
+  type(T_Coeffs_Hubbard_Singles) :: Coeffs_Hubbard_singlesDN
 
 end module

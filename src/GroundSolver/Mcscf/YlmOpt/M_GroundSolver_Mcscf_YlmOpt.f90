@@ -70,7 +70,7 @@ module M_GroundSolver_Mcscf_YlmOpt
   !>
   !> Used as the matvec callback for per-l diagonalizers. The caller must wrap
   !> this in l-specific callbacks (one per diagonalizer).
-  procedure(I_GroundSolver_Mcscf_YlmOpt_FockRadialAction), pointer :: GroundSolver_Mcscf_YlmOpt_FockAction
+  procedure(I_GroundSolver_Mcscf_YlmOpt_FockRadialAction), pointer :: GroundSolver_Mcscf_YlmOpt_FockAction => null()
   abstract interface
     !> @brief Apply the radial RDM-weighted Fock operator for channel l.
     !>

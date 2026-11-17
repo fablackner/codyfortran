@@ -16,20 +16,18 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_OrbBased_Tdhx_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
-    use M_Orbs
-    use M_Coeffs
     use M_Method
     use M_Method_Mb_OrbBased
 
-    call Say_Fabricate("method.mb.orbbased.tdhx")
+    call Say_Fabricate("method.mb.orbBased.tdhx")
 
     !------------------------------------
     ! set values and procedure pointers
     !------------------------------------
 
     Method_Setup => Setup
+    Method_Mb_OrbBased_implementsSwitchingQ = .true.
     Method_Mb_OrbBased_FillRdm1 => FillRdm1
     Method_Mb_OrbBased_FillRdm2 => FillRdm2
     Method_TimeDerivative => TimeDerivative
@@ -49,7 +47,7 @@ contains
 
     integer(I32) :: nVals1, nVals2, nG, nOS
 
-    call Say_Setup("method.mb.orbbased.tdhx")
+    call Say_Setup("method.mb.orbBased.tdhx")
     call Method_Mb_OrbBased_Setup
 
     nG = Grid_nPoints

@@ -14,32 +14,34 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_OrbBased_Mctdhx_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
-    use M_Orbs
-    use M_Coeffs
     use M_Method
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
-    call Say_Fabricate("method.manbody.orbbased.mctdhx")
+    call Say_Fabricate("method.mb.orbBased.mctdhx")
 
     !------------------------------------
     ! set values and procedure pointers
     !------------------------------------
 
     Method_Setup => Setup
+    Method_Mb_OrbBased_implementsMeanFieldReferenceQ = .true.
+    Method_Mb_OrbBased_implementsSpectralCutQ = .true.
+    Method_Mb_OrbBased_implementsSwitchingQ = .true.
     Method_Mb_OrbBased_FillRdm1 => FillRdm1
     Method_Mb_OrbBased_FillRdm2 => FillRdm2
     Method_TimeDerivative => TimeDerivative
     Method_Mb_OrbBased_TimeDerivativeOrbsLin => TimeDerivativeOrbsLin
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin => TimeDerivativeCoeffsPlusOrbsNonLin
     Method_Mb_OrbBased_OrthonormalizeKeepingState => OrthonormalizeKeepingState
-    ! Phi functions only for the eigen-decomposed exact part (Ylm grids); the
-    ! Cayley exact part of other grids has none (no propagator.exponential).
-    ! Unbound pointers stay null (Method_Fabricate nullifies them).
-    if (Method_Mb_OrbBased_exactFieldFreeQ) then
+    ! Phi functions only for the eigen-decomposed exact part
+    ! (fieldFree.eigen); the Cayley exact part has none (no
+    ! propagator.exponential). Unbound pointers stay null (Method_Fabricate
+    ! nullifies them).
+    if (associated(FieldFree_Propagate)) then
       Method_PropagateExactPart => PropagateExactPart
-      if (associated(Method_Mb_OrbBased_ApplyFieldFreePhi)) Method_ApplyExactPartPhi => ApplyExactPartPhi
+      if (associated(FieldFree_ApplyPhi)) Method_ApplyExactPartPhi => ApplyExactPartPhi
     end if
 
   end subroutine
@@ -57,7 +59,7 @@ contains
 
     integer(I32) :: nVals1, nVals2, nG, nOS, nC
 
-    call Say_Setup("method.manbody.orbbased.mctdhx")
+    call Say_Setup("method.mb.orbBased.mctdhx")
     call Method_Mb_OrbBased_Setup
 
     nG = Grid_nPoints
@@ -122,11 +124,12 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Linear split-step part: the one-body operator on the orbitals only (the
   !> coefficients are constant), dOrbs = -i L orbs without projection,
-  !> L = Method_Mb_OrbBased_ApplyLinOp (h, or only the gauge coupling if
-  !> exactFieldFreeQ).
+  !> L = Method_Mb_OrbBased_ApplyLinOp (h, or only the gauge coupling with an
+  !> exact field-free part).
   subroutine TimeDerivativeOrbsLin(dState, state, time)
     use M_Method_Mb_OrbBased
     use M_Utils_Constants
+    use M_FieldFree
 
     complex(R64), intent(out), contiguous, target :: dState(:)
     complex(R64), intent(in), contiguous, target  :: state(:)
@@ -141,7 +144,7 @@ contains
     call GetOrbs(dOrbs, dState)
 
     call Method_Mb_OrbBased_ApplyLinOp(dOrbs, orbs, time)
-    call Method_Mb_OrbBased_ApplySpectralCut(dOrbs)
+    call FieldFree_ProjectBelowCut(dOrbs)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
 
@@ -149,12 +152,13 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Exact field-free propagation of the orbitals (the CI coefficients are
-  !> constant in the linear split step). With exactFieldFreeMeanFieldQ the
-  !> first call after Method_Setup builds the frozen mean-field reference U
+  !> constant in the linear split step). With FieldFree_meanFieldQ the
+  !> first call after FieldFree_Setup builds the frozen mean-field reference U
   !> from the state (EnsureFieldFreeMeanField), and the Cayley step then
   !> propagates h0 + U.
   subroutine PropagateExactPart(state, t0, t1, imagTimeQ_)
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     complex(R64), intent(inout), contiguous, target :: state(:)
     real(R64), intent(in) :: t0
@@ -167,20 +171,21 @@ contains
     imagTimeQ = .false.
     if (present(imagTimeQ_)) imagTimeQ = imagTimeQ_
 
-    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ .and. .not. imagTimeQ) call EnsureFieldFreeMeanField(state, t0)
+    if (FieldFree_meanFieldQ .and. .not. imagTimeQ) call EnsureFieldFreeMeanField(state, t0)
 
     call GetOrbs(orbs, state)
-    call Method_Mb_OrbBased_PropagateFieldFree(orbs, t1 - t0, imagTimeQ)
+    call FieldFree_Propagate(orbs, t1 - t0, imagTimeQ)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Builds the frozen mean-field reference of the Cayley exact part from
   !> state (its stored orbitals and 1-RDM) unless it exists since the last
-  !> Method_Setup: at the first exact-part call, or at the first nonlinear
+  !> FieldFree_Setup: at the first exact-part call, or at the first nonlinear
   !> call if a propagator starts with that part.
   subroutine EnsureFieldFreeMeanField(state, time)
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     complex(R64), intent(in), contiguous, target :: state(:)
     real(R64), intent(in) :: time
@@ -188,11 +193,11 @@ contains
     complex(R64), contiguous, pointer :: orbs(:, :)
     complex(R64), allocatable :: rdm1(:, :)
 
-    if (Method_Mb_OrbBased_FieldFreeMeanFieldBuiltQ()) return
+    if (FieldFree_meanFieldBuiltQ) return
 
     call GetOrbs(orbs, state)
     call FillRdm1(rdm1, state)
-    call Method_Mb_OrbBased_BuildFieldFreeMeanField(orbs, rdm1, time)
+    call FieldFree_BuildMeanField(orbs, rdm1, time)
 
   end subroutine
 
@@ -203,6 +208,7 @@ contains
     use M_Grid
     use M_Orbs
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     complex(R64), intent(out), contiguous, target :: res(:)
     complex(R64), intent(in), contiguous, target :: vecs(:, :)
@@ -228,7 +234,7 @@ contains
       orbsList(:, :, m) = orbsM(:, :)
     end do
 
-    call Method_Mb_OrbBased_ApplyFieldFreePhi(orbs, orbsList, dt)
+    call FieldFree_ApplyPhi(orbs, orbsList, dt)
 
   end subroutine
 
@@ -249,7 +255,7 @@ contains
   !> it twice); its orbital derivative is projected with the spectral cut.
   !>
   !> With the frozen mean-field reference U of the exact part
-  !> (exactFieldFreeMeanFieldQ), which propagates h0 + U unprojected at fixed
+  !> (FieldFree_meanFieldQ), which propagates h0 + U unprojected at fixed
   !> coefficients (the exact one-body flow of U^), the non-linear part is the
   !> flow of the interaction minus U^ in the gauge without in-space rotation:
   !> orbitals -i Q (W - U) phi, coefficients -i (H2 - U^) c with
@@ -262,6 +268,7 @@ contains
     use M_Orbs
     use M_Method_Mb_OrbBased
     use M_Utils_Constants
+    use M_FieldFree
 
     complex(R64), intent(out), contiguous, target :: dState(:)
     complex(R64), intent(in), contiguous, target  :: state(:)
@@ -299,12 +306,12 @@ contains
     call Method_Mb_OrbBased_ApplyCorrelationOp(dOrbs, orbs, invRdm1, rdm2, time, h2_=h2)
 
     ! Frozen mean-field reference: W - U on the orbitals (before Q)
-    meanFieldQ = Method_Mb_OrbBased_exactFieldFreeMeanFieldQ .and. .not. oneBodyQ
+    meanFieldQ = FieldFree_meanFieldQ .and. .not. oneBodyQ
     if (meanFieldQ) then
       call EnsureFieldFreeMeanField(state, time)
       allocate (uOrbs, mold=dOrbs)
       uOrbs(:, :) = 0.0_R64
-      call Method_Mb_OrbBased_ApplyFieldFreeMeanField(uOrbs, orbs, h1_=uMat)
+      call FieldFree_ApplyMeanField(uOrbs, orbs, h1_=uMat)
       dOrbs(:, :) = dOrbs(:, :) - uOrbs(:, :)
     end if
 
@@ -314,7 +321,7 @@ contains
 
     call Coeffs_ProjectOnSubspace(dCoeffs, coeffs)
     call Orbs_ProjectOnSubspace(dOrbs, orbs)
-    if (.not. oneBodyQ) call Method_Mb_OrbBased_ApplySpectralCut(dOrbs)
+    if (.not. oneBodyQ) call FieldFree_ProjectBelowCut(dOrbs)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
 

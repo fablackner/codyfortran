@@ -342,9 +342,9 @@ a NoOp. It is the only projection on the declared m
 ## Testing
 
 Tests using OrbsInit are found in:
-- `test/T_He1d_*.json` — 1D helium with Linear/Harmonic
-- `test/T_FermiHubbard_*.json` — Hubbard model with Lattice/OnSite
-- `test/T_H3d_*.json` — 3D hydrogen with Ylm/HydrogenLike
+- `test/simulationTests/He1d/T_He1d_*.json` — 1D helium with Linear/Harmonic
+- `test/simulationTests/FermiHubbard/T_FermiHubbard_*.json` — Hubbard model with Lattice/OnSite
+- `test/simulationTests/H3d/T_H3d_*.json` — 3D hydrogen with Ylm/HydrogenLike
 - `test/componentTests/OrbsInit/Load/` — loading with declared m: round-off
   admixtures are removed, orbitals of another m stop with an error
   (`ctest-pass-regex` test); partial load (`T_OrbsInit_Load_Partial`: two

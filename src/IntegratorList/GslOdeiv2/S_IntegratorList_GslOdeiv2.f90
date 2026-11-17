@@ -61,7 +61,7 @@ contains
 
     class(T_IntegratorList_E_GslOdeiv2), intent(inout) :: this
 
-    call Say_Fabricate(this % path//".gslOdeiv2")
+    call Say_Fabricate(this % path)
 
     !------------------------------------
     ! set values and procedure pointers
@@ -75,11 +75,10 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Setup(this)
     use M_Utils_Say
-    use M_Utils_UnusedVariables
 
     class(T_IntegratorList_E_GslOdeiv2), intent(inout) :: this
 
-    call Say_Setup(this % path//".gslOdeiv2")
+    call Say_Setup(this % path)
 
   end subroutine
 

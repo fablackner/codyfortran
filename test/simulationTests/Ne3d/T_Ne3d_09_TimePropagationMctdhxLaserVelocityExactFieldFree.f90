@@ -1,6 +1,6 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> T_Ne3d_08_TimePropagationMctdhxLaserVelocity with exact field-free one-body
-!> propagation (method.mb.orbBased.exactFieldFreeQ).
+!> propagation (fieldFree.eigen).
 !>
 !> Every linear split step is exp(-i h0 dt/2) SIL[gauge](dt) exp(-i h0 dt/2):
 !> the field-free h0 = T + V_ext is diagonalized once per l and applied
@@ -91,5 +91,6 @@ program T_Ne3d_09_TimePropagationMctdhxLaserVelocityExactFieldFree
 contains
 
   include 'Ne3dMctdhxLaser.inc'
+  include 'Ne3dMetricNorm.inc'
 
 end program

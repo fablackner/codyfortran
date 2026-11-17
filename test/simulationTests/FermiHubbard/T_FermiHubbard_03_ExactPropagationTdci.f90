@@ -2,8 +2,7 @@ program T_FermiHubbard_03_ExactPropagationTdci
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
-  use M_Utils_Actions
-  use M_Utils_PrinterSpectrum
+  use M_Printer_Spectrum
   use M_Grid
   use M_SysKinetic
   use M_SysPotential
@@ -44,7 +43,7 @@ program T_FermiHubbard_03_ExactPropagationTdci
   call ConfigList_Fabricate
   call Coeffs_Fabricate
   call CoeffsInit_Fabricate
-  DiagonalizerListInput(1) % ApplyMatOnVec => Actions_ApplyHamiltonian
+  DiagonalizerListInput(1) % ApplyMatOnVec => Method_ApplyHamiltonian
   DiagonalizerListInput(1) % dim = Coeffs_nCoeffs
   call DiagonalizerList_Fabricate(DiagonalizerListInput)
   call Propagator_Fabricate
@@ -96,7 +95,7 @@ program T_FermiHubbard_03_ExactPropagationTdci
   write (*, *)
 
   call check(error, energy, -7.29797344_R64, thr=1e-7_R64)
-  if (allocated(error)) error stop "T_FermiHubbard_ExactPropagationTdci failure"
+  if (allocated(error)) error stop "T_FermiHubbard_03_ExactPropagationTdci failure"
 
   !==========================================
   call Say_Goodbye

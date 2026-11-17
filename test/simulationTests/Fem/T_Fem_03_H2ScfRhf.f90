@@ -4,7 +4,7 @@
 !> [1, 1], potential mixing with α = 1, i.e. plain SCF) and the preconditioned
 !> eigensolver diagonalizerList.lobpcg: ApplyPrecOnVec =>
 !> GroundSolver_PreconditionAction ((T + max(−θ, σ_min))⁻¹ by the exact FDM
-!> solve SysKinetic_SolveShifted), metricWeights = Grid_Fem_weights (wiring
+!> solve SysKinetic_SolveShifted), metricWeights = Grid_weights (wiring
 !> and SCF loop in FemScf.inc, shared with T_Fem_04).
 !>
 !> Mesh (identical to the numpy prototype of the FEM design). This test writes

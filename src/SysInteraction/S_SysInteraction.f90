@@ -12,7 +12,7 @@
 !>   - `sysInteraction.ylm`     → spherical-harmonic Coulomb solvers
 !>   - `sysInteraction.prolate` → two-center (prolate) Coulomb solvers
 !>   - `sysInteraction.fem`     → 3D spectral-element Galerkin Poisson solve
-submodule(M_SysInteraction) S_Interaction
+submodule(M_SysInteraction) S_SysInteraction
 
   implicit none
 
@@ -29,7 +29,6 @@ contains
   module subroutine SysInteraction_Fabricate
     use M_Utils_Json
     use M_Utils_Say
-    use M_Utils_NoOpProcedures
     use M_SysInteraction_Linear
     use M_SysInteraction_Lattice
     use M_SysInteraction_Ylm

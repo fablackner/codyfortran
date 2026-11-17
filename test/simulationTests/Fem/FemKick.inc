@@ -1,7 +1,8 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-! Kick helpers shared by T_Fem_06_H2Kick, T_Fem_07_H2KickDouble and
-! T_Fem_09_H2KickMeanFieldReference (included after `contains`, together with
-! FemDynamics.inc; every procedure here is used by each of them).
+! Kick helpers shared by T_Fem_06_H2Kick, T_Fem_07_H2KickDouble,
+! T_Fem_09_H2KickMeanFieldReference and T_FemDft_03_H2KickTdks (included after
+! `contains`, together with FemDynamics.inc; every procedure here is used by
+! each of them).
 !
 ! - RunKick:          kick the loaded ground state and propagate it
 ! - KickAllOrbitals:  the dipole kick exp(i kappa e.r) of every stored orbital
@@ -12,7 +13,7 @@
 !> loaded TDHF ground state (KickAllOrbitals: every electron gets the momentum
 !> kappa along z) and propagates it with dt up to endTime. The dipole is
 !> written at every step to dipoleFile ("time <x> <y> <z>",
-!> PrinterObservableFem_DumpDipole),
+!> Printer_Observable_Fem_DumpDipole),
 !> the energy and N = Tr(rho S) every outputEvery steps. The file is replaced
 !> at the start; its first line is the header of the run,
 !>   "# T_Fem kick (<date> <time>): kappa, timeStep, endTime, E_el(0),
@@ -24,7 +25,7 @@
 !>   energyGround     E_el of the loaded ground state
 !>   energyKick       E_el right after the kick
 !>   slopeExact       d<z>/dt at t = 0+ of the space-discretized TDHF,
-!>                    i Tr(rho [T, z]) (PrinterObservableFem_DumpDipoleVelocity;
+!>                    i Tr(rho [T, z]) (Printer_Observable_Fem_DumpDipoleVelocity;
 !>                    V and the mean field are multiplicative and commute with
 !>                    z)
 !>   slopePropagated  d<z>/dt at t = 0 from the propagated dipole: Richardson
@@ -38,7 +39,7 @@
 !>   secondsPerStep   wall-clock time per step (dipole output included)
 subroutine RunKick(energyGround, energyKick, slopeExact, slopePropagated, maxEnergyDev, maxNormDev, maxTransverse, &
                    times, dipoleZ, secondsPerStep, kappa, dt, endTime, outputEvery, dipoleFile)
-  use M_Utils_PrinterObservableFem
+  use M_Printer_Observable_Fem
   use M_Grid
   use M_Orbs
   use M_Method
@@ -76,7 +77,7 @@ subroutine RunKick(energyGround, energyKick, slopeExact, slopePropagated, maxEne
   ! d<z>/dt at 0+ of the semi-discrete TDHF, i Tr(rho [T, z]) (for the
   ! doubly occupied psi 4 Im <z psi|T psi>)
   call Method_Mb_OrbBased_FillRdm1(rdm1, Method_state)
-  call PrinterObservableFem_DumpDipoleVelocity(rdm1, Orbs_orbs, "", .false., 0.0_R64, velocity_=velocity)
+  call Printer_Observable_Fem_DumpDipoleVelocity(rdm1, Orbs_orbs, "", .false., 0.0_R64, velocity_=velocity)
   slopeExact = velocity(3)
 
   ! Fresh dipole file: the header of the run, then the first line at t = 0
@@ -108,7 +109,7 @@ subroutine RunKick(energyGround, energyKick, slopeExact, slopePropagated, maxEne
         ", E - E(0+) ", energy - energyKick, ", N - 2 ", norm - 2.0_R64, ", dipole ", dipole
     else
       call Method_Mb_OrbBased_FillRdm1(rdm1, Method_state)
-      call PrinterObservableFem_DumpDipole(rdm1, Orbs_orbs, dipoleFile, .false., time, dipole_=dipole)
+      call Printer_Observable_Fem_DumpDipole(rdm1, Orbs_orbs, dipoleFile, .false., time, dipole_=dipole)
     end if
     times(iStep) = time
     dipoleZ(iStep) = dipole(3) - dipoleStart(3)

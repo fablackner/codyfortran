@@ -24,11 +24,9 @@ program P_LaserMctdhfLength
   use M_Utils_Say
   use M_Utils_Json
   use M_Utils_HhgSpectrum
-  use M_Utils_Actions
-  use M_Utils_PrinterObservable
-  use M_Utils_PrinterObservableYlm
+  use M_Printer_Observable
+  use M_Printer_Observable_Ylm
   use M_Grid
-  use M_Grid_Ylm
   use M_SysKinetic
   use M_SysPotential
   use M_SysPotential_Ylm_CoulombLaser
@@ -48,7 +46,7 @@ program P_LaserMctdhfLength
   real(R64)    :: time, startTime, endTime, outputStep, timeStep
   real(R64)    :: startNorm, norm
   real(R64)    :: dipole, energy, field
-  integer(I32) :: iStep, nTimeStepsPropagation, innerStep, iOrb
+  integer(I32) :: iStep, nTimeStepsPropagation, innerStep
   integer(I32) :: io, istat
   real(R64), allocatable :: metricWeights(:)
   complex(R64), allocatable :: rdm1(:, :)
@@ -98,12 +96,7 @@ program P_LaserMctdhfLength
   ! The one-body operator is self-adjoint only in the FEDVR-weighted metric;
   ! supply the metric to the SIL integrator (integrator 1): unit weights for
   ! the CI coefficients, grid weights for each orbital.
-  allocate (metricWeights(Coeffs_nCoeffs + Grid_nPoints * Orbs_nOrbsInState))
-  metricWeights(1:Coeffs_nCoeffs) = 1.0_R64
-  do iOrb = 1, Orbs_nOrbsInState
-    metricWeights(Coeffs_nCoeffs + (iOrb - 1) * Grid_nPoints + 1: &
-                  Coeffs_nCoeffs + iOrb * Grid_nPoints) = Grid_Ylm_weights(:)
-  end do
+  call Method_Mb_OrbBased_FillStateWeights(metricWeights)
   integratorList(1) % e % metricWeights = metricWeights
 
   !==========================================
@@ -139,8 +132,8 @@ program P_LaserMctdhfLength
     norm = MetricNorm(Method_state)
 
     call Method_Mb_OrbBased_FillRdm1(rdm1, Method_state)
-    call PrinterObservableYlm_DumpDipole(rdm1, Orbs_orbs, "dipole.dat", .false., time, dipole_=dipole)
-    call PrinterObservable_DumpEnergy("energy.dat", .false., time)
+    call Printer_Observable_Ylm_DumpDipole(rdm1, Orbs_orbs, "dipole.dat", .false., time, dipole_=dipole)
+    call Printer_Observable_DumpEnergy("energy.dat", .false., time)
 
     open (newunit=io, file="laser.dat", status="unknown", position="append", iostat=istat)
     if (istat .eq. 0) then

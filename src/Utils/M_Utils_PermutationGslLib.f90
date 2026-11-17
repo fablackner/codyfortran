@@ -6,7 +6,7 @@
 !>
 !> Provides thin wrappers around gsl_permutation_* to build full permutation
 !> sets used for indexing and enumeration tasks.
-module M_Utils_CombinatoricsBasics
+module M_Utils_PermutationGslLib
   use M_Utils_Types
   use, intrinsic :: iso_c_binding
 

@@ -17,9 +17,7 @@ submodule(M_SysPotential_Ylm_Coulomb_StdImpl) S_SysPotential_Ylm_Coulomb_StdImpl
 contains
 
   module subroutine SysPotential_Ylm_Coulomb_StdImpl_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
-    use M_SysPotential
     use M_SysPotential_Ylm
 
     call Say_Fabricate("sysPotential.ylm.coulomb.stdImpl")

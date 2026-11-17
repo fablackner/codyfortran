@@ -59,20 +59,8 @@ submodule(M_GroundSolver_Mcscf_StdImpl) S_GroundSolver_Mcscf_StdImpl
   !> External potential V̂_ext, dimension(Grid_nPoints) - recomputed each Approach
   complex(R64), allocatable :: externalPotential(:)
 
-  !> Per-orbital exchange potentials W(φ_p, orb), dimension(potSize, nOrbsInState/2)
-  complex(R64), allocatable :: exchangePotentials(:, :)
-
-  !> RDM-weighted sum of exchange potentials, dimension(potSize)
-  complex(R64), allocatable :: weightedPotential(:)
-
   !> Accumulated RDM-weighted interaction source for the direct term
   complex(R64), allocatable :: weightedSrc(:)
-
-  !> Temporary for pairwise interaction sources
-  complex(R64), allocatable :: src(:)
-
-  !> Temporary for exchange potential computation
-  complex(R64), allocatable :: interactionPotential(:)
 
   !> Temporary for operator action results, dimension(Grid_nPoints)
   complex(R64), allocatable :: dOrbTmp(:)
@@ -108,6 +96,7 @@ contains
     !------------------------------------
 
     alphaCi = Json_Get("alphaCi", 1.0_R64, path_="groundSolver.mcscf.stdImpl")
+    if (.not. (alphaCi > 0.0_R64 .and. alphaCi <= 1.0_R64)) error stop "groundSolver.mcscf.stdImpl.alphaCi must be in (0, 1]"
 
     mixTarget = Json_Get("mixTarget", "orbitals", path_="groundSolver.mcscf.stdImpl")
     if (mixTarget .ne. "orbitals" .and. mixTarget .ne. "potential") then
@@ -130,16 +119,17 @@ contains
     use M_Utils_Say
     use M_Grid
     use M_GroundSolver
-    use M_Orbs
-
     integer(I32) :: nUp
 
     call Say_Setup("groundSolver.mcscf.stdImpl")
 
     nUp = GroundSolver_NumberOfSpinUpOrbs()
 
+    if (allocated(dOrbTmp)) deallocate (dOrbTmp)
     allocate (dOrbTmp(Grid_nPoints))
+    if (allocated(rdm1Up)) deallocate (rdm1Up)
     allocate (rdm1Up(nUp, nUp))
+    if (allocated(orbsRaw)) deallocate (orbsRaw)
     allocate (orbsRaw(Grid_nPoints, nUp))
 
   end subroutine
@@ -162,18 +152,13 @@ contains
   !> This is the matvec callback for DiagonalizerList(2) over the orbital space.
   subroutine FockAction(dOrb, orb, time)
     use M_SysKinetic
+    use M_GroundSolver_Mcscf
     use M_SysPotential
     use M_SysInteraction
-    use M_GroundSolver
-    use M_Orbs
 
     complex(R64), intent(out), contiguous, target :: dOrb(:)
     complex(R64), intent(in), contiguous, target :: orb(:)
     real(R64), intent(in) :: time
-
-    integer(I32) :: p, q, nUp
-
-    nUp = GroundSolver_NumberOfSpinUpOrbs()
 
     dOrb = 0.0_R64
 
@@ -191,20 +176,7 @@ contains
 
     ! Exchange term: −K̂[ρ¹]·orb = −Σ_{pq} ρ¹_{pq}·W(φ_p, orb)·φ_q
     ! Spin-up block only (restricted; the trial vector carries no spin index)
-    do p = 1, nUp
-      call SysInteraction_FillInteractionSrc(src, Orbs_orbs(:, p), orb(:))
-      call SysInteraction_FillInteractionPotential(interactionPotential, src, time)
-      exchangePotentials(:, p) = interactionPotential
-    end do
-
-    do q = 1, nUp
-      weightedPotential = 0.0_R64
-      do p = 1, nUp
-        weightedPotential = weightedPotential + rdm1Up(p, q) * exchangePotentials(:, p)
-      end do
-      call SysInteraction_MultiplyWithInteractionPotential(dOrbTmp, weightedPotential, Orbs_orbs(:, q))
-      dOrb = dOrb - dOrbTmp
-    end do
+    call GroundSolver_Mcscf_SubtractExchange(dOrb, orb, rdm1Up, time)
 
   end subroutine
 
@@ -226,8 +198,8 @@ contains
   !> @param[inout] state  Packed MCTDHX-style state: coefficients ⊕ orbitals
   !> @param[in]    time   Time for potential evaluation (typically 0)
   subroutine Approach(state, time)
-    use M_Mixing
     use M_Grid
+    use M_GroundSolver_Mcscf
     use M_DiagonalizerList
     use M_GroundSolver
     use M_Coeffs
@@ -241,10 +213,8 @@ contains
 
     complex(R64), contiguous, pointer :: coeffs(:)
     complex(R64), contiguous, pointer :: orbs(:, :)
-    complex(R64), contiguous, pointer :: orbsRawFlat(:)
     complex(R64), allocatable :: rdm1(:, :)
-    complex(R64) :: overlap, phase, rdm1Weight
-    integer(I32) :: nC, nG, nOS, nUp, p, q, j
+    integer(I32) :: nC, nG, nOS, nUp
 
     nC = Coeffs_nCoeffs
     nG = Grid_nPoints
@@ -259,53 +229,22 @@ contains
     call Method_Mb_OrbBased_FillH1(Method_Mb_OrbBased_h1, orbs, time)
     call Method_Mb_OrbBased_FillH2(Method_Mb_OrbBased_h2, orbs, time)
 
-    ! Step 2: Diagonalize CI Hamiltonian (GroundSolver_Mcscf_HamiltonianAction is the matvec callback)
-    call DiagonalizerList(1) % e % Diagonalize(time, .true.)
-    call GroundSolver_NoteUnconverged(1)
-
-    ! Step 3: Mix phase-aligned CI ground eigenvector with old coefficients
-    ! The eigenvector's global phase is arbitrary; align it so the mixing
-    ! interpolates instead of cancelling.
-    overlap = dot_product(DiagonalizerList(1) % e % evecs(:, 1), coeffs)
-    phase = (1.0_R64, 0.0_R64)
-    if (0.0_R64 < abs(overlap)) phase = overlap / abs(overlap)
-
-    coeffs = (1.0_R64 - alphaCi) * coeffs + alphaCi * phase * DiagonalizerList(1) % e % evecs(:, 1)
-    call Coeffs_Normalize(coeffs)
+    ! Steps 2 and 3: diagonalize the CI Hamiltonian, mix the phase-aligned
+    ! ground eigenvector into the coefficients
+    call GroundSolver_Mcscf_CiStep(coeffs, alphaCi, time)
 
     ! Step 4: 1-RDM from updated coefficients; direct potential from the
     ! correlated density ρ(r) = Σ_{pq} ρ¹_{pq}·φ_p*(r)·φ_q(r) (all body types)
     call Coeffs_ApplyH1FillRdm1(coeffs, rdm1_=rdm1)
     rdm1Up = rdm1(1:nUp, 1:nUp)
 
-    do p = 1, nOS
-      do q = 1, nOS
-        ! Restricted: the stored orbital pair carries both spins, so the
-        ! density weight is the sum of the spin-up and spin-down blocks
-        rdm1Weight = rdm1(p, q)
-        if (Orbs_restrictedQ) rdm1Weight = rdm1Weight + rdm1(nOS + p, nOS + q)
-        if (abs(rdm1Weight) < tiny(1.0_R64)) cycle
-        call SysInteraction_FillInteractionSrc(src, orbs(:, p), orbs(:, q))
-        if (.not. allocated(weightedSrc)) then
-          allocate (weightedSrc(size(src)))
-          weightedSrc = 0.0_R64
-        end if
-        weightedSrc = weightedSrc + rdm1Weight * src
-      end do
-    end do
-
+    call GroundSolver_Mcscf_FillCorrelatedSource(weightedSrc, rdm1, orbs)
     call SysInteraction_FillInteractionPotential(hartreePotentialRaw, weightedSrc, time)
-    weightedSrc = 0.0_R64
 
     if (mixTarget .eq. "potential") then
       call GroundSolver_MixPotential(hartreePotentialMixed, hartreePotentialRaw)
     else
       hartreePotentialMixed = hartreePotentialRaw
-    end if
-
-    if (.not. allocated(exchangePotentials)) then
-      allocate (exchangePotentials(size(hartreePotentialMixed), nUp))
-      allocate (weightedPotential(size(hartreePotentialMixed)))
     end if
 
     ! Step 5: Diagonalize RDM-weighted Fock operator (FockAction is the matvec callback)
@@ -316,29 +255,8 @@ contains
     ! the arbitrary per-vector phase and the arbitrary rotation within
     ! degenerate shells), then mix and copy spin-up → spin-down (restricted)
     orbsRaw = DiagonalizerList(2) % e % evecs(:, 1:nUp)
-    ! ARPACK normalizes in the Euclidean metric; alignment and mixing require
-    ! orthonormality with respect to the grid metric (Grid_InnerProduct)
-    call Grid_Orthonormalize(orbsRaw)
-    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nUp))
-
-    if (mixTarget .eq. "orbitals") then
-      orbsRawFlat(1:nG * nUp) => orbsRaw
-      call Mixing_Mix(state(nC + 1:nC + nG * nUp), orbsRawFlat)
-    else
-      do j = 1, nUp
-        orbs(:, j) = orbsRaw(:, j)
-      end do
-    end if
-
-    ! Restricted: the state holds only the shared spatial set, no copy needed
-    if (.not. Orbs_restrictedQ) then
-      do j = 1, nUp
-        orbs(:, nUp + j) = orbs(:, j)
-      end do
-    end if
-
-    ! Gram–Schmidt orthonormalize
-    call Orbs_Orthonormalize(orbs)
+    call GroundSolver_AlignOrbitals(orbsRaw, orbs(:, 1:nUp))
+    call GroundSolver_StoreOrbitals(state(nC + 1:nC + nG * nOS), orbsRaw, mixQ=mixTarget .eq. "orbitals")
 
   end subroutine
 

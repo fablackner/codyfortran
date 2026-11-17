@@ -1,0 +1,79 @@
+{
+    "grid": {
+        "lattice": {
+            "xSize": 5
+        }
+    },
+    "sysKinetic": {
+        "lattice": {
+            "nearestNeighbor": {
+                "hoppX": 1.0
+            }
+        }
+    },
+    "sysPotential": {
+        "lattice": {
+            "manual": {
+                "values": [ 0.3, -0.1, 0.0, 0.2, -0.4 ],
+                "stdImpl": { }
+            }
+        }
+    },
+    "sysInteraction": {
+        "lattice": {
+            "onSite": {
+                "strength": 2.0,
+                "stdImpl": { }
+            }
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 2, 2 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 5, 5 ],
+                "tdci": { }
+            }
+        }
+    },
+    "orbs": {
+        "restrictedQ": false
+    },
+    "orbsInit": {
+        "lattice": {
+            "onSite": { }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    },
+    "coeffsInit": {
+        "unary": { }
+    },
+    "integratorList": {
+        "rk": {
+            "o4Expl": { }
+        }
+    },
+    "propagator": {
+        "single": { }
+    },
+    "program": {
+        "endTime": 2.0,
+        "timeStep": 0.01
+    }
+}

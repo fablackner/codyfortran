@@ -105,6 +105,43 @@ module M_GroundSolver
     end function
   end interface
 
+  interface GroundSolver_AlignOrbitals
+    !> @brief Prepare new spin-up orbitals for acceptance.
+    !>
+    !> @details
+    !> Orthonormalizes the new orbitals (e.g. Fock eigenvectors, normalized
+    !> in the Euclidean metric) in the grid metric, which alignment and mixing
+    !> require, and gauge-aligns them on the old ones (`Orbs_AlignOnReference`:
+    !> removes the arbitrary per-vector phase and the rotation within
+    !> degenerate shells; with blockOf_ only within blocks of equal declared m).
+    module subroutine GroundSolver_AlignOrbitals(orbsRaw, oldOrbs, blockOf_)
+      !> New spin-up orbitals (nPoints x nUp), orthonormalized and aligned in place.
+      complex(R64), intent(inout), contiguous :: orbsRaw(:, :)
+      !> Old spin-up orbitals (nPoints x nUp).
+      complex(R64), intent(in), contiguous :: oldOrbs(:, :)
+      !> Symmetry block of every orbital (Orbs_blockOfOrb(1:nUp)).
+      integer(I32), intent(in), contiguous, optional :: blockOf_(:)
+    end subroutine
+  end interface
+
+  interface GroundSolver_StoreOrbitals
+    !> @brief Accept new spin-up orbitals into the state.
+    !>
+    !> @details
+    !> Mixes them into the spin-up orbitals of the state (`Mixing_Mix`, the
+    !> mixTarget "orbitals") or replaces those, copies spin up to spin down
+    !> unless the orbitals are stored restricted, and orthonormalizes all
+    !> stored orbitals (`Orbs_Orthonormalize`).
+    module subroutine GroundSolver_StoreOrbitals(orbsState, newOrbs, mixQ)
+      !> The orbital part of the state (nPoints x Orbs_nOrbsInState, flat).
+      complex(R64), intent(inout), contiguous, target :: orbsState(:)
+      !> New spin-up orbitals (nPoints x nUp), aligned (GroundSolver_AlignOrbitals).
+      complex(R64), intent(in), contiguous, target :: newOrbs(:, :)
+      !> Mix (true) or replace (false).
+      logical, intent(in) :: mixQ
+    end subroutine
+  end interface
+
   interface GroundSolver_MixPotential
     !> @brief Accept the next mean-field potential of mixTarget "potential".
     !>
@@ -129,6 +166,17 @@ module M_GroundSolver
   !> (`GroundSolver_PreconditionAction`); read by `GroundSolver_Fabricate`
   !> from `groundSolver.precShiftMin` (default 0.5, must be positive).
   real(R64) :: GroundSolver_precShiftMin = 0.5_R64
+
+  !> Options that only some backends implement. The fabricate of a backend
+  !> sets the flags of those it implements; GroundSolver_Fabricate resets them
+  !> before it dispatches and refuses a configured option afterwards if its
+  !> flag is unset:
+  !>   - declared orbital m (method.mb.orbBased.mOfOrbs): the backend keeps
+  !>     every orbital in its m channel (radial Fock operators per l,
+  !>     alignment per m block, or an m-conserving update);
+  !>   - Kohn-Sham DFT (sysXc): the backend builds the mean field v_KS - a K.
+  logical :: GroundSolver_implementsDeclaredMQ = .false.
+  logical :: GroundSolver_implementsKohnShamQ = .false.
 
   !=============================================================================
   ! module procedures pointers
@@ -155,7 +203,7 @@ module M_GroundSolver
   !> @brief Pointer to one ground-state approach/relaxation step.
   !>
   !> This is the main workhorse—call repeatedly until energy convergence.
-  procedure(I_GroundSolver_Approach), pointer :: GroundSolver_Approach
+  procedure(I_GroundSolver_Approach), pointer :: GroundSolver_Approach => null()
   abstract interface
     !> @brief Perform a single SCF approach/relaxation iteration on the state.
     !>

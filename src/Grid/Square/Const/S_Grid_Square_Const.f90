@@ -53,8 +53,8 @@ contains
     dy = (Grid_Square_ymax - Grid_Square_ymin) / (Grid_Square_nPointsY - 1)
 
     ! Allocate and calculate weights (for 2D integration)
-    allocate (Grid_Square_weights(Grid_nPoints))
-    Grid_Square_weights(:) = dx * dy
+    allocate (Grid_weights(Grid_nPoints))
+    Grid_weights(:) = dx * dy
 
     ! Allocate arrays for coordinate storage and indexing
     allocate (Grid_Square_xCoord(Grid_nPoints)) ! Store x, y coordinates

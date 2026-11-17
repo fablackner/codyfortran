@@ -9,7 +9,7 @@
 !> family-level fabricator. The family fabricator in turn selects the concrete
 !> potential model (harmonic, Coulomb, disorder, etc.) and wires the procedure
 !> pointers exported by M_SysPotential.
-submodule(M_SysPotential) S_Potential
+submodule(M_SysPotential) S_SysPotential
 
   implicit none
 
@@ -26,8 +26,6 @@ contains
   module subroutine SysPotential_Fabricate
     use M_Utils_Json
     use M_Utils_Say
-    use M_Utils_Characters
-    use M_Utils_NoOpProcedures
     use M_SysPotential_Lattice
     use M_SysPotential_Linear
     use M_SysPotential_Ylm

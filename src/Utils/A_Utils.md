@@ -2,10 +2,13 @@
 
 ## Overview
 
-The **Utils** module is a collection of 72 utility modules providing the numerical
+The **Utils** module is a collection of 61 utility modules providing the numerical
 and algebraic infrastructure for the CodyFortran framework. These modules are
 **stateless** helper functions—they do not follow the Fabricate/Setup pattern and
-have no JSON configuration. They are imported directly by other modules as needed.
+have no JSON configuration. They are imported directly by other modules as needed,
+and they import nothing but each other: what a routine needs from the simulation
+(sizes, particle numbers) comes in through its arguments. Output routines that
+read the simulation state are the printers of `src/Printer/` (`A_Printer.md`).
 
 This guide focuses on the **RDM algebra utilities**, which provide tensor operations
 essential for reduced density matrix (RDM) theory and time-dependent simulations.
@@ -76,18 +79,6 @@ complex(R64), intent(inout), contiguous :: A2(:,:,:,:)
 
 ---
 
-## Observable Printers
-
-| Module | Public routines | Notes |
-|--------|-----------------|-------|
-| `M_Utils_PrinterObservable` | `PrinterObservable_DumpNorm`, `_DumpOrthonormality`, `_DumpOrbitalEnergyMatrix`, `_DumpEnergy` | Method-aware: uses `M_Method`/`M_Method_Mb_OrbBased` (Apply*Op, `Method_Mb_OrbBased_FillInverseRdm1` for the orbital energy matrix), so not a stateless utility; one inner product per orbital (norms) and per pair (overlap matrix) |
-| `M_Utils_PrinterObservableLinear` | `PrinterObservableLinear_DumpDipole`, `_DumpPotentialFullExpansion` | Linear grids |
-| `M_Utils_PrinterObservableLattice` | `PrinterObservableLattice_DumpDensityCenter`, `_DumpDensityOnSite` | Lattice grids |
-| `M_Utils_PrinterObservableYlm` | `PrinterObservableYlm_DumpDipole` (optional `dipole_` out), `PrinterObservableYlm_DumpDipoleAcceleration` (optional `acceleration_` out) | Ylm grids; z = r√(4π/3)Y₁₀ applied as spatial product; acceleration form −Z⟨cosθ/r²⟩ |
-| `M_Utils_PrinterObservableFem` | `PrinterObservableFem_DumpDipole(rdm1, orbs, filename, toScreenQ, time, dipole_)` (line "time ⟨x⟩ ⟨y⟩ ⟨z⟩", optional `dipole_(3)` out), `PrinterObservableFem_DumpNorm(..., norm_)` (line "time N", N = Tr(ρ S)), `PrinterObservableFem_DumpDipoleVelocity(..., velocity_)` (line "time v_x v_y v_z", the velocity form v_a = i Tr(ρ_s [T, r_a]) of the dipole, d⟨r_a⟩/dt wherever the equations of motion obey Ehrenfest's theorem for r_a, e.g. TDHF; optional `velocity_(3)` out) | grid.fem; Method-aware like `M_Utils_PrinterObservable`: ρ_s = `Method_Mb_OrbBased_FillSpatialRdm1` of rdm1 (rdm1 itself, or the sum of the two spin blocks for restricted storage), body type of stored orbital i = `Method_Mb_OrbBased_bodyTypeOfOrb(i)`. Dipole and N: one pass over the nodes with the density ρ = Σ_ij ρ_s(i,j) φ_j* φ_i and the nodal weights (no orthonormality assumed), node coordinates from `Grid_Fem_FillNodeCoordinate`. Velocity: Re(i Σ_ij ρ_s(i,j)(⟨Tφ_j\|r_aφ_i⟩ − ⟨r_aφ_j\|Tφ_i⟩)) with `SysKinetic_MultiplyWithKineticOp` (one T application per orbital, 2 nOS² inner products per axis); the potential, the length gauge and the interaction commute with r_a, so after a kick e^{iκr_a} it gives the TRK value Nκ/m on the grid (P_KickTdhfFem and FemKick.inc take their initial slope from it); early return without output request |
-
----
-
 ## Binary Data I/O: `M_Utils_DataStorage`
 
 `SaveData(data, filename, elementBits, startPos_)` and `LoadData(...)` move
@@ -137,7 +128,7 @@ called through `bind(C)`, so no CUDA compiler is needed. CMake compiles
 exactly one implementation submodule: `S_Utils_CublasLib_Cuda` with
 `-DCODY_USE_CUDA=ON` (links `CUDA::cublas`, `CUDA::cudart`), otherwise
 `S_Utils_CublasLib_Stub` (no device; every call except `AvailableQ` stops).
-Used by the exact field-free propagation (`method.mb.orbBased.exactFieldFreeGpuQ`).
+Used by the exact field-free propagation (`fieldFree.eigen.gpuQ`).
 
 ---
 
@@ -264,8 +255,8 @@ cycles; b = 0 gives y = 0. A solve touches only its context and arguments
 (solves with different contexts may run concurrently); the vector passes are
 OpenMP parallel outside parallel regions.
 
-User: the Cayley step of the exact field-free part of Method on grid.fem
-(`S_Method_Mb_OrbBased_FieldFreeCayley`: P⁻¹ = (1 + i Δt T/2)⁻¹ by
+User: the Cayley step of the exact field-free part on grid.fem
+(`S_FieldFree_Cayley`: P⁻¹ = (1 + i Δt T/2)⁻¹ by
 `SysKinetic_SolveShifted`, `Grid_InnerProduct`). Test:
 `test/componentTests/Utils/T_Utils_Gmres` (dense non-Hermitian n = 40 system
 in a diagonal metric against ZGESV with one cycle and with m = 2 restarts,

@@ -50,8 +50,8 @@ program T_Reconstruction_Singlet_Triples
                                            "not antisymmetric in (i1, i2)")
     if (.not. allocated(error)) call check(error, maxval(abs(t + reshape(t, shape(t), order=[1, 2, 3, 5, 4, 6]))) < 1e-13_R64, &
                                            "not antisymmetric in (j1, j2)")
-    if (.not. allocated(error)) call check(error, maxval(abs(t - conjg(reshape(t, shape(t), order=[4, 5, 6, 1, 2, 3])))) < 1e-13_R64, &
-                                           "not Hermitian")
+    if (.not. allocated(error)) &
+      call check(error, maxval(abs(t - conjg(reshape(t, shape(t), order=[4, 5, 6, 1, 2, 3])))) < 1e-13_R64, "not Hermitian")
     if (.not. allocated(error)) call check(error, MaxContraction(t) < 1e-13_R64, "onefold contractions do not vanish")
 
     ! rotated orbitals: RDMs and integrals transform alike, h1 -> rot h1 rot^+

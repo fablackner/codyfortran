@@ -1,5 +1,5 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Frozen mean-field reference (method.mb.orbBased.exactFieldFreeMeanFieldQ) in
+!> Frozen mean-field reference (fieldFree.cayley.meanFieldQ) in
 !> MCTDHF with more orbitals than electrons, where its CI term matters: H2
 !> (R = 1.4) on a small finite-element mesh (N = 15341), restricted MCTDHX
 !> with nOrbs = [2, 2] (sigma_g and sigma_u from STOs, CI coefficient 1 on
@@ -36,6 +36,7 @@ program T_Fem_10_H2MctdhfMeanFieldReference
   use M_Grid
   use M_Orbs
   use M_Coeffs
+  use M_FieldFree
   use M_Method
   use M_Method_Mb_OrbBased
   use testdrive, only: check, error_type
@@ -72,8 +73,8 @@ program T_Fem_10_H2MctdhfMeanFieldReference
   energyAgreement = Json_Get("program.energyAgreement", 3e-6_R64)
   nSteps = nint(endTime / dt)
 
-  if (.not. Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) &
-    error stop "T_Fem_10_H2MctdhfMeanFieldReference: the JSON must set method.mb.orbBased.exactFieldFreeMeanFieldQ"
+  if (.not. FieldFree_meanFieldQ) &
+    error stop "T_Fem_10_H2MctdhfMeanFieldReference: the JSON must set fieldFree.cayley.meanFieldQ"
   if (Orbs_nOrbsInState .ne. 2) &
     error stop "T_Fem_10_H2MctdhfMeanFieldReference: the JSON must declare two stored orbitals (nOrbs = [2, 2], restricted)"
 
@@ -92,7 +93,7 @@ program T_Fem_10_H2MctdhfMeanFieldReference
   ! natural occupation (spatial 1-RDM, 2 x 2 Hermitian)
   allocate (uOrbs, mold=Orbs_orbs)
   uOrbs(:, :) = (0.0_R64, 0.0_R64)
-  call Method_Mb_OrbBased_ApplyFieldFreeMeanField(uOrbs, Orbs_orbs, h1_=uMat)
+  call FieldFree_ApplyMeanField(uOrbs, Orbs_orbs, h1_=uMat)
   coupling = abs(uMat(1, 2))
   allocate (ciTermVec(Coeffs_nCoeffs))
   ciTermVec(:) = (0.0_R64, 0.0_R64)
@@ -180,8 +181,8 @@ contains
 
     allocate (dipoleZ(0:nSteps), energies(0:nSteps))
     Method_state(:) = state0(:)
-    Method_Mb_OrbBased_exactFieldFreeMeanFieldQ = meanFieldQ
-    call Method_Mb_OrbBased_SetupFieldFree
+    FieldFree_meanFieldQ = meanFieldQ
+    call FieldFree_Setup
 
     call FemObservables(energies(0), norm, dipoleStart, 0.0_R64, "")
     call KickOrbitalsZ(kappa)

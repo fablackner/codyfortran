@@ -1,6 +1,6 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Frozen mean-field reference of the Cayley exact part
-!> (method.mb.orbBased.exactFieldFreeMeanFieldQ) in TDHF of H2 (R = 1.4) on the
+!> (fieldFree.cayley.meanFieldQ) in TDHF of H2 (R = 1.4) on the
 !> finite-element grid: the exact part propagates h0 + U with U = J0 - K0 of
 !> the state at the first propagation (static, Hermitian, K0 by ACE), the
 !> nonlinear part the interaction minus U (orbitals -i Q (W - U) phi, CI
@@ -51,6 +51,8 @@ program T_Fem_09_H2KickMeanFieldReference
   use M_Grid
   use M_Orbs
   use M_Coeffs
+  use M_FieldFree
+  use M_FieldFree_Cayley
   use M_Method
   use M_Method_Mb_OrbBased
   use M_Propagator
@@ -107,8 +109,8 @@ program T_Fem_09_H2KickMeanFieldReference
   nSteps = nint(endTime / dt)
   nGround = nint(groundEndTime / groundTimeStep)
 
-  if (.not. Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) &
-    error stop "T_Fem_09_H2KickMeanFieldReference: the JSON must set method.mb.orbBased.exactFieldFreeMeanFieldQ"
+  if (.not. FieldFree_meanFieldQ) &
+    error stop "T_Fem_09_H2KickMeanFieldReference: the JSON must set fieldFree.cayley.meanFieldQ"
   if (size(refineTimeSteps) .ne. 2) error stop "T_Fem_09_H2KickMeanFieldReference: program.refineTimeSteps needs 2 steps"
   if (refineEndTime > endTime) error stop "T_Fem_09_H2KickMeanFieldReference: program.refineEndTime > program.endTime"
 
@@ -134,10 +136,10 @@ program T_Fem_09_H2KickMeanFieldReference
 
   ! 1. The nonlinear derivative at the ground state without and with the
   !    reference (the second call builds it from the ground state at t = 0)
-  Method_Mb_OrbBased_exactFieldFreeMeanFieldQ = .false.
+  FieldFree_meanFieldQ = .false.
   call Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin(dState, Method_state, 0.0_R64)
   derivativePlain = OrbitalNorm(dState)
-  Method_Mb_OrbBased_exactFieldFreeMeanFieldQ = .true.
+  FieldFree_meanFieldQ = .true.
   call Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin(dState, Method_state, 0.0_R64)
   write (*, '(1X, A, ES12.4, A, ES12.4)') "nonlinear orbital derivative at the ground state: without reference ", &
     derivativePlain, ", with ", OrbitalNorm(dState)
@@ -164,20 +166,20 @@ program T_Fem_09_H2KickMeanFieldReference
     write (*, '(1X, A, F6.3, A, F18.13, A, ES10.2, A, ES10.2, A, ES10.2)') "ground state, t = ", time, ": E_el ", &
       energy, ", E - E(0) ", energy - energyGround, ", N - 2 ", norm - N_ELECTRONS, ", 1 - |<phi0|phi>| ", 1.0_R64 - overlap
   end do
-  groundMaxIterations = Method_Mb_OrbBased_cayleyMaxIterations
+  groundMaxIterations = FieldFree_Cayley_maxIterations
   write (*, '(1X, A, F5.2, A, I0, A, I0, A, F6.2, A, I0)') "ground state at dt = ", groundTimeStep, ": ", &
-    Method_Mb_OrbBased_cayleyNSolves, " Cayley solves, ", Method_Mb_OrbBased_cayleyNIterations, &
-    " GMRES iterations, mean ", real(Method_Mb_OrbBased_cayleyNIterations, R64) / &
-    real(max(Method_Mb_OrbBased_cayleyNSolves, 1_I64), R64), ", max ", groundMaxIterations
+    FieldFree_Cayley_nSolves, " Cayley solves, ", FieldFree_Cayley_nIterations, &
+    " GMRES iterations, mean ", real(FieldFree_Cayley_nIterations, R64) / &
+    real(max(FieldFree_Cayley_nSolves, 1_I64), R64), ", max ", groundMaxIterations
 
   ! 3. The kick at dt with a fresh reference (built after the kick)
   call RestartFromGroundState
   call RunKick(energyGround, energyKick, slopeExact, slopePropagated, maxEnergyDev, maxNormDev, maxTransverse, &
                times, dipoleZ, secondsPerStep, kappa, dt, endTime, 10, "dipoleKickMeanField.dat")
-  write (*, '(1X, A, I0, A, I0, A, F6.2, A, I0)') "Cayley GMRES of the kick: ", Method_Mb_OrbBased_cayleyNSolves, &
-    " solves, ", Method_Mb_OrbBased_cayleyNIterations, " iterations, mean ", &
-    real(Method_Mb_OrbBased_cayleyNIterations, R64) / real(max(Method_Mb_OrbBased_cayleyNSolves, 1_I64), R64), &
-    ", max ", Method_Mb_OrbBased_cayleyMaxIterations
+  write (*, '(1X, A, I0, A, I0, A, F6.2, A, I0)') "Cayley GMRES of the kick: ", FieldFree_Cayley_nSolves, &
+    " solves, ", FieldFree_Cayley_nIterations, " iterations, mean ", &
+    real(FieldFree_Cayley_nIterations, R64) / real(max(FieldFree_Cayley_nSolves, 1_I64), R64), &
+    ", max ", FieldFree_Cayley_maxIterations
   if (.not. (abs(energyGroundRef - energyGround) <= 1e-10_R64 * abs(energyGround))) &
     error stop "T_Fem_09_H2KickMeanFieldReference: E_el(0) differs from that of dipoleKick.dat (orbital or mesh &
                &changed since T_Fem_06_H2Kick; run it again)"
@@ -215,7 +217,7 @@ program T_Fem_09_H2KickMeanFieldReference
   !    (released by the restart, built from the kicked state at the call)
   call RestartFromGroundState
   call Method_Mb_OrbBased_FillRdm1(rdm1, Method_state)
-  call Method_Mb_OrbBased_BuildFieldFreeMeanField(Orbs_orbs, rdm1, 0.0_R64)
+  call FieldFree_BuildMeanField(Orbs_orbs, rdm1, 0.0_R64)
   call KickAllOrbitals(kappa, [0.0_R64, 0.0_R64, 1.0_R64])
   call Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin(dState, Method_state, 0.0_R64)
   derivativeExplicit = OrbitalNorm(dState) / derivativePlain
@@ -301,7 +303,7 @@ contains
   !> the next propagation, i.e. after the kick of RunKick).
   subroutine RestartFromGroundState
     Method_state(:) = groundState(:)
-    call Method_Mb_OrbBased_SetupFieldFree
+    call FieldFree_Setup
   end subroutine
 
   !> Norm of the orbital part of a state vector in the grid metric.

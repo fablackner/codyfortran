@@ -31,11 +31,12 @@
 !>    from `ConfigList` descriptors. Supports arbitrary body-type combinations
 !>    (fermions, bosons, mixed statistics).
 !>
-!> 2. **Hubbard** (`coeffs.hubbard`): Bit-encoded Fock states optimized for
-!>    lattice models with on-site interactions. Three spin-symmetry variants:
+!> 2. **Hubbard** (`coeffs.hubbard`): Bit-encoded Fock states of two fermion
+!>    species (spin up and down) with an on-site interaction (M_Coeffs_Hubbard).
+!>    Three spin-symmetry variants:
 !>    - `noSpinSym`:    Full \( n_{up} \times n_{dn} \) product space
-!>    - `plusSpinSym`:  Symmetric sector, \( n(n+1)/2 \) states (triplet-like)
-!>    - `minusSpinSym`: Antisymmetric sector, \( n(n-1)/2 \) states (singlet-like)
+!>    - `plusSpinSym`:  Sector symmetric under spin exchange, \( n(n+1)/2 \) states
+!>    - `minusSpinSym`: Sector antisymmetric under spin exchange, \( n(n-1)/2 \) states
 !>
 !> # Key Operations
 !>
@@ -153,8 +154,9 @@ module M_Coeffs
       !> in-place accumulator for H1|coeffs>. If present, the result is
       !> added to `dCoeffs_` (AXPY-style). Caller must pre-initialize the array.
       complex(R64), intent(inout), contiguous, target, optional :: dCoeffs_(:)
-      !> explicit one-body Hamiltonian matrix in the active basis.
-      !> If absent, the representation provides H1 implicitly.
+      !> explicit one-body Hamiltonian matrix in the active basis. coeffs.generic
+      !> requires it with dCoeffs_ (stops otherwise); a model backend may build
+      !> H1 from its own model.
       complex(R64), intent(in), contiguous, optional :: h1_(:, :)
     end subroutine
   end interface
@@ -178,8 +180,9 @@ module M_Coeffs
       !> in-place accumulator for H2|coeffs>. If present, the result is
       !> added to `dCoeffs_` (AXPY-style). Caller must pre-initialize the array.
       complex(R64), intent(inout), contiguous, target, optional :: dCoeffs_(:)
-      !> explicit two-body Hamiltonian tensor in the active basis.
-      !> If absent, the representation provides H2 implicitly.
+      !> explicit two-body Hamiltonian tensor in the active basis. coeffs.generic
+      !> requires it with dCoeffs_ (stops otherwise); a model backend may build
+      !> H2 from its own model.
       complex(R64), intent(in), contiguous, optional :: h2_(:, :, :, :)
     end subroutine
   end interface

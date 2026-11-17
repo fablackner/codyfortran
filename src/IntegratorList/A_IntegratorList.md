@@ -37,7 +37,7 @@ M_IntegratorList (interface)
 | `Rk/O2Expl`     | `T_IntegratorList_E_Rk_O2Expl`    | Midpoint (2nd-order explicit)           |
 | `Rk/O2Impl`     | `T_IntegratorList_E_Rk_O2Impl`    | Implicit midpoint (2nd-order implicit)  |
 | `Rk/O4Expl`     | `T_IntegratorList_E_Rk_O4Expl`    | Classical RK4 (4th-order explicit)      |
-| `CrankNicolson` | `T_IntegratorList_E_Cn`           | Crank–Nicolson (A-stable, symplectic)   |
+| `Cn`            | `T_IntegratorList_E_Cn`           | Crank–Nicolson (A-stable, symplectic)   |
 | `Expokit`       | `T_IntegratorList_E_Expokit`      | Krylov subspace exp(Δt·A)v              |
 | `GslOdeiv2`     | `T_IntegratorList_E_GslOdeiv2`    | GSL adaptive steppers (rkf45, rk8pd, …) |
 | `Sil`           | `T_IntegratorList_E_Sil`          | Short Iterative Lanczos                 |
@@ -120,25 +120,29 @@ Advances `state` from `t0` to `t1` **in-place**.
 
 ```json
 {
-  "integratorList": [
-    { "rk": { "o4Expl": {} } }
-  ]
+  "integratorList": {
+    "rk1": { "o4Expl": { } }
+  }
 }
 ```
+
+`integratorList` is an object whose elements are the integrators in the order
+of the TimeDerivative inputs. The element name selects the backend: it must
+contain `rk`, `expokit`, `gslOdeiv2`, `sil` or `cn` (tested in this order),
+e.g. `rk1`, `sil1`, `rk2`. The RK element needs one scheme child: `o1Expl`,
+`o2Expl`, `o4Expl` or `o2Impl`.
 
 ### Expokit Krylov exponential
 
 ```json
 {
-  "integratorList": [
-    {
-      "expokit": {
-        "krylov_dim": 30,
-        "tolerance": 1.0e-7,
-        "max_steps": 1000
-      }
+  "integratorList": {
+    "expokit1": {
+      "krylovDim": 30,
+      "tolerance": 1.0e-7,
+      "maxSteps": 1000
     }
-  ]
+  }
 }
 ```
 
@@ -146,9 +150,9 @@ Advances `state` from `t0` to `t1` **in-place**.
 
 ```json
 {
-  "integratorList": [
-    { "gslOdeiv2": { "stepperType": "rkf45" } }
-  ]
+  "integratorList": {
+    "gslOdeiv21": { "stepperType": "rkf45" }
+  }
 }
 ```
 
@@ -158,15 +162,13 @@ Supported GSL stepper types: `rk4`, `rkf45`, `rkck`, `rk8pd`.
 
 ```json
 {
-  "integratorList": [
-    {
-      "sil": {
-        "krylovDim": 32,
-        "tolerance": 1.0e-10,
-        "maxRestarts": 8
-      }
+  "integratorList": {
+    "sil1": {
+      "krylovDim": 32,
+      "tolerance": 1.0e-10,
+      "maxRestarts": 8
     }
-  ]
+  }
 }
 ```
 

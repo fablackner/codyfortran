@@ -58,6 +58,38 @@ module M_Purification_Singlet_Reduce
     !> `M_Purification` procedure pointer `Purification_PurifyTwoRdmState`.
     module subroutine Purification_Singlet_Reduce_Fabricate
     end subroutine
+
+    !> Trace-free direction of the two-body energy of a singlet as a
+    !> functional of its (up,down) 2-RDM block D_ab: with D_aa = D_ab - P12 D_ab
+    !> the energy is <2 h2_singlet + 6 h2_triplet | D_ab>, so corrections
+    !> orthogonal to h2Tr0 = Tr0(h2_singlet) + 3 Tr0(h2_triplet) of the
+    !> (up,down) block of h2 conserve it. Shared with SingletTr0/Reduce.
+    module subroutine Purification_Singlet_Reduce_FillEnergyDirection(h2Tr0, h2, nOa)
+      !> Output: the direction, (nOa, nOa, nOa, nOa).
+      complex(R64), intent(out), allocatable :: h2Tr0(:, :, :, :)
+      !> Two-body Hamiltonian, the full spin-orbital tensor (2 nOa)^4.
+      complex(R64), intent(in), contiguous :: h2(:, :, :, :)
+      !> Number of spin-up orbitals.
+      integer(I32), intent(in) :: nOa
+    end subroutine
+
+    !> The iterative positivity reduction of a singlet (up,down) 2-RDM block,
+    !> shared with SingletTr0/Reduce. Every step removes the defective parts
+    !> (eigenvalues below threshold) of the singlet and triplet blocks of D,
+    !> then those of Q of the updated D; the corrections are trace-free and,
+    !> with h2Tr0_, orthogonal to the energy direction
+    !> (Purification_Singlet_Reduce_FillEnergyDirection). Stops when the
+    !> smallest eigenvalue reaches threshold or after nSteps steps.
+    module subroutine Purification_Singlet_Reduce_PurifyRdm2ab(rdm2ab, nSteps, threshold, h2Tr0_)
+      !> The (up,down) 2-RDM block, purified in place.
+      complex(R64), intent(inout), contiguous :: rdm2ab(:, :, :, :)
+      !> Largest number of steps.
+      integer(I32), intent(in) :: nSteps
+      !> Eigenvalue threshold of the defect detection.
+      real(R64), intent(in) :: threshold
+      !> Energy direction of energy-conserving corrections.
+      complex(R64), intent(in), contiguous, optional :: h2Tr0_(:, :, :, :)
+    end subroutine
   end interface
 
   !=============================================================================

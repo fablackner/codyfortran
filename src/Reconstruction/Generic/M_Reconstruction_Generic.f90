@@ -10,7 +10,7 @@
 !> RDM tensors have dimensions nOrbs⁴ (2-RDM) and nOrbs⁶ (3-RDM).
 !>
 !> **Available schemes**:
-!> - `genericValdemoro`: Free-cumulant (Valdemoro) approximation with C³=0
+!> - `valdemoro`: Free-cumulant (Valdemoro) approximation with C³=0
 !>
 !> Concrete implementations live in submodules and are attached at runtime by
 !> `Reconstruction_Generic_Fabricate`.

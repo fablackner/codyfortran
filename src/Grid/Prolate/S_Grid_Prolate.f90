@@ -27,7 +27,6 @@ contains
     Grid_Prolate_mmax = Json_Get("grid.prolate.mmax", 0)
     Grid_Prolate_nEta = Json_Get("grid.prolate.nEta", 8)
 
-    Grid_InnerProduct => InnerProduct
     Grid_Prolate_SpatialProduct => SpatialProduct
     Grid_Prolate_GetMComponent => GetMComponent
     Grid_Prolate_SetMComponent => SetMComponent
@@ -96,9 +95,10 @@ contains
     do iEta2 = 1, Grid_Prolate_nEta
       do iEta1 = 1, Grid_Prolate_nEta
         do kEta = 1, Grid_Prolate_nEta
-          Grid_Prolate_etaKinMatrix(iEta1, iEta2, 0) = Grid_Prolate_etaKinMatrix(iEta1, iEta2, 0) + &
-                                                       Grid_Prolate_etaWeights(kEta) * (1.0_R64 - Grid_Prolate_etaPoints(kEta)**2) * &
-                                                       dEta(kEta, iEta1) * dEta(kEta, iEta2)
+          Grid_Prolate_etaKinMatrix(iEta1, iEta2, 0) = &
+            Grid_Prolate_etaKinMatrix(iEta1, iEta2, 0) + &
+            Grid_Prolate_etaWeights(kEta) * (1.0_R64 - Grid_Prolate_etaPoints(kEta)**2) * &
+            dEta(kEta, iEta1) * dEta(kEta, iEta2)
           Grid_Prolate_etaKinMatrix(iEta1, iEta2, 1) = Grid_Prolate_etaKinMatrix(iEta1, iEta2, 1) + &
                                                        Grid_Prolate_etaWeights(kEta) * gOdd(kEta, iEta1) * gOdd(kEta, iEta2)
         end do
@@ -113,7 +113,7 @@ contains
     Grid_Prolate_nSpatial = Grid_Prolate_nXi * Grid_Prolate_nEta
 
     allocate (Grid_Prolate_spatialWeights(Grid_Prolate_nSpatial))
-    allocate (Grid_Prolate_weights(Grid_nPoints))
+    allocate (Grid_weights(Grid_nPoints))
     allocate (Grid_Prolate_xiCoord(Grid_nPoints))
     allocate (Grid_Prolate_etaCoord(Grid_nPoints))
     allocate (Grid_Prolate_mCoord(Grid_nPoints))
@@ -132,7 +132,7 @@ contains
     ! Channels in interleaved order m = 0, -1, +1, -2, +2, ...
     do mChannel = 0, 2 * Grid_Prolate_mmax
       associate (base => mChannel * Grid_Prolate_nSpatial)
-        Grid_Prolate_weights(base + 1:base + Grid_Prolate_nSpatial) = Grid_Prolate_spatialWeights(:)
+        Grid_weights(base + 1:base + Grid_Prolate_nSpatial) = Grid_Prolate_spatialWeights(:)
         Grid_Prolate_mCoord(base + 1:base + Grid_Prolate_nSpatial) = MOfChannel(mChannel)
 
         iGrid = base
@@ -176,18 +176,6 @@ contains
     else
       res = -(channel + 1) / 2
     end if
-
-  end function
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Computes the inner product of two fields
-  pure function InnerProduct(fConjg, f) result(res)
-
-    complex(R64), intent(in), contiguous, dimension(:) :: fConjg
-    complex(R64), intent(in), contiguous, dimension(:) :: f
-    complex(R64) :: res
-
-    res = sum(conjg(fConjg(:)) * f(:) * Grid_Prolate_weights(:))
 
   end function
 

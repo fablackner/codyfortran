@@ -69,7 +69,7 @@ module M_SysInteraction
     !> weightedOrbs = orbs with factor_ = 2 gives the closed-shell density
     !> 2 sum |orbs_l|^2 (groundSolver.scf.stdImpl); weightedOrbs = orbs rhoS,
     !> rhoS a Hermitian spatial 1-RDM, that of a correlated state (frozen
-    !> mean-field reference of Method, exactFieldFreeMeanFieldQ).
+    !> mean-field reference of the exact part, fieldFree.cayley.meanFieldQ).
     module subroutine SysInteraction_FillDirectPotential(pot, orbs, weightedOrbs, time, factor_, bt1_, bt2_)
       !> Output: the potential, in the representation of
       !> SysInteraction_FillInteractionPotential.
@@ -102,7 +102,7 @@ module M_SysInteraction
     !> weightedOrbs = orbs gives the exchange of closed-shell orbitals of
     !> one spin (groundSolver.scf.stdImpl, aceQ); weightedOrbs = orbs R, R a
     !> Hermitian 1-RDM block, that of a correlated state (frozen mean-field
-    !> reference of Method, exactFieldFreeMeanFieldQ).
+    !> reference of the exact part, fieldFree.cayley.meanFieldQ).
     !> Cost: n(n+1)/2 potential solves for n orbitals if
     !> SysInteraction_conjSymmetricQ, else n^2.
     module subroutine SysInteraction_FillExchangeAce(zeta, positiveDefiniteQ, orbs, weightedOrbs, time, bt1_, bt2_)

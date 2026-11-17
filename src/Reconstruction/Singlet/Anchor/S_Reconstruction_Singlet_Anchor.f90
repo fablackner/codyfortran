@@ -109,6 +109,7 @@ contains
     use M_Utils_DataStorage
     use M_Utils_RdmTrace
     use M_Orbs
+    use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), allocatable :: rdm1a(:, :), rdm3aab(:, :, :, :, :, :)
@@ -124,7 +125,7 @@ contains
     call LoadData(anchorRdm2ab, anchorDir//rdm2File, storage_size(anchorRdm2ab))
     call LoadData(anchorDelta3, anchorDir//rdm3File, storage_size(anchorDelta3))
 
-    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, anchorRdm2ab)
+    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, anchorRdm2ab, Method_Mb_nBodies(2))
     call SchemeFillRdm3aab(rdm3aab, rdm1a, anchorRdm2ab)
     refNorm = norm2(abs(anchorDelta3))
     anchorDelta3(:, :, :, :, :, :) = anchorDelta3(:, :, :, :, :, :) - rdm3aab(:, :, :, :, :, :)

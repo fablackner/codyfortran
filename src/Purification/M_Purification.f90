@@ -26,7 +26,7 @@
 !> |---------------------------------|--------------------------------------|-------------------------------------------------|
 !> | `purification.singlet.reduce`   | `M_Purification_Singlet_Reduce`      | Singlet spin-symmetry with iterative reduction  |
 !> | `purification.singletTr0.reduce`| `M_Purification_SingletTr0_Reduce`   | SingletTr0 (trace-free) with iterative reduction|
-!> | `purification.generic.alcoba`   | `M_Purification_Generic_Alcoba`      | Spin-agnostic Alcoba/Valdemoro-style (stub)     |
+!> | `purification.generic.alcoba`   | `M_Purification_Generic_Alcoba`      | Placeholder: stops at fabricate                 |
 !>
 !> @par Algorithm Overview (Reduce Method)
 !> The "reduce" backends implement the following iterative scheme:
@@ -137,8 +137,7 @@ module M_Purification
     !>                            Layout: the full spin-orbital tensor as in
     !>                            Method_Mb_OrbBased_h2 (nOrbsSum^4, spin-up orbitals
     !>                            first, then spin-down); backends extract the blocks
-    !>                            they need (Singlet/Reduce also accepts the (up,down)
-    !>                            block alone).
+    !>                            they need.
     subroutine I_Purification_PurifyTwoRdmState(twoRdmState, h2)
       import :: R64
       complex(R64), intent(inout), contiguous :: twoRdmState(:)

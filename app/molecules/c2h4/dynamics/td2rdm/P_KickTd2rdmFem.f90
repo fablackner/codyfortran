@@ -272,7 +272,7 @@ contains
     call Method_Mb_OrbBased_FillRdm2(rdm2, Method_state)
     call RdmDiagonalize_Rdm1(natOcc, natOrbs, rdm1(1:n, 1:n))
     call RdmTrace_FillRdm2abFromRdm2(rdm2ab, rdm2, n, n)
-    call RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2ab)
+    call RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2ab, Method_Mb_nBodies(1), Method_Mb_nBodies(2))
 
     write (io, '(F10.4, F8.4, F22.12, F18.10, 2ES13.4, *(ES15.7))') t, sw, &
       RdmObservables_Energy(rdm1, h1Full, rdm2, h2Full), real(sum(dMat * transpose(rdm1)), R64), minD, minQ, natOcc

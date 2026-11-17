@@ -1,0 +1,33 @@
+{
+    "grid": {
+        "lattice": {
+            "xSize": 5
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 3, 2 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 5, 5 ],
+                "tdci": { }
+            }
+        }
+    },
+    "configList": {
+        "allActive1": {
+            "fermionic": {
+                "bodyTarget": 1
+            }
+        },
+        "allActive2": {
+            "fermionic": {
+                "bodyTarget": 2
+            }
+        }
+    },
+    "coeffs": {
+        "generic": { }
+    }
+}

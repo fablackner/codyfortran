@@ -35,10 +35,6 @@ module M_Grid_Linear
   !> Maximum x-coordinate of the 1D grid (right boundary of the domain).
   real(R64) :: Grid_Linear_xmax
 
-  !> Quadrature/metric weights for the 1D grid points used in inner products.
-  !> Grid_Linear_weights(i) corresponds to Grid_Linear_xCoord(i).
-  real(R64), allocatable :: Grid_Linear_weights(:)
-
   !> x-coordinates of the grid points ordered as used by the active back-end.
   !> Grid_Linear_xCoord(i) gives the position of point i.
   real(R64), allocatable :: Grid_Linear_xCoord(:)

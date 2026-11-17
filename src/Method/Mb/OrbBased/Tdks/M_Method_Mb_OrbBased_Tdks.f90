@@ -26,11 +26,11 @@
 !> ρ↑, ρ↓ of body types 1 and 2 (one body type: ρ↓ = 0).
 !>
 !> Split-step propagation as MCTDHX: `Method_Mb_OrbBased_TimeDerivativeOrbsLin`
-!> (-i h φ, or only the gauge coupling with `exactFieldFreeQ`) and
+!> (-i h φ, or only the gauge coupling with a `fieldFree` block) and
 !> `Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin` (-i (v_KS - a K) φ);
-!> with `exactFieldFreeQ` the exact part (Ylm: eigen-decomposition with phi
-!> functions; grid.fem: Cayley step) propagates h0 = T + V_ext. Every orbital
-!> derivative is projected below `exactFieldFreeCut` (Ylm; no-op without
+!> with a `fieldFree` block the exact part (M_FieldFree; `eigen` on Ylm grids
+!> with phi functions, `cayley` on grid.fem) propagates h0 = T + V_ext. Every
+!> orbital derivative is projected below `fieldFree.eigen.cut` (no-op without
 !> cut): a GGA split step is stable only if every propagated h0 mode has
 !> E dt < pi (A_Method.md, "Time step with a GGA").
 module M_Method_Mb_OrbBased_Tdks
@@ -60,7 +60,7 @@ module M_Method_Mb_OrbBased_Tdks
     !> Local Kohn-Sham potentials v_KS,s = J + v_xc,s of the stored orbitals
     !> and 1-RDM on the xc points of SysXc, (SysXc_nPoints, nSpin), and the
     !> column s of every body type (spinOfBodyType); the local part of the
-    !> frozen mean-field reference (Method_Mb_OrbBased_BuildFieldFreeMeanField).
+    !> frozen mean-field reference (FieldFree_BuildMeanField).
     module subroutine Method_Mb_OrbBased_Tdks_FillKohnShamPotential(kohnShamPot, spinOfBodyType, orbs, rdm1, time)
       real(R64), intent(out), allocatable :: kohnShamPot(:, :)
       integer(I32), intent(out), allocatable :: spinOfBodyType(:)

@@ -211,7 +211,7 @@ contains
           j = Grid_Fem_Index(jx, jy, jz)
           x = Grid_Fem_axes(1) % points(jx)
           dr = [x, Grid_Fem_axes(2) % points(jy), Grid_Fem_axes(3) % points(jz)] - r0
-          field(j) = Grid_Fem_weights(j) * PI**(-1.5_R64) * exp(-sum(dr**2)) * exp(cmplx(0.0_R64, kappa * x, kind=R64))
+          field(j) = Grid_weights(j) * PI**(-1.5_R64) * exp(-sum(dr**2)) * exp(cmplx(0.0_R64, kappa * x, kind=R64))
         end do
       end do
     end do

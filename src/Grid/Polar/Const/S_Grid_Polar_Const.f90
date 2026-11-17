@@ -15,20 +15,15 @@ contains
     use M_Grid
     use M_Grid_Polar
 
-    call Say_Fabricate("grid.polar.constRadial2d")
+    call Say_Fabricate("grid.polar.const")
 
     !------------------------------------
     ! set values and procedure pointers
     !------------------------------------
 
-    ! Read radial grid parameters from JSON
-    Grid_Polar_nRadial = Json_Get("grid.polar.constRadial2d.nRadial", 100)
-    Grid_Polar_rmin = Json_Get("grid.polar.constRadial2d.rmin", 0.0_R64)
-    Grid_Polar_rmax = Json_Get("grid.polar.constRadial2d.rmax", 20.0_R64)
-
-    ! For a standard polar grid, we just need the number of phi points
-    ! No need for mmax parameter
-    Grid_Polar_nPhi = Json_Get("grid.polar.constRadial2d.nPhi", 21)
+    ! Point counts; the radial range (rmin, rmax) is read by Grid_Polar_Fabricate
+    Grid_Polar_nRadial = Json_Get("grid.polar.const.nRadial", 100)
+    Grid_Polar_nPhi = Json_Get("grid.polar.const.nPhi", 21)
 
     ! Set total grid size - product of radial points and phi points
     Grid_nPoints = Grid_Polar_nRadial * Grid_Polar_nPhi
@@ -58,7 +53,7 @@ contains
     ! Allocate arrays for the grid
     allocate (Grid_Polar_xCoord(Grid_nPoints))  ! 2D coordinates
     allocate (Grid_Polar_yCoord(Grid_nPoints))  ! 2D coordinates
-    allocate (Grid_Polar_weights(Grid_nPoints))      ! Integration weights
+    allocate (Grid_weights(Grid_nPoints))      ! Integration weights
     allocate (Grid_Polar_rCoord(Grid_nPoints))  ! Polar coordinates (r, phi)
     allocate (Grid_Polar_phiCoord(Grid_nPoints))  ! Polar coordinates (r, phi)
 
@@ -108,7 +103,7 @@ contains
         Grid_Polar_phiCoord(iGrid) = phi        ! phi
 
         ! Set integration weight as product of radial and phi weights
-        Grid_Polar_weights(iGrid) = Grid_Polar_radialWeights(iRad) * Grid_Polar_phiWeights(iPhi)
+        Grid_weights(iGrid) = Grid_Polar_radialWeights(iRad) * Grid_Polar_phiWeights(iPhi)
       end do
     end do
 

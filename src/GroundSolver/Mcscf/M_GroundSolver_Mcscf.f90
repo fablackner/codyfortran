@@ -74,6 +74,47 @@ module M_GroundSolver_Mcscf
     !> @post `GroundSolver_Mcscf_HamiltonianAction` is bound
     module subroutine GroundSolver_Mcscf_Fabricate
     end subroutine
+
+    !> CI step of the Fock backends (stdImpl, ylmOpt): diagonalizes the CI
+    !> Hamiltonian (DiagonalizerList(1)), mixes the phase-aligned ground
+    !> eigenvector c0 into the coefficients, coeffs <- (1 - alphaCi) coeffs +
+    !> alphaCi e^(i arg<c0|coeffs>) c0, projects on the declared total-M sector
+    !> (Coeffs_ProjectOnSector, a no-op without one) and normalizes.
+    module subroutine GroundSolver_Mcscf_CiStep(coeffs, alphaCi, time)
+      !> CI coefficients of the state, updated in place.
+      complex(R64), intent(inout), contiguous :: coeffs(:)
+      !> Mixing factor of the CI eigenvector.
+      real(R64), intent(in) :: alphaCi
+      !> Time of the Hamiltonian.
+      real(R64), intent(in) :: time
+    end subroutine
+
+    !> The interaction source of the correlated density of a 1-RDM,
+    !> weightedSrc = sum_pq w_pq src(phi_p, phi_q) over the stored orbitals,
+    !> w = rdm1 (restricted storage: the sum of the two spin blocks of a pair).
+    module subroutine GroundSolver_Mcscf_FillCorrelatedSource(weightedSrc, rdm1, orbs)
+      !> Output: the source, in the representation of SysInteraction.
+      complex(R64), intent(out), allocatable :: weightedSrc(:)
+      !> 1-RDM (nOrbsSum x nOrbsSum).
+      complex(R64), intent(in), contiguous :: rdm1(:, :)
+      !> Stored orbitals (nPoints x nOrbsInState).
+      complex(R64), intent(in), contiguous :: orbs(:, :)
+    end subroutine
+
+    !> dOrb -= K orb with the exchange operator of the spin-up block rdm1Up of
+    !> the 1-RDM, K orb = sum_q (sum_p rdm1Up(p, q) W(phi_p, orb)) phi_q, phi
+    !> the stored spin-up orbitals (Orbs_orbs; the trial vector carries no
+    !> spin index). Reuses its work arrays from call to call (not reentrant).
+    module subroutine GroundSolver_Mcscf_SubtractExchange(dOrb, orb, rdm1Up, time)
+      !> In/out: accumulator on the full grid.
+      complex(R64), intent(inout), contiguous :: dOrb(:)
+      !> Trial orbital on the full grid.
+      complex(R64), intent(in), contiguous :: orb(:)
+      !> Spin-up block of the 1-RDM (nUp x nUp).
+      complex(R64), intent(in), contiguous :: rdm1Up(:, :)
+      !> Time of the interaction.
+      real(R64), intent(in) :: time
+    end subroutine
   end interface
 
   !=============================================================================
@@ -83,7 +124,7 @@ module M_GroundSolver_Mcscf
   !> @brief Pointer to the CI Hamiltonian action (matrix-vector product).
   !>
   !> This callback computes Ĥ·c for the CI diagonalizer (DiagonalizerList(1)).
-  procedure(I_GroundSolver_Mcscf_HamiltonianAction), pointer :: GroundSolver_Mcscf_HamiltonianAction
+  procedure(I_GroundSolver_Mcscf_HamiltonianAction), pointer :: GroundSolver_Mcscf_HamiltonianAction => null()
   abstract interface
     !> @brief Apply the CI Hamiltonian to a coefficient vector.
     !>
@@ -110,7 +151,7 @@ module M_GroundSolver_Mcscf
   !> @brief Pointer to the RDM-weighted Fock operator action (matrix-vector product).
   !>
   !> This callback computes F̂·φ for the orbital diagonalizer (DiagonalizerList(2)).
-  procedure(I_GroundSolver_Mcscf_FockAction), pointer :: GroundSolver_Mcscf_FockAction
+  procedure(I_GroundSolver_Mcscf_FockAction), pointer :: GroundSolver_Mcscf_FockAction => null()
   abstract interface
     !> @brief Apply the RDM-weighted Fock operator to an orbital.
     !>

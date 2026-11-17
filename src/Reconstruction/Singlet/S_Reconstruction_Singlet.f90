@@ -25,14 +25,14 @@ contains
     call Say_Fabricate("reconstruction.singlet")
 
     Reconstruction_Singlet_FillRdm3aab => null()
-    if (Json_GetExistence("reconstruction.singlet.singletNy")) then
-      scheme = "reconstruction.singlet.singletNy"
+    if (Json_GetExistence("reconstruction.singlet.ny")) then
+      scheme = "reconstruction.singlet.ny"
       call Reconstruction_Singlet_Ny_Fabricate
     else if (Json_GetExistence("reconstruction.singlet.valdemoro")) then
       scheme = "reconstruction.singlet.valdemoro"
       call Reconstruction_Singlet_Valdemoro_Fabricate
     else
-      error stop "reconstruction.singlet is missing one of: singletNy, valdemoro"
+      error stop "reconstruction.singlet is missing one of: ny, valdemoro"
     end if
     if (.not. associated(Reconstruction_Singlet_FillRdm3aab)) error stop "reconstruction.singlet: the scheme binds no closure"
     Reconstruction_Singlet_ccQ = Json_Get(scheme//".ccQ", .false.)
@@ -72,13 +72,14 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Reconstruction_Singlet_ReconstructRdm3aab(rdm3aab, rdm2ab)
     use M_Utils_RdmTrace
+    use M_Method_Mb
 
     complex(R64), intent(out), allocatable :: rdm3aab(:, :, :, :, :, :)
     complex(R64), intent(in), contiguous   :: rdm2ab(:, :, :, :)
 
     complex(R64), allocatable :: rdm1a(:, :)
 
-    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab)
+    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab, Method_Mb_nBodies(2))
     call Reconstruction_Singlet_FillRdm3aab(rdm3aab, rdm1a, rdm2ab)
     if (Reconstruction_Singlet_ccQ) call EnforceContractions(rdm3aab, rdm2ab)
 

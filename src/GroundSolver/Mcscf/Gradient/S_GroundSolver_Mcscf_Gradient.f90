@@ -29,6 +29,7 @@ contains
       error stop "groundSolver.mcscf.gradient requires method.mb.orbBased.mctdhx (packed CI ⊕ orbitals state)"
 
     GroundSolver_Approach => Approach
+    GroundSolver_implementsDeclaredMQ = .true.
 
   end subroutine
 

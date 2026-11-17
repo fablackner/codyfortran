@@ -33,10 +33,9 @@
 !>     }
 !>   }
 !>
-!> The excitation â†_{creates} â_{destroys} is applied to both body types.
-!>
-!> @note For single-body-type systems, both bodyType1 and bodyType2 should
-!>       be set to the same value (typically 1).
+!> The excitation â†_{creates} â_{destroys} is applied to bodyType1 and,
+!> if different, to bodyType2 (default: body type 2, or 1 for a single body
+!> type), and the result is normalized.
 submodule(M_CoeffsInit_Excited) S_CoeffsInit_Excited
 
   implicit none
@@ -54,7 +53,7 @@ submodule(M_CoeffsInit_Excited) S_CoeffsInit_Excited
   integer(I32) :: bodyType1 = 1
 
   !> Second body type index (e.g., spin-down electrons, species B).
-  !> Default: 2
+  !> Default: 2 (1 for a single body type)
   integer(I32) :: bodyType2 = 2
 
 contains
@@ -66,10 +65,12 @@ contains
   !>   - coeffsInit.excited.creates   → creation operator targets
   !>   - coeffsInit.excited.destroys  → annihilation operator sources
   !>   - coeffsInit.excited.bodyType1 → first body type (default 1)
-  !>   - coeffsInit.excited.bodyType2 → second body type (default 2)
+  !>   - coeffsInit.excited.bodyType2 → second body type (default 2, or 1
+  !>     for a single body type)
   module subroutine CoeffsInit_Excited_Fabricate
     use M_Utils_Json
     use M_Utils_Say
+    use M_Method_Mb
     use M_CoeffsInit
 
     call Say_Fabricate("coeffsInit.excited")
@@ -81,7 +82,9 @@ contains
     creates = Json_Get("coeffsInit.excited.creates", [1])
     destroys = Json_Get("coeffsInit.excited.destroys", [1])
     bodyType1 = Json_Get("coeffsInit.excited.bodyType1", 1)
-    bodyType2 = Json_Get("coeffsInit.excited.bodyType2", 2)
+    bodyType2 = Json_Get("coeffsInit.excited.bodyType2", min(2, Method_Mb_nBodyTypes))
+    if (bodyType1 < 1 .or. bodyType1 > Method_Mb_nBodyTypes .or. bodyType2 < 1 .or. bodyType2 > Method_Mb_nBodyTypes) &
+      error stop "coeffsInit.excited: bodyType1 and bodyType2 must be body types of method.mb"
 
     CoeffsInit_Initialize => Initialize
 
@@ -97,7 +100,9 @@ contains
   !> Algorithm:
   !>   1. Initialize to reference state: c(1) = 1, c(i>1) = 0
   !>   2. Apply â†_{creates} â_{destroys} for bodyType1
-  !>   3. Apply â†_{creates} â_{destroys} for bodyType2
+  !>   3. Apply â†_{creates} â_{destroys} for bodyType2 if it differs
+  !>   4. Normalize (bosonic ladder factors); stop if the excitation
+  !>      annihilated the reference configuration
   !>
   !> The `Coeffs_ApplyExcitation` routine handles the Fock-space algebra,
   !> including fermionic sign factors and configuration lookup.
@@ -112,9 +117,13 @@ contains
     coeffs(:) = 0.0_R64
     coeffs(1) = 1.0_R64
 
-    ! Apply excitation operators for both body types
+    ! Apply excitation operators for both body types (once for one)
     call Coeffs_ApplyExcitation(coeffs, creates, destroys, bodyType1)
-    call Coeffs_ApplyExcitation(coeffs, creates, destroys, bodyType2)
+    if (bodyType2 .ne. bodyType1) call Coeffs_ApplyExcitation(coeffs, creates, destroys, bodyType2)
+
+    if (.not. (sum(abs(coeffs)**2) > 0.0_R64)) &
+      error stop "coeffsInit.excited: the excitation annihilates the reference configuration (zero CI vector)"
+    call Coeffs_Normalize(coeffs)
 
   end subroutine
 

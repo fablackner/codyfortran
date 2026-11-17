@@ -22,7 +22,6 @@
 !> in M_CoeffsInit to the unary implementation. No setup phase is required.
 module M_CoeffsInit_Unary
   use M_Utils_Types
-  use M_Utils_NoOpProcedures
 
   implicit none
 

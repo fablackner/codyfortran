@@ -1,11 +1,12 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ! Helpers shared by the Ne MCTDHF laser tests T_Ne3d_07 .. T_Ne3d_16
-! (included after `contains`).
+! (included after `contains`; every procedure here is used by each of them).
+! The checks of the propagated state that only some of them use are
+! Ne3dMetricNorm.inc and Ne3dOtherMEntries.inc.
 !
 ! - SetupMctdhxLaser:           fabricate and set up the run of a JSON file
 ! - ConvergedGroundStateEnergy: MCSCF ground state (Ylm-optimized orbitals)
 ! - BeforeEndTimeQ, PropagateOutputStep: real-time propagation loop
-! - MetricNorm, OtherMEntries:  checks of the propagated state
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -29,6 +30,7 @@ subroutine SetupMctdhxLaser(jsonFileName)
   use M_ConfigList
   use M_Coeffs
   use M_CoeffsInit
+  use M_FieldFree
   use M_Method
   use M_Method_Mb_OrbBased
   use M_DiagonalizerList
@@ -43,7 +45,6 @@ subroutine SetupMctdhxLaser(jsonFileName)
   type(T_DiagonalizerList_FabricateInput) :: DiagonalizerListInput(3)
   type(T_IntegratorList_FabricateInput) :: IntegratorListInput(2)
   real(R64), allocatable :: metricWeights(:)
-  integer(I32) :: iOrb
   logical :: gaugeQ
 
   call Json_LoadJsonFile(manualFileName_=jsonFileName, relativeToProjectDirQ_=.true.)
@@ -54,6 +55,7 @@ subroutine SetupMctdhxLaser(jsonFileName)
   call SysPotential_Fabricate
   if (gaugeQ) call SysGauge_Fabricate
   call SysInteraction_Fabricate
+  call FieldFree_Fabricate
   call Method_Fabricate
   call Orbs_Fabricate
   call OrbsInit_Fabricate
@@ -84,16 +86,12 @@ subroutine SetupMctdhxLaser(jsonFileName)
   call ConfigList_Setup
   call Coeffs_Setup
   call CoeffsInit_Setup
+  call FieldFree_Setup
   call Method_Setup
   call GroundSolver_Setup
   call DiagonalizerList_Setup
 
-  allocate (metricWeights(Coeffs_nCoeffs + Grid_nPoints * Orbs_nOrbsInState))
-  metricWeights(1:Coeffs_nCoeffs) = 1.0_R64
-  do iOrb = 1, Orbs_nOrbsInState
-    metricWeights(Coeffs_nCoeffs + (iOrb - 1) * Grid_nPoints + 1: &
-                  Coeffs_nCoeffs + iOrb * Grid_nPoints) = Grid_Ylm_weights(:)
-  end do
+  call Method_Mb_OrbBased_FillStateWeights(metricWeights)
   integratorList(1) % e % metricWeights = metricWeights
 
   call IntegratorList_Setup
@@ -162,7 +160,7 @@ end function
 !> to dipoleFile and prints energy and dipole.
 subroutine PropagateOutputStep(time, dipole, dipoleFile)
   use M_Utils_Json
-  use M_Utils_PrinterObservableYlm
+  use M_Printer_Observable_Ylm
   use M_Orbs
   use M_Method
   use M_Method_Mb_OrbBased
@@ -186,42 +184,11 @@ subroutine PropagateOutputStep(time, dipole, dipoleFile)
 
   energy = Method_GetEnergy(time)
   call Method_Mb_OrbBased_FillRdm1(rdm1, Method_state)
-  call PrinterObservableYlm_DumpDipole(rdm1, Orbs_orbs, dipoleFile, .false., time, dipole_=dipole)
+  call Printer_Observable_Ylm_DumpDipole(rdm1, Orbs_orbs, dipoleFile, .false., time, dipole_=dipole)
 
   write (*, '(A,ES10.3E1,A,E20.10,A,E20.10)') ' time = ', time, '    energy = ', energy, '    <z> = ', dipole
 
 end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Norm of a packed state in the metric of integrator 1.
-function MetricNorm(state) result(res)
-  use M_IntegratorList
-
-  complex(R64), intent(in), contiguous :: state(:)
-  real(R64) :: res
-
-  res = sqrt(sum(integratorList(1) % e % metricWeights(:) * abs(state(:))**2))
-
-end function
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Number of nonzero entries of the orbitals in channels other than their
-!> declared m.
-function OtherMEntries(orbs) result(res)
-  use M_Grid_Ylm
-  use M_Method_Mb_OrbBased
-
-  complex(R64), intent(in), contiguous :: orbs(:, :)
-  integer(I32) :: res
-
-  integer(I32) :: i
-
-  res = 0
-  do i = 1, size(orbs, 2)
-    res = res + count(Grid_Ylm_mCoord .ne. Method_Mb_OrbBased_mOfOrb(i) .and. abs(orbs(:, i)) > 0.0_R64)
-  end do
-
-end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 subroutine ApplyMatOnVecL0(dOrbLm, orbLm, time)

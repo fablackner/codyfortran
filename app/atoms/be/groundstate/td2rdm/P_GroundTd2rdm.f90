@@ -39,7 +39,9 @@ program P_GroundTd2rdm
   use M_OrbsInit
   use M_TwoRdm
   use M_TwoRdmInit
+  use M_FieldFree
   use M_Method
+  use M_Method_Mb
   use M_Method_Mb_OrbBased
   use M_IntegratorList
   use M_Propagator
@@ -65,6 +67,7 @@ program P_GroundTd2rdm
   call SysKinetic_Fabricate
   call SysPotential_Fabricate
   call SysInteraction_Fabricate
+  call FieldFree_Fabricate
   call Method_Fabricate
   call TwoRdm_Fabricate
   call TwoRdmInit_Fabricate
@@ -91,6 +94,7 @@ program P_GroundTd2rdm
   call TwoRdmInit_Setup
   call Orbs_Setup
   call OrbsInit_Setup
+  call FieldFree_Setup
   call Method_Setup
   call IntegratorList_Setup
   call Propagator_Setup
@@ -98,7 +102,7 @@ program P_GroundTd2rdm
   if (purifyQ) call Purification_Setup
 
   ! The one-body operator is self-adjoint only in the FEDVR-weighted metric
-  integratorList(1) % e % metricWeights = MetricWeights(TwoRdm_nElements)
+  call Method_Mb_OrbBased_FillStateWeights(integratorList(1) % e % metricWeights)
 
   !==========================================
   call Say_Section("field-free propagation and time average")
@@ -214,7 +218,7 @@ contains
     call LapackLib_DiagonalizeGeneric(evals, evecs, mat, .false.)
     minD = minval(evals)
 
-    call RdmHole_FillQrdm2(qrdm2, rdm2)
+    call RdmHole_FillQrdm2(qrdm2, rdm2, Method_Mb_nBodiesSum)
     mat = reshape(qrdm2, [n * n, n * n])
     mat = 0.5_R64 * (mat + conjg(transpose(mat)))
     call LapackLib_DiagonalizeGeneric(evals, evecs, mat, .false.)
@@ -240,26 +244,5 @@ contains
     write (*, '(A,F9.3,A,F22.14)') " t =", t, "  energy =", energy
 
   end subroutine
-
-  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> FEDVR metric weights of a packed state [many-body part (nHead entries,
-  !> unit weights) | orbitals (Grid_Ylm_weights each)] for the SIL integrator.
-  function MetricWeights(nHead) result(res)
-    use M_Grid
-    use M_Grid_Ylm
-    use M_Orbs
-
-    integer(I32), intent(in) :: nHead
-    real(R64), allocatable :: res(:)
-
-    integer(I32) :: iOrb
-
-    allocate (res(nHead + Grid_nPoints * Orbs_nOrbsInState))
-    res(1:nHead) = 1.0_R64
-    do iOrb = 1, Orbs_nOrbsInState
-      res(nHead + (iOrb - 1) * Grid_nPoints + 1:nHead + iOrb * Grid_nPoints) = Grid_Ylm_weights(:)
-    end do
-
-  end function
 
 end program

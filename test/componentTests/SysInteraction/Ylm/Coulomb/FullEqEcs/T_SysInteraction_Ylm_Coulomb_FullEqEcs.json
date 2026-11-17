@@ -2,7 +2,6 @@
     "grid": {
         "ylm": {
             "lmax": 1,
-            "rmin": 0.0,
             "rmax": 10.0,
             "fedvrEcs": {
                 "nElements": 50,
@@ -17,7 +16,6 @@
         "ylm": {
             "coulomb": {
                 "strength": 1.0,
-                "softening": 0.0,
                 "fullEqEcs": { }
             }
         }

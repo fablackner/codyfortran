@@ -1,10 +1,10 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-! Helpers shared by the real-time tests T_Fem_05 .. T_Fem_07, T_Fem_09 and
-! T_Fem_10 (included after `contains`; every procedure here is used by each of
-! them).
+! Helpers shared by the real-time tests T_Fem_05 .. T_Fem_07, T_Fem_09,
+! T_Fem_10 and T_FemDft_03 (included after `contains`; every procedure here is
+! used by each of them).
 !
-! - SetupFemDynamics:  fabricate and set up the run of a JSON file (restricted
-!                      MCTDHX with the orbital of T_Fem_03 loaded, split-step
+! - SetupFemDynamics:  fabricate and set up the run of a JSON file (MCTDHX or
+!                      TDKS with the orbitals of its orbsInit, split-step
 !                      propagator, exact field-free part by the Cayley step)
 ! - FemObservables:    energy, particle number and dipole of Method_state
 ! - ElapsedSeconds:    wall-clock time
@@ -31,6 +31,7 @@ subroutine SetupFemDynamics(jsonFileName)
   use M_ConfigList
   use M_Coeffs
   use M_CoeffsInit
+  use M_FieldFree
   use M_Method
   use M_Method_Mb_OrbBased
   use M_IntegratorList
@@ -51,6 +52,7 @@ subroutine SetupFemDynamics(jsonFileName)
   if (gaugeQ) call SysGauge_Fabricate
   call SysInteraction_Fabricate
   if (kohnShamQ) call SysXc_Fabricate
+  call FieldFree_Fabricate
   call Method_Fabricate
   call Orbs_Fabricate
   call OrbsInit_Fabricate
@@ -73,6 +75,7 @@ subroutine SetupFemDynamics(jsonFileName)
   call ConfigList_Setup
   call Coeffs_Setup
   call CoeffsInit_Setup
+  call FieldFree_Setup
   call Method_Setup
   call IntegratorList_Setup
   call Propagator_Setup
@@ -86,7 +89,7 @@ end subroutine
 !> particle number N = Tr(rho S) and dipole (<x>, <y>, <z>) of Method_state;
 !> the dipole is appended to dipoleFile ("time <x> <y> <z>") if it is not empty.
 subroutine FemObservables(energy, norm, dipole, time, dipoleFile)
-  use M_Utils_PrinterObservableFem
+  use M_Printer_Observable_Fem
   use M_Orbs
   use M_Method
   use M_Method_Mb_OrbBased
@@ -101,8 +104,8 @@ subroutine FemObservables(energy, norm, dipole, time, dipoleFile)
 
   energy = Method_GetEnergy(time)
   call Method_Mb_OrbBased_FillRdm1(rdm1, Method_state)
-  call PrinterObservableFem_DumpDipole(rdm1, Orbs_orbs, dipoleFile, .false., time, dipole_=dipole)
-  call PrinterObservableFem_DumpNorm(rdm1, Orbs_orbs, "", .false., time, norm_=norm)
+  call Printer_Observable_Fem_DumpDipole(rdm1, Orbs_orbs, dipoleFile, .false., time, dipole_=dipole)
+  call Printer_Observable_Fem_DumpNorm(rdm1, Orbs_orbs, "", .false., time, norm_=norm)
 
 end subroutine
 

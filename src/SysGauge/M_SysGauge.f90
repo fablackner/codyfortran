@@ -26,8 +26,8 @@
 !> potentials of SysPotential (`sysPotential.ylm.coulombLaser`); on Fem and
 !> Prolate grids the length gauge is the SysGauge model of M_SysGauge_Length
 !> (`sysGauge.fem.length`, `sysGauge.prolate.length`), so that
-!> SysPotential stays static and the exact field-free part
-!> (method.mb.orbBased.exactFieldFreeQ) can treat h0 = T + V_static.
+!> SysPotential stays static and the exact field-free part (a fieldFree
+!> block, M_FieldFree) can treat h0 = T + V_static.
 module M_SysGauge
   use M_Utils_Types
   use M_Utils_NoOpProcedures

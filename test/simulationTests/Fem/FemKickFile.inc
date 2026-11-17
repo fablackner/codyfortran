@@ -7,7 +7,7 @@
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Header and dipole lines of a kick file of RunKick (FemKick.inc): the
 !> header line and its run parameters, and the times and <z> (columns 1 and 4
-!> of the lines of PrinterObservableFem_DumpDipole), indexed from 0. Stops if
+!> of the lines of Printer_Observable_Fem_DumpDipole), indexed from 0. Stops if
 !> the file or its header is missing (stale or foreign file).
 subroutine ReadKickFile(header, kappaFile, dtFile, endTimeFile, energyGroundFile, nStepsFile, nPointsFile, &
                         fileTimes, fileDipoleZ, fileName)

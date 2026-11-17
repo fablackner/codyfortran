@@ -50,6 +50,7 @@ contains
 !> @post Each element's `path` and `Fabricate()` have been called
   module subroutine ConfigList_Fabricate
     use M_Utils_Json
+    use M_Method_Mb
     use M_Utils_Say
     use M_ConfigList_AllActive, only: ConfigList_AllActive_Allocate
 
@@ -69,6 +70,7 @@ contains
     !------------------------------------
 
     nListElements = Json_GetNumChildren("configList")
+    if (allocated(configList)) deallocate (configList)
     allocate (configList(nListElements))
 
     do i = 1, Json_GetNumChildren("configList")
@@ -87,7 +89,13 @@ contains
       configList(i) % e % path = "configList."//childName
       call configList(i) % e % Fabricate()
 
+      ! The consumers read configList(bt) as the list of body type bt
+      if (configList(i) % e % bodyTarget .ne. i) &
+        error stop "configList: the elements must be ordered by bodyTarget (element i for body type i)"
+
     end do
+
+    if (nListElements .ne. Method_Mb_nBodyTypes) error stop "configList needs one element per body type"
 
   end subroutine
 

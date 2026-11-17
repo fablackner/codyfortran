@@ -38,7 +38,8 @@ contains
     pi = acos(-1.0_R64)
     Grid_Ylm_FedvrEcs_theta = thetaDeg * (pi / 180.0_R64)
 
-    ! Calculate total grid points from FedvrEcs parameters (without rmin and rmax)
+    ! Radial points: all Lobatto points of the elements except r = 0; the
+    ! point at rmax is kept
     Grid_Ylm_nRadial = Grid_Ylm_FedvrEcs_nElements * (Grid_Ylm_FedvrEcs_nLocals - 1)
 
     ! Update total grid size to include the radial component

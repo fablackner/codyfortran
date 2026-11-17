@@ -94,7 +94,7 @@
     },
     "reconstruction": {
         "singlet": {
-            "singletNy": {
+            "ny": {
                 "ccQ": true
             },
             "triples": {

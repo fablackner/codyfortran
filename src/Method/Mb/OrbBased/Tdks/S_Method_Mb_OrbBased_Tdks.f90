@@ -43,6 +43,7 @@ contains
     use M_Method
     use M_Method_Mb
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     call Say_Fabricate("method.mb.orbBased.tdks")
 
@@ -55,7 +56,9 @@ contains
     ! set values and procedure pointers
     !------------------------------------
 
-    Method_Mb_OrbBased_kohnShamQ = .true.
+    Method_kohnShamQ = .true.
+    Method_Mb_OrbBased_implementsMeanFieldReferenceQ = .true.
+    Method_Mb_OrbBased_implementsSpectralCutQ = .true.
     Method_Setup => Setup
     Method_GetEnergy => GetEnergy
     Method_Mb_OrbBased_FillRdm1 => FillRdm1
@@ -64,10 +67,10 @@ contains
     Method_Mb_OrbBased_TimeDerivativeOrbsLin => TimeDerivativeOrbsLin
     Method_Mb_OrbBased_TimeDerivativeCoeffsPlusOrbsNonLin => TimeDerivativeOrbsNonLin
     ! The exact part propagates h0 on the orbitals; phi functions only for
-    ! the eigen-decomposed exact part (Ylm grids)
-    if (Method_Mb_OrbBased_exactFieldFreeQ) then
+    ! the eigen-decomposed exact part (fieldFree.eigen)
+    if (associated(FieldFree_Propagate)) then
       Method_PropagateExactPart => PropagateExactPart
-      if (associated(Method_Mb_OrbBased_ApplyFieldFreePhi)) Method_ApplyExactPartPhi => ApplyExactPartPhi
+      if (associated(FieldFree_ApplyPhi)) Method_ApplyExactPartPhi => ApplyExactPartPhi
     end if
 
   end subroutine
@@ -159,6 +162,7 @@ contains
   subroutine TimeDerivative(dState, state, time)
     use M_Utils_Constants
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     complex(R64), intent(out), contiguous, target :: dState(:)
     complex(R64), intent(in), contiguous, target  :: state(:)
@@ -172,7 +176,7 @@ contains
 
     call Method_Mb_OrbBased_ApplySingleBodyOp(dOrbs, orbs, time)
     call Method_Mb_OrbBased_Tdks_ApplyKohnShamOp(dOrbs, orbs, Method_Mb_OrbBased_rdm1, time)
-    call Method_Mb_OrbBased_ApplySpectralCut(dOrbs)
+    call FieldFree_ProjectBelowCut(dOrbs)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
 
@@ -180,10 +184,11 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Linear split-step part: -i L orbs with L = Method_Mb_OrbBased_ApplyLinOp
-  !> (h, or only the gauge coupling with exactFieldFreeQ).
+  !> (h, or only the gauge coupling with an exact field-free part).
   subroutine TimeDerivativeOrbsLin(dState, state, time)
     use M_Utils_Constants
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     complex(R64), intent(out), contiguous, target :: dState(:)
     complex(R64), intent(in), contiguous, target  :: state(:)
@@ -196,7 +201,7 @@ contains
     call GetOrbs(dOrbs, dState)
 
     call Method_Mb_OrbBased_ApplyLinOp(dOrbs, orbs, time)
-    call Method_Mb_OrbBased_ApplySpectralCut(dOrbs)
+    call FieldFree_ProjectBelowCut(dOrbs)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
 
@@ -205,12 +210,13 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Non-linear split-step part: -i (v_KS - a K) orbs (the mean field of the
   !> instantaneous densities); with the frozen mean-field reference
-  !> (exactFieldFreeMeanFieldQ), whose U = v_KS[rho0] - a K0 the exact part
+  !> (FieldFree_meanFieldQ), whose U = v_KS[rho0] - a K0 the exact part
   !> propagates with h0, -i (v_KS - a K - U) orbs, which vanishes at the
   !> reference state.
   subroutine TimeDerivativeOrbsNonLin(dState, state, time)
     use M_Utils_Constants
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     complex(R64), intent(out), contiguous, target :: dState(:)
     complex(R64), intent(in), contiguous, target  :: state(:)
@@ -225,14 +231,14 @@ contains
 
     call Method_Mb_OrbBased_Tdks_ApplyKohnShamOp(dOrbs, orbs, Method_Mb_OrbBased_rdm1, time)
 
-    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) then
+    if (FieldFree_meanFieldQ) then
       call EnsureFieldFreeMeanField(state, time)
       allocate (uOrbs, mold=orbs)
       uOrbs(:, :) = (0.0_R64, 0.0_R64)
-      call Method_Mb_OrbBased_ApplyFieldFreeMeanField(uOrbs, orbs)
+      call FieldFree_ApplyMeanField(uOrbs, orbs)
       dOrbs(:, :) = dOrbs(:, :) - uOrbs(:, :)
     end if
-    call Method_Mb_OrbBased_ApplySpectralCut(dOrbs)
+    call FieldFree_ProjectBelowCut(dOrbs)
 
     dState(:) = -IU * dState(:) ! out is the time-derivative!
 
@@ -240,30 +246,32 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> Builds the frozen Kohn-Sham reference of the exact part from state (its
-  !> orbitals and the 1-RDM) unless it exists since the last Method_Setup:
+  !> orbitals and the 1-RDM) unless it exists since the last FieldFree_Setup:
   !> at the first exact-part call (or the first nonlinear call if a
   !> propagator starts with that part), unless a program built it before
-  !> (Method_Mb_OrbBased_BuildFieldFreeMeanField, e.g. from the ground state
+  !> (FieldFree_BuildMeanField, e.g. from the ground state
   !> before a kick).
   subroutine EnsureFieldFreeMeanField(state, time)
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     complex(R64), intent(in), contiguous, target :: state(:)
     real(R64), intent(in) :: time
 
     complex(R64), contiguous, pointer :: orbs(:, :)
 
-    if (Method_Mb_OrbBased_FieldFreeMeanFieldBuiltQ()) return
+    if (FieldFree_meanFieldBuiltQ) return
 
     call GetOrbs(orbs, state)
-    call Method_Mb_OrbBased_BuildFieldFreeMeanField(orbs, Method_Mb_OrbBased_rdm1, time)
+    call FieldFree_BuildMeanField(orbs, Method_Mb_OrbBased_rdm1, time)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> Exact field-free propagation of the orbitals (exactFieldFreeQ).
+  !> Exact field-free propagation of the orbitals (FieldFree_Propagate).
   subroutine PropagateExactPart(state, t0, t1, imagTimeQ_)
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     complex(R64), intent(inout), contiguous, target :: state(:)
     real(R64), intent(in) :: t0
@@ -276,10 +284,10 @@ contains
     imagTimeQ = .false.
     if (present(imagTimeQ_)) imagTimeQ = imagTimeQ_
 
-    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ .and. .not. imagTimeQ) call EnsureFieldFreeMeanField(state, t0)
+    if (FieldFree_meanFieldQ .and. .not. imagTimeQ) call EnsureFieldFreeMeanField(state, t0)
 
     call GetOrbs(orbs, state)
-    call Method_Mb_OrbBased_PropagateFieldFree(orbs, t1 - t0, imagTimeQ)
+    call FieldFree_Propagate(orbs, t1 - t0, imagTimeQ)
 
   end subroutine
 
@@ -289,6 +297,7 @@ contains
     use M_Grid
     use M_Orbs
     use M_Method_Mb_OrbBased
+    use M_FieldFree
 
     complex(R64), intent(out), contiguous, target :: res(:)
     complex(R64), intent(in), contiguous, target :: vecs(:, :)
@@ -305,7 +314,7 @@ contains
       orbsList(:, :, m) = orbsM(:, :)
     end do
 
-    call Method_Mb_OrbBased_ApplyFieldFreePhi(orbs, orbsList, dt)
+    call FieldFree_ApplyPhi(orbs, orbsList, dt)
 
   end subroutine
 

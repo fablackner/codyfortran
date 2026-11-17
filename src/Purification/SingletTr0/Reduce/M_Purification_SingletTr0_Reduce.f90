@@ -14,8 +14,9 @@
 !> @f[
 !>   D^2_{\alpha\beta}(pq|rs) = D^{2,\text{Tr0}}_{\alpha\beta} + D^1_\alpha(pr) D^1_\beta(qs)
 !> @f]
-!> This reduces the DOF count but requires the trace constraint to be enforced
-!> via `RdmEnforceTraceM2ab` rather than the full symmetric/antisymmetric projectors.
+!> The purification itself acts on the unpacked (up,down) block with the
+!> kernel of Singlet/Reduce (Purification_Singlet_Reduce_PurifyRdm2ab); its
+!> trace-free corrections leave the 1-RDM segment unchanged.
 !>
 !> @par Configuration Parameters
 !> | JSON Path                                       | Default   | Description                              |

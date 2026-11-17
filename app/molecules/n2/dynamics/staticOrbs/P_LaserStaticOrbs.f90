@@ -53,6 +53,7 @@ program P_LaserStaticOrbs
   use M_Reconstruction
   use M_Purification
   use M_Method
+  use M_Method_Mb
   use M_Method_Mb_OrbBased
   use M_IntegratorList
   use M_Propagator
@@ -234,7 +235,7 @@ contains
 
     n = Orbs_nOrbsInState
     call RdmDiagonalize_Rdm1(natOcc, natOrbs, rdm1(1:n, 1:n))
-    call RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2(1:n, n + 1:, 1:n, n + 1:))
+    call RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2(1:n, n + 1:, 1:n, n + 1:), Method_Mb_nBodies(1), Method_Mb_nBodies(2))
 
     write (io, '(F10.4, ES16.8, F20.12, F24.14, *(ES16.8))') t, SysGauge_Length_FieldAmplitude(t), &
       dipole, energy, natOcc, minD, minQ

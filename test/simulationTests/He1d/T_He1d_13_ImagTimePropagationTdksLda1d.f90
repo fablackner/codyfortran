@@ -4,9 +4,9 @@
 !> soft-Coulomb interaction and beta = 1): imaginary-time TDKS reaches the
 !> Kohn-Sham energy of the SCF of T_He1d_12 (two independent solvers of the
 !> same equations). The imaginary-time fixed point of RK4 with the nonlinear
-!> Kohn-Sham potential carries an O(dtau^2) bias: 2.6e-6 at dtau = 0.01 (this
-!> test), 6.4e-7 at dtau = 0.005; their Richardson extrapolation,
-!> -2.2013755803, equals the SCF energy to 1e-9.
+!> Kohn-Sham potential carries an O(dtau^2) bias: about 6e-5 at dtau = 0.05
+!> (this test), 2.6e-6 at dtau = 0.01 and 6.4e-7 at dtau = 0.005, whose
+!> Richardson extrapolation, -2.2013755803, equals the SCF energy to 1e-9.
 program T_He1d_13_ImagTimePropagationTdksLda1d
   use M_Utils_Types
   use M_Utils_Say

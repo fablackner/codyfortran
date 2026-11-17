@@ -58,7 +58,7 @@ module M_GroundSolver_Scf_YlmOpt
   !>
   !> Used as the matvec callback for per-l diagonalizers. The caller must wrap
   !> this in l-specific callbacks (one per diagonalizer).
-  procedure(I_GroundSolver_Scf_YlmOpt_HartreeFockRadialAction), pointer :: GroundSolver_Scf_YlmOpt_HartreeFockAction
+  procedure(I_GroundSolver_Scf_YlmOpt_HartreeFockRadialAction), pointer :: GroundSolver_Scf_YlmOpt_HartreeFockAction => null()
   abstract interface
     !> @brief Apply the radial Fock operator for angular momentum channel l.
     !>

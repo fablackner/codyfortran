@@ -8,7 +8,7 @@ when a `triples` block exists; the extension wraps the closure
 
 ```json
 "reconstruction": { "singlet": {
-    "singletNy": { "ccQ": true },
+    "ny": { "ccQ": true },
     "triples": { "moellerPlesset": {} }
 } }
 ```

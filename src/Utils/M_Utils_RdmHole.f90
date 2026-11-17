@@ -15,10 +15,11 @@ module M_Utils_RdmHole
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmHole_FillQrdm2ab(qrdm2ab, rdm2ab)
+  subroutine RdmHole_FillQrdm2ab(qrdm2ab, rdm2ab, nBodiesA, nBodiesB)
 
     complex(R64), intent(out), allocatable :: qrdm2ab(:, :, :, :)
     complex(R64), intent(in), contiguous   :: rdm2ab(:, :, :, :)
+    integer(I32), intent(in) :: nBodiesA, nBodiesB
 
     integer, allocatable :: delta_a(:, :), delta_b(:, :)
     complex(R64), allocatable :: rdm1a(:, :), rdm1b(:, :)
@@ -31,8 +32,8 @@ contains
     allocate (delta_a(nOa, nOa))
     allocate (delta_b(nOb, nOb))
 
-    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab)
-    call RdmTrace_FillRdm1bFromRdm2ab(rdm1b, rdm2ab)
+    call RdmTrace_FillRdm1aFromRdm2ab(rdm1a, rdm2ab, nBodiesB)
+    call RdmTrace_FillRdm1bFromRdm2ab(rdm1b, rdm2ab, nBodiesA)
 
     delta_a(:, :) = 0
     Do i1 = 1, nOa
@@ -63,16 +64,17 @@ contains
   !> Minimal eigenvalues of the Hermitian parts of the up-down blocks of D,
   !> reshape(rdm2ab, [n^2, n^2]), and of its 2-hole matrix Q
   !> (RdmHole_FillQrdm2ab): the N-representability check of a singlet 2-RDM.
-  subroutine RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2ab)
+  subroutine RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2ab, nBodiesA, nBodiesB)
     use M_Utils_LapackLib
 
     real(R64), intent(out) :: minD
     real(R64), intent(out) :: minQ
     complex(R64), intent(in), contiguous :: rdm2ab(:, :, :, :)
+    integer(I32), intent(in) :: nBodiesA, nBodiesB
 
     complex(R64), allocatable :: qrdm2ab(:, :, :, :)
 
-    call RdmHole_FillQrdm2ab(qrdm2ab, rdm2ab)
+    call RdmHole_FillQrdm2ab(qrdm2ab, rdm2ab, nBodiesA, nBodiesB)
     minD = MinEigenvalue(rdm2ab)
     minQ = MinEigenvalue(qrdm2ab)
 
@@ -94,10 +96,11 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmHole_FillGrdm2ab(grdm2ab, rdm2ab)
+  subroutine RdmHole_FillGrdm2ab(grdm2ab, rdm2ab, nBodiesA)
 
     complex(R64), intent(out), allocatable :: grdm2ab(:, :, :, :)
     complex(R64), intent(in), contiguous   :: rdm2ab(:, :, :, :)
+    integer(I32), intent(in) :: nBodiesA
 
     integer, allocatable :: delta_a(:, :)
     complex(R64), allocatable :: rdm1b(:, :)
@@ -109,7 +112,7 @@ contains
     if (.not. allocated(grdm2ab)) allocate (grdm2ab(nOa, nOb, nOa, nOb))
     allocate (delta_a(nOa, nOa))
 
-    call RdmTrace_FillRdm1bFromRdm2ab(rdm1b, rdm2ab)
+    call RdmTrace_FillRdm1bFromRdm2ab(rdm1b, rdm2ab, nBodiesA)
 
     delta_a(:, :) = 0
     Do i1 = 1, nOa
@@ -130,10 +133,11 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmHole_FillQrdm2(qrdm2, rdm2)
+  subroutine RdmHole_FillQrdm2(qrdm2, rdm2, nBodies)
 
     complex(R64), intent(out), allocatable :: qrdm2(:, :, :, :)
     complex(R64), intent(in), contiguous   :: rdm2(:, :, :, :)
+    integer(I32), intent(in) :: nBodies
 
     integer, allocatable :: delta(:, :)
     complex(R64), allocatable :: rdm1(:, :)
@@ -144,7 +148,7 @@ contains
     if (.not. allocated(qrdm2)) allocate (qrdm2(nO, nO, nO, nO))
     allocate (delta(nO, nO))
 
-    call RdmTrace_FillRdm1FromRdm2(rdm1, rdm2)
+    call RdmTrace_FillRdm1FromRdm2(rdm1, rdm2, nBodies)
 
     delta(:, :) = 0
     Do i1 = 1, nO
@@ -172,10 +176,11 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine RdmHole_FillGrdm2(grdm2, rdm2)
+  subroutine RdmHole_FillGrdm2(grdm2, rdm2, nBodies)
 
     complex(R64), intent(out), allocatable :: grdm2(:, :, :, :)
     complex(R64), intent(in), contiguous   :: rdm2(:, :, :, :)
+    integer(I32), intent(in) :: nBodies
 
     integer, allocatable :: delta(:, :)
     complex(R64), allocatable :: rdm1(:, :)
@@ -186,7 +191,7 @@ contains
     if (.not. allocated(grdm2)) allocate (grdm2(nO, nO, nO, nO))
     allocate (delta(nO, nO))
 
-    call RdmTrace_FillRdm1FromRdm2(rdm1, rdm2)
+    call RdmTrace_FillRdm1FromRdm2(rdm1, rdm2, nBodies)
 
     delta(:, :) = 0
     Do i1 = 1, nO

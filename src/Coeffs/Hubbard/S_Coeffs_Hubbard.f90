@@ -2,58 +2,45 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Implementation submodule for the Hubbard coefficient backend.
+!> Implementation submodule of the Hubbard coefficient backend.
 !>
-!> This submodule contains:
-!> - `Coeffs_Hubbard_Fabricate`: Backend selection and pointer binding
-!> - `Setup`: Build bit-encoded configurations and hopping graphs
-!> - `SetupConfigurations`: Enumerate configs via GSL combination generator
-!> - `SetupHamiltonian`: Precompute hopping connectivity and interaction values
-!> - `ExciteBits`: Apply creation/annihilation to bit pattern with sign tracking
-!> - `ApplyExcitation`: Transform CI vector via ladder operators
+!> - `Coeffs_Hubbard_Fabricate`: checks, configuration counts, pointer binding
+!>   and dispatch to the spin-symmetry variant (which sets the parity and the
+!>   number of coefficients)
+!> - `Setup`: configurations of each spin and their single excitations
+!> - `ApplyH1FillRdm1`, `ApplyH2FillRdm2`: Hamiltonian application and RDMs on
+!>   the product space c(iUp, iDn); a sector vector is expanded to the product
+!>   space and the result projected back
+!> - `ApplyExcitation`: ladder operators of one spin (product space only)
+!> - the index maps of the three variants
 !>
-!> # Implementation Details
-!>
-!> **Configuration enumeration:** Uses GSL's combination iterator to generate
-!> all C(n,k) ways to place k particles in n sites. Each combination is
-!> converted to a bit pattern for O(1) operations.
-!>
-!> **Hopping graph construction:** For each (source, target) site pair with
-!> nonzero h1 matrix element, check if the hop is valid (source occupied,
-!> target empty). If so, store target config index and weight (including
-!> fermionic sign from bit counting).
-!>
-!> **Fermionic sign:** When moving particle from site i to site j, count
-!> occupied sites between i and j. Sign = (-1)^count. Implemented via
-!> sequential bit testing in `ExciteBits`.
+!> RDM conventions are those of coeffs.generic (M_Coeffs): rdm1(p,q) =
+!> <a+_q a_p>, rdm2(p,q,r,s) = <a+_r a+_s a_q a_p> over the spin orbitals
+!> (up orbitals first), the two spins treated as one fermion species
+!> (antisymmetric also under the exchange of an up and a down index).
 submodule(M_Coeffs_Hubbard) S_Coeffs_Hubbard
-
   implicit none
 
-  !=============================================================================
-  ! local data: inverse lookup tables for bit patterns
-  !=============================================================================
+  !> binomials(n, k) = binom(n, k) for 0 <= n, k <= nSites (zero for k > n),
+  !> the colex ranks of the configurations.
+  integer(I64), allocatable :: binomials(:, :)
 
-  !> Inverse lookup: bit pattern → config index (spin up)
-  integer(I32), allocatable :: ConfigurationsFromIndexUP(:)
-
-  !> Inverse lookup: bit pattern → config index (spin down)
-  integer(I32), allocatable :: ConfigurationsFromIndexDN(:)
+  !> H1 of one spin for the h1 of one call: diag(i) = <i|H1|i> and the
+  !> nonzero off-diagonal elements <i|H1|target(k)> = value(k) of
+  !> configuration i, k = first(i) .. first(i + 1) - 1.
+  type :: T_Hops
+    integer(I32), allocatable :: first(:)
+    integer(I32), allocatable :: target(:)
+    complex(R64), allocatable :: value(:)
+    complex(R64), allocatable :: diag(:)
+  end type
 
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Bind Hubbard backend procedures and select spin-symmetry variant.
-!>
-!> Computes per-spin configuration counts via binomial coefficients:
-!>   nCoeffsUP = C(nOrbs, nBodiesUp)
-!>   nCoeffsDN = C(nOrbs, nBodiesDn)
-!>
-!> Then delegates to one of the spin-symmetry sub-backends based on JSON.
   module subroutine Coeffs_Hubbard_Fabricate
     use M_Utils_Json
     use M_Utils_Say
-    use M_Utils_SfGslLib
     use M_Method_Mb
     use M_Method_Mb_OrbBased
     use M_Coeffs
@@ -64,24 +51,36 @@ contains
     call Say_Fabricate("coeffs.hubbard")
 
     !------------------------------------
-    ! Compute per-spin configuration counts
+    ! many-body setting
     !------------------------------------
 
-    Coeffs_Hubbard_nCoeffsUP = SfGslLib_Binomial(Method_Mb_OrbBased_nOrbs(1), Method_Mb_nBodies(1))
-    Coeffs_Hubbard_nCoeffsDN = SfGslLib_Binomial(Method_Mb_OrbBased_nOrbs(2), Method_Mb_nBodies(2))
+    if (Method_Mb_nBodyTypes .ne. 2) error stop "coeffs.hubbard needs two body types (spin up and spin down)"
+    if (any(Method_Mb_bodyStatistics .ne. 'f')) error stop "coeffs.hubbard needs fermions (bosons: coeffs.generic)"
+    if (Method_Mb_OrbBased_nOrbs(1) .ne. Method_Mb_OrbBased_nOrbs(2)) &
+      error stop "coeffs.hubbard needs the same number of orbitals (the lattice sites) for both spins"
+
+    Coeffs_Hubbard_nSites = Method_Mb_OrbBased_nOrbs(1)
+    if (Coeffs_Hubbard_nSites > 62) error stop "coeffs.hubbard supports at most 62 sites"
+
+    call FillBinomials(binomials, Coeffs_Hubbard_nSites)
+    Coeffs_Hubbard_nCoeffsUP = NumberOfConfigurations(Method_Mb_nBodies(1))
+    Coeffs_Hubbard_nCoeffsDN = NumberOfConfigurations(Method_Mb_nBodies(2))
 
     !------------------------------------
-    ! Common procedure pointers
+    ! set procedure pointers
     !------------------------------------
 
     Coeffs_Setup => Setup
+    Coeffs_ApplyH1FillRdm1 => ApplyH1FillRdm1
+    Coeffs_ApplyH2FillRdm2 => ApplyH2FillRdm2
     Coeffs_ApplyExcitation => ApplyExcitation
+    Coeffs_ConfigurationsFromIndex => ConfigurationsFromIndex
+    Coeffs_IndexFromConfigurations => IndexFromConfigurations
 
     !------------------------------------
-    ! Select spin-symmetry variant from JSON
+    ! branch on the spin symmetry
     !------------------------------------
 
-    Coeffs_Hubbard_spinSymQ = .not. Json_GetExistence("coeffs.hubbard.noSpinSym")
     if (Json_GetExistence("coeffs.hubbard.noSpinSym")) then
       call Coeffs_Hubbard_NoSpinSym_Fabricate
 
@@ -98,371 +97,923 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Initialize Hubbard backend data structures.
-!>
-!> Must be called after Fabricate. Builds:
-!> 1. Bit-encoded configuration arrays
-!> 2. Inverse lookup tables (bit pattern → index)
-!> 3. Hopping connectivity graphs
-!> 4. Precomputed interaction values
+!> Configurations of both spins and their single excitations. Repeated calls
+!> rebuild the tables.
   subroutine Setup
     use M_Utils_Say
+    use M_Method_Mb
 
     call Say_Setup("coeffs.hubbard")
 
-    call SetupConfigurations
-    call SetupHamiltonian
+    call FillConfigurations(Coeffs_Hubbard_bitcodesUP, Method_Mb_nBodies(1))
+    call FillConfigurations(Coeffs_Hubbard_bitcodesDN, Method_Mb_nBodies(2))
+
+    call FillSingles(Coeffs_Hubbard_singlesUP, Coeffs_Hubbard_bitcodesUP)
+    call FillSingles(Coeffs_Hubbard_singlesDN, Coeffs_Hubbard_bitcodesDN)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Enumerate all configurations and build bit patterns + inverse lookup.
-!>
-!> Uses GSL combination generator to enumerate all ways to place N particles
-!> in M sites. Each combination is converted to a bit pattern where bit j=1
-!> means site j is occupied.
-!>
-!> Inverse lookup tables allow O(1) conversion: bit pattern → config index.
-  subroutine SetupConfigurations
-    use M_Utils_CombinationGslLib
-    use M_Grid
-    use M_Method_Mb
+!> H1 = sum_ij h1(i,j) a+_i a_j added to dCoeffs_ (h1_ of the call), and the
+!> 1-RDM. A sector needs a spin-independent h1.
+  subroutine ApplyH1FillRdm1(coeffs, rdm1_, dCoeffs_, h1_)
+    complex(R64), intent(in), contiguous, target                 :: coeffs(:)
+    complex(R64), intent(out), allocatable, optional             :: rdm1_(:, :)
+    complex(R64), intent(inout), contiguous, target, optional    :: dCoeffs_(:)
+    complex(R64), intent(in), contiguous, optional               :: h1_(:, :)
 
-    integer(I32) :: iCoeff, j
-    integer(I32), allocatable :: collect(:, :)
+    complex(R64), allocatable :: c(:), dc(:)
 
-    allocate (Coeffs_Hubbard_bitcodesUP(Coeffs_Hubbard_nCoeffsUP))
-    allocate (Coeffs_Hubbard_bitcodesDN(Coeffs_Hubbard_nCoeffsDN))
+    if (present(dCoeffs_) .and. .not. present(h1_)) error stop "Coeffs_ApplyH1FillRdm1 (coeffs.hubbard): dCoeffs_ requires h1_"
 
-    ! Inverse lookup: bit pattern → config index (needs 2^nSites entries)
-    allocate (ConfigurationsFromIndexUP(0:2**(Grid_nPoints)))
-    allocate (ConfigurationsFromIndexDN(0:2**(Grid_nPoints)))
+    if (Coeffs_Hubbard_parity .eq. 0) then
+      if (present(dCoeffs_)) call AddH1(dCoeffs_, coeffs, h1_)
+      if (present(rdm1_)) call FillRdm1(rdm1_, coeffs)
+      return
+    end if
 
-    !-------------------------------------------------------------------------------------
-    ! Spin-up configurations
-    !-------------------------------------------------------------------------------------
+    call ExpandSector(c, coeffs)
 
-    allocate (collect(Method_Mb_nBodies(1), Coeffs_Hubbard_nCoeffsUP))
+    if (present(dCoeffs_)) then
+      call CheckSpinIndependent(h1_)
+      allocate (dc(size(c)))
+      dc(:) = 0.0_R64
+      call AddH1(dc, c, h1_)
+      call AddPackedSector(dCoeffs_, dc)
+    end if
 
-    ! collect(i, iCoeff) = position of i-th particle in configuration iCoeff
-    call CombinationGslLib_CombiNoRepeat(collect, Grid_nPoints)
-
-    ! Convert particle positions to bit patterns
-    Coeffs_Hubbard_bitcodesUP(:) = 0
-    do j = 1, Method_Mb_nBodies(1)
-      do iCoeff = 1, Coeffs_Hubbard_nCoeffsUP
-        Coeffs_Hubbard_bitcodesUP(iCoeff) = ibset(Coeffs_Hubbard_bitcodesUP(iCoeff), collect(j, iCoeff) - 1)
-      end do
-    end do
-
-    ! Build inverse lookup table
-    ConfigurationsFromIndexUP(:) = 0
-    do iCoeff = 1, Coeffs_Hubbard_nCoeffsUP
-      ConfigurationsFromIndexUP(Coeffs_Hubbard_bitcodesUP(iCoeff)) = iCoeff
-    end do
-
-    deallocate (collect)
-
-    !-------------------------------------------------------------------------------------
-    ! Spin-down configurations (same procedure)
-    !-------------------------------------------------------------------------------------
-
-    allocate (collect(Method_Mb_nBodies(2), Coeffs_Hubbard_nCoeffsDN))
-    if (Method_Mb_nBodies(2) .ne. 0) call CombinationGslLib_CombiNoRepeat(collect, Grid_nPoints)
-
-    Coeffs_Hubbard_bitcodesDN(:) = 0
-    do j = 1, Method_Mb_nBodies(2)
-      do iCoeff = 1, Coeffs_Hubbard_nCoeffsDN
-        Coeffs_Hubbard_bitcodesDN(iCoeff) = ibset(Coeffs_Hubbard_bitcodesDN(iCoeff), collect(j, iCoeff) - 1)
-      end do
-    end do
-
-    ConfigurationsFromIndexDN(:) = 0
-    do iCoeff = 1, Coeffs_Hubbard_nCoeffsDN
-      ConfigurationsFromIndexDN(Coeffs_Hubbard_bitcodesDN(iCoeff)) = iCoeff
-    end do
-
-    deallocate (collect)
+    if (present(rdm1_)) call FillRdm1(rdm1_, c)
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Build hopping connectivity graphs and precompute interaction values.
-!>
-!> For each source configuration i and target site pair (i1,j1) with h1(i1,j1)≠0:
-!> - Check if hop is valid: site i1 occupied and site j1 empty
-!> - If valid, compute target config via `ExciteBits` (handles fermionic sign)
-!> - Store in sparse format: hoppUP(k,i), weightUP(k,i), nConnectedUP(i)
-!>
-!> Interaction values are precomputed for all (up,dn) config pairs:
-!>   interactionValues(bits) = U × (number of doubly occupied sites)
-!> where bits = bitcodesUP(i) AND bitcodesDN(j).
-  subroutine SetupHamiltonian
-    use M_Grid
-    use M_Grid_Lattice
-    use M_Method_Mb
+!> The on-site interaction of h2_ added to dCoeffs_ (stops if h2_ is not an
+!> on-site interaction), and the 2-RDM.
+  subroutine ApplyH2FillRdm2(coeffs, rdm2_, dCoeffs_, h2_)
+    complex(R64), intent(in), contiguous, target                 :: coeffs(:)
+    complex(R64), intent(out), allocatable, optional             :: rdm2_(:, :, :, :)
+    complex(R64), intent(inout), contiguous, target, optional    :: dCoeffs_(:)
+    complex(R64), intent(in), contiguous, optional               :: h2_(:, :, :, :)
+
+    complex(R64), allocatable :: c(:), dc(:)
+
+    if (present(dCoeffs_) .and. .not. present(h2_)) error stop "Coeffs_ApplyH2FillRdm2 (coeffs.hubbard): dCoeffs_ requires h2_"
+
+    if (Coeffs_Hubbard_parity .eq. 0) then
+      if (present(dCoeffs_)) call AddH2(dCoeffs_, coeffs, h2_)
+      if (present(rdm2_)) call FillRdm2(rdm2_, coeffs)
+      return
+    end if
+
+    call ExpandSector(c, coeffs)
+
+    if (present(dCoeffs_)) then
+      allocate (dc(size(c)))
+      dc(:) = 0.0_R64
+      call AddH2(dc, c, h2_)
+      call AddPackedSector(dCoeffs_, dc)
+    end if
+
+    if (present(rdm2_)) call FillRdm2(rdm2_, c)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> a+_creates(1) .. a+_creates(n) a_destroys(n) .. a_destroys(1) on the spin
+!> bt (orbital indices of that spin), in place. Product space only: an
+!> excitation of one spin leaves the spin-exchange sectors.
+  subroutine ApplyExcitation(coeffs, creates, destroys, bt)
+    complex(R64), intent(inout), contiguous :: coeffs(:)
+    integer(I32), intent(in), contiguous :: creates(:)
+    integer(I32), intent(in), contiguous :: destroys(:)
+    integer(I32), intent(in) :: bt
+
+    complex(R64), allocatable :: source(:)
+    integer(I32) :: nUP, nDN, i, j, k, sgn
+    integer(I64) :: y
+
+    if (Coeffs_Hubbard_parity .ne. 0) &
+      error stop "coeffs.hubbard: an excitation of one spin leaves the spin-exchange sector (use noSpinSym)"
+    if (size(creates) .ne. size(destroys)) error stop "coeffs.hubbard: an excitation must conserve the particle number"
+    if (any(creates < 1 .or. creates > Coeffs_Hubbard_nSites) .or. any(destroys < 1 .or. destroys > Coeffs_Hubbard_nSites)) &
+      error stop "coeffs.hubbard: orbital index of an excitation out of range"
+
+    nUP = Coeffs_Hubbard_nCoeffsUP
+    nDN = Coeffs_Hubbard_nCoeffsDN
+
+    allocate (source, source=coeffs)
+    coeffs(:) = 0.0_R64
+
+    if (bt .eq. 1) then
+      do i = 1, nUP
+        call ExciteBits(y, sgn, creates, destroys, Coeffs_Hubbard_bitcodesUP(i))
+        if (sgn .eq. 0) cycle
+        j = ConfigurationRank(y)
+        do k = 0, nDN - 1
+          coeffs(j + k * nUP) = real(sgn, kind=R64) * source(i + k * nUP)
+        end do
+      end do
+
+    else if (bt .eq. 2) then
+      do i = 1, nDN
+        call ExciteBits(y, sgn, creates, destroys, Coeffs_Hubbard_bitcodesDN(i))
+        if (sgn .eq. 0) cycle
+        j = ConfigurationRank(y)
+        coeffs((j - 1) * nUP + 1:j * nUP) = real(sgn, kind=R64) * source((i - 1) * nUP + 1:i * nUP)
+      end do
+
+    else
+      error stop "coeffs.hubbard: the body type of an excitation must be 1 (up) or 2 (down)"
+    end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Configurations of the stored coefficient iCoeff: (iUp, iDn) in the product
+!> space, (lo, hi) of the sector basis state in a sector.
+  pure subroutine ConfigurationsFromIndex(configurations, iCoeff)
+    integer(I32), intent(out), contiguous :: configurations(:)
+    integer(I32), intent(in) :: iCoeff
+
+    integer(I32) :: hi
+
+    if (Coeffs_Hubbard_parity .eq. 0) then
+      configurations(1) = mod(iCoeff - 1, Coeffs_Hubbard_nCoeffsUP) + 1
+      configurations(2) = (iCoeff - 1) / Coeffs_Hubbard_nCoeffsUP + 1
+      return
+    end if
+
+    ! column hi of the upper triangle ends at lo = hi (plus) or hi - 1 (minus)
+    if (Coeffs_Hubbard_parity .eq. 1) then
+      hi = 1
+      do while (PackedIndex(hi, hi) < iCoeff)
+        hi = hi + 1
+      end do
+    else
+      hi = 2
+      do while (PackedIndex(hi - 1, hi) < iCoeff)
+        hi = hi + 1
+      end do
+    end if
+    configurations(2) = hi
+    configurations(1) = iCoeff - PackedIndex(1, hi) + 1
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Inverse of ConfigurationsFromIndex; in a sector both orders of the pair
+!> give the same coefficient, and 0 for the pair (i, i) of the minus sector,
+!> which has no coefficient.
+  pure subroutine IndexFromConfigurations(iCoeff, configurations)
+    integer(I32), intent(out) :: iCoeff
+    integer(I32), intent(in), contiguous :: configurations(:)
+
+    integer(I32) :: lo, hi
+
+    if (Coeffs_Hubbard_parity .eq. 0) then
+      iCoeff = configurations(1) + (configurations(2) - 1) * Coeffs_Hubbard_nCoeffsUP
+      return
+    end if
+
+    lo = minval(configurations(1:2))
+    hi = maxval(configurations(1:2))
+    iCoeff = 0
+    if (lo .ne. hi .or. Coeffs_Hubbard_parity .eq. 1) iCoeff = PackedIndex(lo, hi)
+
+  end subroutine
+
+!=============================================================================
+! Hamiltonian application and RDMs on the product space c(iUp + (iDn - 1) nUP)
+!=============================================================================
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> dc = dc + H1 c. The entry a+_c a_d |i> = factor |t> of configuration i
+!> gives <i| a+_d a_c |t> = factor, so (H1 c)(i) = sum over the entries of i
+!> of h1(d, c) factor c(t).
+  subroutine AddH1(dc, c, h1)
     use M_Method_Mb_OrbBased
-    use M_Utils_Combinatorics
 
-    integer(I32) :: iCoeff, i1, j1, count, k, iDn, iUp, iSite, bitpos
-    integer(I64) :: bits, tbits, interactionBits
-    integer(I32) :: nDim
+    complex(R64), intent(inout), contiguous :: dc(:)
+    complex(R64), intent(in), contiguous :: c(:)
+    complex(R64), intent(in), contiguous :: h1(:, :)
 
-    integer(I32), allocatable :: permut(:)
-    real(R64), allocatable :: upTmp(:)
-    real(R64), allocatable :: dnTmp(:)
-    real(R64) :: interactionStrength, onSite
+    type(T_Hops) :: hops
+    integer(I32) :: n, oUp, oDn
 
-    ! Validate prerequisites
-    if (.not. allocated(Method_Mb_OrbBased_h1)) then
-      error stop "Method_Mb_OrbBased_h1 is not allocated, please call Method_Mb_OrbBased_FillH1 first"
+    n = Coeffs_Hubbard_nSites
+    oUp = Method_Mb_OrbBased_nOrbsStart(1) - 1
+    oDn = Method_Mb_OrbBased_nOrbsStart(2) - 1
+
+    call FillHops(hops, Coeffs_Hubbard_singlesUP, h1(oUp + 1:oUp + n, oUp + 1:oUp + n))
+    call AddH1Up(dc, c, hops)
+
+    call FillHops(hops, Coeffs_Hubbard_singlesDN, h1(oDn + 1:oDn + n, oDn + 1:oDn + n))
+    call AddH1Down(dc, c, hops)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> The spin-up part of H1: within every column iDn of c(iUp, iDn).
+  subroutine AddH1Up(dc, c, up)
+    complex(R64), intent(inout), contiguous :: dc(:)
+    complex(R64), intent(in), contiguous :: c(:)
+    type(T_Hops), intent(in) :: up
+
+    complex(R64) :: acc
+    integer(I32) :: nUP, iUp, iDn, k, base
+
+    nUP = Coeffs_Hubbard_nCoeffsUP
+
+    !$omp parallel do default(shared) private(iDn, iUp, k, acc, base) schedule(static)
+    do iDn = 1, Coeffs_Hubbard_nCoeffsDN
+      base = (iDn - 1) * nUP
+      do iUp = 1, nUP
+        acc = up % diag(iUp) * c(base + iUp)
+        do k = up % first(iUp), up % first(iUp + 1) - 1
+          acc = acc + up % value(k) * c(base + up % target(k))
+        end do
+        dc(base + iUp) = dc(base + iUp) + acc
+      end do
+    end do
+    !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> The spin-down part of H1: whole columns of c(iUp, iDn).
+  subroutine AddH1Down(dc, c, dn)
+    complex(R64), intent(inout), contiguous :: dc(:)
+    complex(R64), intent(in), contiguous :: c(:)
+    type(T_Hops), intent(in) :: dn
+
+    integer(I32) :: nUP, iDn, k, base, t
+
+    nUP = Coeffs_Hubbard_nCoeffsUP
+
+    !$omp parallel do default(shared) private(iDn, k, base, t) schedule(static)
+    do iDn = 1, Coeffs_Hubbard_nCoeffsDN
+      base = (iDn - 1) * nUP
+      dc(base + 1:base + nUP) = dc(base + 1:base + nUP) + dn % diag(iDn) * c(base + 1:base + nUP)
+      do k = dn % first(iDn), dn % first(iDn + 1) - 1
+        t = (dn % target(k) - 1) * nUP
+        dc(base + 1:base + nUP) = dc(base + 1:base + nUP) + dn % value(k) * c(t + 1:t + nUP)
+      end do
+    end do
+    !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> The H1 of one spin (h1s the block of h1 of that spin) from its single
+!> excitations: the entries with c = d sum to the diagonal, and of the others
+!> only the nonzero elements are kept (the hops of the lattice).
+  subroutine FillHops(hops, singles, h1s)
+    type(T_Hops), intent(out) :: hops
+    type(T_Coeffs_Hubbard_Singles), intent(in) :: singles
+    complex(R64), intent(in), contiguous :: h1s(:, :)
+
+    complex(R64) :: v
+    integer(I32) :: nConf, i, k, m
+
+    nConf = size(singles % first) - 1
+    allocate (hops % first(nConf + 1), hops % diag(nConf))
+    allocate (hops % target(size(singles % target)), hops % value(size(singles % target)))
+
+    m = 0
+    do i = 1, nConf
+      hops % first(i) = m + 1
+      hops % diag(i) = 0.0_R64
+      do k = singles % first(i), singles % first(i + 1) - 1
+        v = singles % factor(k) * h1s(singles % destroy(k), singles % create(k))
+        if (singles % create(k) .eq. singles % destroy(k)) then
+          hops % diag(i) = hops % diag(i) + v
+        else if (abs(v) > 0.0_R64) then
+          m = m + 1
+          hops % target(m) = singles % target(k)
+          hops % value(m) = v
+        end if
+      end do
+    end do
+    hops % first(nConf + 1) = m + 1
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> dc = dc + H2 c with H2 = sum_s U_s n_{s,up} n_{s,dn} (diagonal).
+  subroutine AddH2(dc, c, h2)
+    complex(R64), intent(inout), contiguous :: dc(:)
+    complex(R64), intent(in), contiguous :: c(:)
+    complex(R64), intent(in), contiguous :: h2(:, :, :, :)
+
+    complex(R64), allocatable :: u(:)
+    complex(R64) :: w
+    integer(I64) :: both
+    integer(I32) :: nUP, nDN, iUp, iDn, s, idx
+
+    call FillOnSiteInteraction(u, h2)
+
+    nUP = Coeffs_Hubbard_nCoeffsUP
+    nDN = Coeffs_Hubbard_nCoeffsDN
+
+    !$omp parallel do default(shared) private(iDn, iUp, both, w, s, idx) schedule(static)
+    do iDn = 1, nDN
+      do iUp = 1, nUP
+        ! doubly occupied sites
+        both = iand(Coeffs_Hubbard_bitcodesUP(iUp), Coeffs_Hubbard_bitcodesDN(iDn))
+        if (both .eq. 0) cycle
+        w = (0.0_R64, 0.0_R64)
+        do while (both .ne. 0)
+          s = trailz(both)
+          w = w + u(s + 1)
+          both = ibclr(both, s)
+        end do
+        idx = iUp + (iDn - 1) * nUP
+        dc(idx) = dc(idx) + w * c(idx)
+      end do
+    end do
+    !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> U_s of the on-site interaction that h2 represents. For up orbitals a, b
+!> and down orbitals g, d coeffs.generic couples the excitations a+_a a_b
+!> (up) and a+_g a_d (down) by
+!>   v = h2(b,d,a,g) - h2(d,b,a,g) - h2(b,d,g,a) + h2(d,b,g,a)
+!> (spin-orbital indices); U_s = v at a = b = g = d = s. Stops unless v
+!> vanishes for every other (a, b, g, d) and the antisymmetrized interaction
+!> within each spin vanishes (below 1e-10 times the largest of these
+!> combinations, or 1): then this backend and coeffs.generic apply the same
+!> H2. Only these combinations are read, O(n^4) per call.
+  subroutine FillOnSiteInteraction(u, h2)
+    use M_Method_Mb_OrbBased
+
+    complex(R64), intent(out), allocatable :: u(:)
+    complex(R64), intent(in), contiguous :: h2(:, :, :, :)
+
+    integer(I32) :: n, oUp, oDn, a, b, g, d, bt, o
+    integer(I32) :: i1, i2, j1, j2
+    complex(R64) :: v
+    real(R64) :: tol, offSite, sameSpin
+
+    n = Coeffs_Hubbard_nSites
+    oUp = Method_Mb_OrbBased_nOrbsStart(1) - 1
+    oDn = Method_Mb_OrbBased_nOrbsStart(2) - 1
+
+    allocate (u(n))
+    offSite = 0.0_R64
+
+    do d = 1, n
+      do g = 1, n
+        do b = 1, n
+          do a = 1, n
+            v = h2(oUp + b, oDn + d, oUp + a, oDn + g) - h2(oDn + d, oUp + b, oUp + a, oDn + g) &
+                - h2(oUp + b, oDn + d, oDn + g, oUp + a) + h2(oDn + d, oUp + b, oDn + g, oUp + a)
+            if (a .eq. b .and. a .eq. g .and. a .eq. d) then
+              u(a) = v
+            else
+              offSite = max(offSite, abs(v))
+            end if
+          end do
+        end do
+      end do
+    end do
+
+    sameSpin = 0.0_R64
+    do bt = 1, 2
+      o = Method_Mb_OrbBased_nOrbsStart(bt) - 1
+      do j2 = o + 2, o + n
+        do j1 = o + 1, j2 - 1
+          do i2 = o + 2, o + n
+            do i1 = o + 1, i2 - 1
+              v = h2(j1, j2, i1, i2) - h2(j2, j1, i1, i2) - h2(j1, j2, i2, i1) + h2(j2, j1, i2, i1)
+              sameSpin = max(sameSpin, abs(v))
+            end do
+          end do
+        end do
+      end do
+    end do
+
+    tol = 1e-10_R64 * max(1.0_R64, maxval(abs(u)), offSite, sameSpin)
+    if (offSite > tol .or. sameSpin > tol) then
+      print *, "coeffs.hubbard: largest off-site interaction ", offSite, ", largest same-spin interaction ", sameSpin
+      error stop "coeffs.hubbard: h2 is not an on-site interaction of the orbitals (lattice sites, static orbitals: tdci)"
     end if
 
-    if (.not. allocated(Method_Mb_OrbBased_h2)) then
-      error stop "Method_Mb_OrbBased_h2 is not allocated, please call Method_Mb_OrbBased_FillH2 first"
-    end if
+  end subroutine
 
-    allocate (Coeffs_Hubbard_nConnectedUP(Coeffs_Hubbard_nCoeffsUP))
-    allocate (Coeffs_Hubbard_NConnectedDN(Coeffs_Hubbard_nCoeffsDN))
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> rdm1(p, q) = <a+_q a_p>: the entry a+_c a_d |i> = factor |t> adds
+!> factor <t|i> (overlap over the other spin) to rdm1(d, c).
+  subroutine FillRdm1(rdm1, c)
+    use M_Method_Mb_OrbBased
 
-    ! Count active dimensions for array sizing
-    nDim = 0
-    if (Grid_Lattice_xSize > 1) nDim = nDim + 1
-    if (Grid_Lattice_ySize > 1) nDim = nDim + 1
-    if (Grid_Lattice_zSize > 1) nDim = nDim + 1
+    complex(R64), intent(out), allocatable :: rdm1(:, :)
+    complex(R64), intent(in), contiguous :: c(:)
 
-    ! Max hops per config: nParticles × nDimensions × 2 (forward/backward)
-    allocate (Coeffs_Hubbard_hoppUP(Method_Mb_nBodies(1) * nDim * 2, Coeffs_Hubbard_nCoeffsUP))
-    allocate (Coeffs_Hubbard_hoppDN(Method_Mb_nBodies(2) * nDim * 2, Coeffs_Hubbard_nCoeffsDN))
+    complex(R64), allocatable :: block(:, :)
+    integer(I32) :: n, oUp, oDn
 
-    allocate (Coeffs_Hubbard_weightUP(Method_Mb_nBodies(1) * nDim * 2, Coeffs_Hubbard_nCoeffsUP))
-    allocate (Coeffs_Hubbard_weightDN(Method_Mb_nBodies(2) * nDim * 2, Coeffs_Hubbard_nCoeffsDN))
+    n = Coeffs_Hubbard_nSites
+    oUp = Method_Mb_OrbBased_nOrbsStart(1) - 1
+    oDn = Method_Mb_OrbBased_nOrbsStart(2) - 1
 
-    allocate (Coeffs_Hubbard_interactionValues(2**Grid_nPoints))
+    allocate (rdm1(Method_Mb_OrbBased_nOrbsSum, Method_Mb_OrbBased_nOrbsSum))
+    rdm1(:, :) = 0.0_R64
 
-    allocate (upTmp(Method_Mb_nBodies(1) * nDim * 2))
-    allocate (dnTmp(Method_Mb_nBodies(1) * nDim * 2))
+    call FillRdm1Block(block, c, 1, Coeffs_Hubbard_singlesUP)
+    rdm1(oUp + 1:oUp + n, oUp + 1:oUp + n) = block
+    call FillRdm1Block(block, c, 2, Coeffs_Hubbard_singlesDN)
+    rdm1(oDn + 1:oDn + n, oDn + 1:oDn + n) = block
 
-    !-------------------------------------------------------------------------------------
-    ! Build hopping connectivity for each (source, target) pair with nonzero h1
-    !-------------------------------------------------------------------------------------
+  end subroutine
 
-    Coeffs_Hubbard_nConnectedUP(:) = 0
-    Coeffs_Hubbard_nConnectedDN(:) = 0
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> The 1-RDM block of spin bt (orbital indices of that spin) from its single
+!> excitations.
+  subroutine FillRdm1Block(block, c, bt, singles)
+    complex(R64), intent(out), allocatable :: block(:, :)
+    complex(R64), intent(in), contiguous :: c(:)
+    integer(I32), intent(in) :: bt
+    type(T_Coeffs_Hubbard_Singles), intent(in) :: singles
 
-    Do i1 = 1, Grid_nPoints
-      Do j1 = 1, Grid_nPoints
-        if (abs(Method_Mb_OrbBased_h1(i1, j1)) < 1e-15_R64) cycle
+    complex(R64), allocatable :: strings(:, :), blockThread(:, :)
+    integer(I32) :: n, i, k, cr, de
 
-        !---------------------------------------------------------------------------
-        ! Spin-up hopping
-        !---------------------------------------------------------------------------
-        do iCoeff = 1, Coeffs_Hubbard_nCoeffsUP
-          bits = Coeffs_Hubbard_bitcodesUP(iCoeff)
+    n = Coeffs_Hubbard_nSites
+    call FillStrings(strings, c, bt)
 
-          tbits = ExciteBits([i1], [j1], bits)
-          if (tbits .eq. 0) cycle
+    allocate (block(n, n))
+    block(:, :) = 0.0_R64
 
-          Coeffs_Hubbard_nConnectedUP(iCoeff) = Coeffs_Hubbard_nConnectedUP(iCoeff) + 1
-          count = Coeffs_Hubbard_nConnectedUP(iCoeff)
+    !$omp parallel default(shared) private(i, k, cr, de, blockThread)
+    allocate (blockThread(n, n))
+    blockThread(:, :) = 0.0_R64
+    !$omp do schedule(static)
+    do i = 1, size(strings, 2)
+      do k = singles % first(i), singles % first(i + 1) - 1
+        cr = singles % create(k)
+        de = singles % destroy(k)
+        blockThread(de, cr) = blockThread(de, cr) &
+                              + singles % factor(k) * dot_product(strings(:, singles % target(k)), strings(:, i))
+      end do
+    end do
+    !$omp end do
+    !$omp critical
+    block = block + blockThread
+    !$omp end critical
+    !$omp end parallel
 
-          Coeffs_Hubbard_hoppUP(count, iCoeff) = ConfigurationsFromIndexUP(abs(tbits))
-          Coeffs_Hubbard_weightUP(count, iCoeff) = real(Method_Mb_OrbBased_h1(i1, j1) * sign(1_I64, tbits), kind=R64)
-        end do
+  end subroutine
 
-        !---------------------------------------------------------------------------
-        ! Spin-down hopping (same procedure)
-        !---------------------------------------------------------------------------
-        do iCoeff = 1, Coeffs_Hubbard_nCoeffsDN
-          bits = Coeffs_Hubbard_bitcodesDN(iCoeff)
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> rdm2(p,q,r,s) = <a+_r a+_s a_q a_p>. Within one spin
+!>   <a+_r a+_s a_q a_p> = <a+_r a_p a+_s a_q> - delta(p,s) <a+_r a_q>
+!> from chains of two single excitations; for p, r up and q, s down
+!>   X(p,q,r,s) = <(a+_r a_p)_up (a+_s a_q)_dn>
+!> gives rdm2(p,q,r,s) = rdm2(q,p,s,r) = X and, antisymmetric in the
+!> exchange of an up and a down index (the convention of coeffs.generic),
+!> rdm2(p,q,s,r) = rdm2(q,p,r,s) = -X.
+  subroutine FillRdm2(rdm2, c)
+    use M_Method_Mb_OrbBased
 
-          tbits = ExciteBits([i1], [j1], bits)
-          if (tbits .eq. 0) cycle
+    complex(R64), intent(out), allocatable :: rdm2(:, :, :, :)
+    complex(R64), intent(in), contiguous :: c(:)
 
-          Coeffs_Hubbard_NConnectedDN(iCoeff) = Coeffs_Hubbard_NConnectedDN(iCoeff) + 1
-          count = Coeffs_Hubbard_NConnectedDN(iCoeff)
+    complex(R64), allocatable :: rdm1(:, :), x(:, :, :, :)
+    integer(I32) :: n, bt, o, oUp, oDn, p, q, r, s
 
-          Coeffs_Hubbard_hoppDN(count, iCoeff) = ConfigurationsFromIndexDN(abs(tbits))
-          Coeffs_Hubbard_weightDN(count, iCoeff) = real(Method_Mb_OrbBased_h1(i1, j1) * sign(1_I64, tbits), kind=R64)
+    n = Coeffs_Hubbard_nSites
+    oUp = Method_Mb_OrbBased_nOrbsStart(1) - 1
+    oDn = Method_Mb_OrbBased_nOrbsStart(2) - 1
+
+    allocate (rdm2(Method_Mb_OrbBased_nOrbsSum, Method_Mb_OrbBased_nOrbsSum, &
+                   Method_Mb_OrbBased_nOrbsSum, Method_Mb_OrbBased_nOrbsSum))
+    rdm2(:, :, :, :) = 0.0_R64
+
+    call FillRdm1(rdm1, c)
+
+    ! within one spin
+    do bt = 1, 2
+      o = Method_Mb_OrbBased_nOrbsStart(bt) - 1
+      if (bt .eq. 1) call FillSameSpinProducts(x, c, bt, Coeffs_Hubbard_singlesUP)
+      if (bt .eq. 2) call FillSameSpinProducts(x, c, bt, Coeffs_Hubbard_singlesDN)
+      do s = 1, n
+        do r = 1, n
+          do q = 1, n
+            do p = 1, n
+              rdm2(o + p, o + q, o + r, o + s) = x(p, q, r, s)
+              if (p .eq. s) rdm2(o + p, o + q, o + r, o + s) = rdm2(o + p, o + q, o + r, o + s) - rdm1(o + q, o + r)
+            end do
+          end do
         end do
       end do
     end do
 
-    ! Sort hopping arrays for cache-friendly access during Hamiltonian application
-    do iCoeff = 1, Coeffs_Hubbard_nCoeffsUP
-      call Combinatorics_sortintegerarray(Coeffs_Hubbard_hoppUP(:, iCoeff), Coeffs_Hubbard_nConnectedUP(iCoeff), permut_=permut)
-      upTmp(:) = Coeffs_Hubbard_weightUP(:, iCoeff)
-      do k = 1, Coeffs_Hubbard_nConnectedUP(iCoeff)
-        Coeffs_Hubbard_weightUP(k, iCoeff) = upTmp(permut(k))
-      end do
-    end do
-
-    do iCoeff = 1, Coeffs_Hubbard_nCoeffsDN
-      call Combinatorics_sortintegerarray(Coeffs_Hubbard_hoppDN(:, iCoeff), Coeffs_Hubbard_NConnectedDN(iCoeff), permut_=permut)
-      dnTmp(:) = Coeffs_Hubbard_weightDN(:, iCoeff)
-      do k = 1, Coeffs_Hubbard_NConnectedDN(iCoeff)
-        Coeffs_Hubbard_weightDN(k, iCoeff) = dnTmp(permut(k))
-      end do
-    end do
-
-    !-------------------------------------------------------------------------------------
-    ! Precompute on-site interaction for all (up,dn) configuration pairs
-    !-------------------------------------------------------------------------------------
-
-    do iUp = 1, Coeffs_Hubbard_nCoeffsUP
-      do iDn = 1, Coeffs_Hubbard_nCoeffsDN
-        ! Doubly occupied sites = bitwise AND of up and down patterns
-        interactionBits = iand(Coeffs_Hubbard_bitcodesUP(iUp), Coeffs_Hubbard_bitcodesDN(iDn))
-
-        interactionStrength = 0.0_R64
-        do iSite = 1, Grid_nPoints
-          bitpos = iSite - 1
-          if (btest(interactionBits, bitpos)) then
-            onSite = 2.0_R64 * real(Method_Mb_OrbBased_h2(iSite, iSite + Grid_nPoints, iSite, iSite + Grid_nPoints), kind=R64)
-            interactionStrength = interactionStrength + onSite
-          end if
+    ! between the spins
+    call FillUpDownProducts(x, c, Coeffs_Hubbard_singlesUP, Coeffs_Hubbard_singlesDN)
+    do s = 1, n
+      do r = 1, n
+        do q = 1, n
+          do p = 1, n
+            rdm2(oUp + p, oDn + q, oUp + r, oDn + s) = x(p, q, r, s)
+            rdm2(oDn + q, oUp + p, oDn + s, oUp + r) = x(p, q, r, s)
+            rdm2(oUp + p, oDn + q, oDn + s, oUp + r) = -x(p, q, r, s)
+            rdm2(oDn + q, oUp + p, oUp + r, oDn + s) = -x(p, q, r, s)
+          end do
         end do
-
-        Coeffs_Hubbard_interactionValues(interactionBits) = interactionStrength
       end do
     end do
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Apply ladder operators to a bit pattern, computing fermionic sign.
-!>
-!> Transforms `bits` by:
-!> 1. Annihilating particles at sites in `destroys` (right to left order)
-!> 2. Creating particles at sites in `creates` (left to right order)
-!>
-!> Returns 0 if any annihilation targets an empty site or creation targets
-!> an occupied site (Pauli exclusion violation).
-!>
-!> The result encodes the fermionic sign in its sign: abs(result) is the
-!> new bit pattern, sign(result) is ±1.
-!>
-!> **Sign calculation:** For each operator, count occupied sites to the left
-!> (i.e., with smaller index). Each occupied site contributes a factor of -1.
-!>
-!> @param[in]  creates   Sites to create particles on (1-based)
-!> @param[in]  destroys  Sites to annihilate particles from (1-based)
-!> @param[in]  bits      Input bit pattern
-!> @return     Signed result: |res| = new pattern, sign(res) = phase
-  function ExciteBits(creates, destroys, bits) result(res)
+!> x(p,q,r,s) = <a+_r a_p a+_s a_q> within spin bt: the entry a+_s a_q |i> =
+!> f1 |m> followed by the entry a+_r a_p |m> = f2 |t> adds f1 f2 <t|i>.
+  subroutine FillSameSpinProducts(x, c, bt, singles)
+    complex(R64), intent(out), allocatable :: x(:, :, :, :)
+    complex(R64), intent(in), contiguous :: c(:)
+    integer(I32), intent(in) :: bt
+    type(T_Coeffs_Hubbard_Singles), intent(in) :: singles
 
-    integer(I64)              :: res
-    integer(I32), intent(in), contiguous  :: creates(:)
-    integer(I32), intent(in), contiguous  :: destroys(:)
-    integer(I64), intent(in) :: bits
-    integer(I32) :: sgn, iDestroy, iCreate, i, j
+    complex(R64), allocatable :: strings(:, :), xThread(:, :, :, :)
+    integer(I32) :: n, i, k1, k2, m, p, q, r, s
 
-    res = bits
-    sgn = 1
+    n = Coeffs_Hubbard_nSites
+    call FillStrings(strings, c, bt)
 
-    ! Apply annihilation operators (right to left)
-    do i = 1, size(destroys)
-      iDestroy = destroys(i)
+    allocate (x(n, n, n, n))
+    x(:, :, :, :) = 0.0_R64
 
-      ! Check if site is occupied
-      if (.not. btest(res, iDestroy - 1)) then
-        res = 0
-        return
-      end if
-
-      ! Count occupied sites to the left for fermionic sign
-      do j = 1, iDestroy - 1
-        if (btest(res, j - 1)) sgn = (-1) * sgn
+    !$omp parallel default(shared) private(i, k1, k2, m, p, q, r, s, xThread)
+    allocate (xThread(n, n, n, n))
+    xThread(:, :, :, :) = 0.0_R64
+    !$omp do schedule(dynamic)
+    do i = 1, size(strings, 2)
+      do k1 = singles % first(i), singles % first(i + 1) - 1
+        m = singles % target(k1)
+        q = singles % destroy(k1)
+        s = singles % create(k1)
+        do k2 = singles % first(m), singles % first(m + 1) - 1
+          p = singles % destroy(k2)
+          r = singles % create(k2)
+          xThread(p, q, r, s) = xThread(p, q, r, s) + singles % factor(k1) * singles % factor(k2) &
+                                * dot_product(strings(:, singles % target(k2)), strings(:, i))
+        end do
       end do
-
-      res = ibclr(res, iDestroy - 1)
     end do
+    !$omp end do
+    !$omp critical
+    x = x + xThread
+    !$omp end critical
+    !$omp end parallel
 
-    ! Apply creation operators (left to right, reverse order)
-    do i = 1, size(creates)
-      iCreate = creates(size(creates) - i + 1)
+  end subroutine
 
-      ! Check if site is empty (Pauli exclusion)
-      if (btest(res, iCreate - 1)) then
-        res = 0
-        return
-      end if
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> x(p,q,r,s) = <(a+_r a_p)_up (a+_s a_q)_dn>: the entries a+_s a_q |iDn> =
+!> fd |mDn> and a+_r a_p |iUp> = fu |tUp> add fu fd conj(c(tUp, mDn))
+!> c(iUp, iDn).
+  subroutine FillUpDownProducts(x, c, up, dn)
+    complex(R64), intent(out), allocatable :: x(:, :, :, :)
+    complex(R64), intent(in), contiguous :: c(:)
+    type(T_Coeffs_Hubbard_Singles), intent(in) :: up
+    type(T_Coeffs_Hubbard_Singles), intent(in) :: dn
 
-      ! Count occupied sites to the left for fermionic sign
-      do j = 1, iCreate - 1
-        if (btest(res, j - 1)) sgn = (-1) * sgn
+    complex(R64), allocatable :: xThread(:, :, :, :)
+    integer(I32) :: n, nUP, iUp, iDn, ku, kd, mBase, iBase, p, q, r, s
+
+    n = Coeffs_Hubbard_nSites
+    nUP = Coeffs_Hubbard_nCoeffsUP
+
+    allocate (x(n, n, n, n))
+    x(:, :, :, :) = 0.0_R64
+
+    !$omp parallel default(shared) private(iUp, iDn, ku, kd, mBase, iBase, p, q, r, s, xThread)
+    allocate (xThread(n, n, n, n))
+    xThread(:, :, :, :) = 0.0_R64
+    !$omp do schedule(dynamic)
+    do iDn = 1, Coeffs_Hubbard_nCoeffsDN
+      iBase = (iDn - 1) * nUP
+      do kd = dn % first(iDn), dn % first(iDn + 1) - 1
+        mBase = (dn % target(kd) - 1) * nUP
+        q = dn % destroy(kd)
+        s = dn % create(kd)
+        do iUp = 1, nUP
+          if (.not. (abs(c(iBase + iUp)) > 0.0_R64)) cycle
+          do ku = up % first(iUp), up % first(iUp + 1) - 1
+            p = up % destroy(ku)
+            r = up % create(ku)
+            xThread(p, q, r, s) = xThread(p, q, r, s) + up % factor(ku) * dn % factor(kd) &
+                                  * conjg(c(mBase + up % target(ku))) * c(iBase + iUp)
+          end do
+        end do
       end do
-
-      res = ibset(res, iCreate - 1)
     end do
+    !$omp end do
+    !$omp critical
+    x = x + xThread
+    !$omp end critical
+    !$omp end parallel
 
-    res = sgn * res
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> strings(:, i) = the coefficients of configuration i of spin bt over the
+!> configurations of the other spin (a row of c(iUp, iDn) for up, a column
+!> for down), contiguous for the overlaps of the RDMs.
+  subroutine FillStrings(strings, c, bt)
+    complex(R64), intent(out), allocatable :: strings(:, :)
+    complex(R64), intent(in), contiguous :: c(:)
+    integer(I32), intent(in) :: bt
+
+    if (bt .eq. 1) then
+      strings = transpose(reshape(c, [Coeffs_Hubbard_nCoeffsUP, Coeffs_Hubbard_nCoeffsDN]))
+    else
+      strings = reshape(c, [Coeffs_Hubbard_nCoeffsUP, Coeffs_Hubbard_nCoeffsDN])
+    end if
+
+  end subroutine
+
+!=============================================================================
+! spin-exchange sectors
+!=============================================================================
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Product-space vector c(iUp + (iDn - 1) n) of the sector vector packed:
+!> c(lo, hi) = packed / sqrt(2), c(hi, lo) = parity packed / sqrt(2) for
+!> lo < hi, c(i, i) = packed (plus sector) or 0 (minus sector).
+  subroutine ExpandSector(c, packed)
+    complex(R64), intent(out), allocatable :: c(:)
+    complex(R64), intent(in), contiguous :: packed(:)
+
+    integer(I32) :: m, lo, hi
+    complex(R64) :: v
+
+    m = Coeffs_Hubbard_nCoeffsUP
+    allocate (c(m * m))
+    c(:) = 0.0_R64
+
+    ! iteration hi writes column hi and row hi of the upper part only
+    !$omp parallel do default(shared) private(hi, lo, v) schedule(dynamic, 16)
+    do hi = 1, m
+      do lo = 1, hi - 1
+        v = packed(PackedIndex(lo, hi)) / sqrt(2.0_R64)
+        c(lo + (hi - 1) * m) = v
+        c(hi + (lo - 1) * m) = real(Coeffs_Hubbard_parity, kind=R64) * v
+      end do
+      if (Coeffs_Hubbard_parity .eq. 1) c(hi + (hi - 1) * m) = packed(PackedIndex(hi, hi))
+    end do
+    !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> packed = packed + the components of the product-space vector dc on the
+!> orthonormal sector basis, (dc(lo, hi) + parity dc(hi, lo)) / sqrt(2) and
+!> dc(i, i) (plus sector).
+  subroutine AddPackedSector(packed, dc)
+    complex(R64), intent(inout), contiguous :: packed(:)
+    complex(R64), intent(in), contiguous :: dc(:)
+
+    integer(I32) :: m, lo, hi, idx
+
+    m = Coeffs_Hubbard_nCoeffsUP
+
+    !$omp parallel do default(shared) private(hi, lo, idx) schedule(dynamic, 16)
+    do hi = 1, m
+      do lo = 1, hi - 1
+        idx = PackedIndex(lo, hi)
+        packed(idx) = packed(idx) + (dc(lo + (hi - 1) * m) + real(Coeffs_Hubbard_parity, kind=R64) * dc(hi + (lo - 1) * m)) &
+                      / sqrt(2.0_R64)
+      end do
+      if (Coeffs_Hubbard_parity .eq. 1) then
+        idx = PackedIndex(hi, hi)
+        packed(idx) = packed(idx) + dc(hi + (hi - 1) * m)
+      end if
+    end do
+    !$omp end parallel do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Stored index of the sector basis state of the configurations lo <= hi
+!> (plus sector) or lo < hi (minus sector), columns of the upper triangle.
+  pure function PackedIndex(lo, hi) result(idx)
+    integer(I32), intent(in) :: lo
+    integer(I32), intent(in) :: hi
+    integer(I32) :: idx
+
+    if (Coeffs_Hubbard_parity .eq. 1) then
+      idx = int((int(hi - 1, I64) * hi) / 2, I32) + lo
+    else
+      idx = int((int(hi - 2, I64) * (hi - 1)) / 2, I32) + lo
+    end if
 
   end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Apply ladder operators to CI vector for a specific body type.
-!>
-!> Transforms all CI coefficients by applying the operator sequence:
-!>   a†_{creates(1)} a†_{creates(2)} ... a_{destroys(n)} ... a_{destroys(1)}
-!> to the `bt`-th spin sector.
-!>
-!> Uses `ExciteBits` to compute target configuration and phase for each
-!> source configuration, then scatters the result. noSpinSym only: in a
-!> spin-exchange sector the excited vector cannot be stored.
-!>
-!> @param[inout] coeffs   CI coefficients (modified in-place)
-!> @param[in]    creates  Orbital indices for creation operators
-!> @param[in]    destroys Orbital indices for annihilation operators
-!> @param[in]    bt       Body type index (1=up, 2=down)
-  subroutine ApplyExcitation(coeffs, creates, destroys, bt)
-    use M_Coeffs
-    use M_Method_Mb
+!> The sectors are invariant only under an h1 that is the same for both spins.
+  subroutine CheckSpinIndependent(h1)
+    use M_Method_Mb_OrbBased
 
-    complex(R64), intent(inout), contiguous  :: coeffs(:)
-    integer(I32), intent(in), contiguous  :: creates(:)
-    integer(I32), intent(in), contiguous  :: destroys(:)
-    integer(I32), intent(in) :: bt
+    complex(R64), intent(in), contiguous :: h1(:, :)
 
-    complex(R64), allocatable  :: coeffsTmp(:)
+    integer(I32) :: n, oUp, oDn
+    real(R64) :: difference
 
-    integer(I32) :: iCoeff, iCoeffNew, configurationBtNew
-    integer(I64) :: bits, tbits
-    real(R64)  :: factor
-    integer(I32) :: configurations(Method_Mb_nBodyTypes)
+    n = Coeffs_Hubbard_nSites
+    oUp = Method_Mb_OrbBased_nOrbsStart(1) - 1
+    oDn = Method_Mb_OrbBased_nOrbsStart(2) - 1
 
-    if (Coeffs_Hubbard_spinSymQ) &
-      error stop "coeffs.hubbard: an excitation of one spin species leaves the spin-exchange sector (use noSpinSym)"
+    difference = maxval(abs(h1(oUp + 1:oUp + n, oUp + 1:oUp + n) - h1(oDn + 1:oDn + n, oDn + 1:oDn + n)))
+    if (difference > 1e-12_R64 * max(1.0_R64, maxval(abs(h1)))) then
+      print *, "coeffs.hubbard: largest difference of h1 between the spins ", difference
+      error stop "coeffs.hubbard: the spin-exchange sectors need an h1 that is the same for both spins (use noSpinSym)"
+    end if
 
-    allocate (coeffsTmp, source=coeffs)
+  end subroutine
 
-    coeffs(:) = 0.0_R64
+!=============================================================================
+! configurations and bit operations
+!=============================================================================
 
-    do iCoeff = 1, Coeffs_nCoeffs
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  subroutine FillBinomials(b, n)
+    integer(I64), intent(out), allocatable :: b(:, :)
+    integer(I32), intent(in) :: n
 
-      call Coeffs_ConfigurationsFromIndex(configurations, iCoeff)
+    integer(I32) :: i, k
 
-      if (bt .eq. 1) then
-        bits = Coeffs_Hubbard_bitcodesUP(configurations(bt))
-      else
-        bits = Coeffs_Hubbard_bitcodesDN(configurations(bt))
+    allocate (b(0:n, 0:n))
+    b(:, :) = 0
+    do i = 0, n
+      b(i, 0) = 1
+      do k = 1, i
+        b(i, k) = b(i - 1, k - 1) + b(i - 1, k)
+      end do
+    end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  function NumberOfConfigurations(nParticles) result(nConfigurations)
+    integer(I32), intent(in) :: nParticles
+    integer(I32) :: nConfigurations
+
+    if (nParticles < 0 .or. nParticles > Coeffs_Hubbard_nSites) &
+      error stop "coeffs.hubbard: more particles of one spin than orbitals"
+    if (binomials(Coeffs_Hubbard_nSites, nParticles) > huge(nConfigurations)) &
+      error stop "coeffs.hubbard: more than 2^31 - 1 configurations of one spin"
+
+    nConfigurations = int(binomials(Coeffs_Hubbard_nSites, nParticles), I32)
+
+  end function
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> All bit patterns of nParticles bits below bit nSites, in increasing order:
+!> from the smallest, the next larger pattern with as many bits (Gosper). Their
+!> colex ranks must count 1, 2, ...
+  subroutine FillConfigurations(bitcodes, nParticles)
+    integer(I64), intent(out), allocatable :: bitcodes(:)
+    integer(I32), intent(in) :: nParticles
+
+    integer(I32) :: iConf
+    integer(I64) :: x, lowest, ripple
+
+    allocate (bitcodes(NumberOfConfigurations(nParticles)))
+
+    x = maskr(nParticles, I64)
+    do iConf = 1, size(bitcodes)
+      bitcodes(iConf) = x
+      if (ConfigurationRank(x) .ne. iConf) error stop "coeffs.hubbard: the rank of a configuration differs from its position"
+      if (iConf .eq. size(bitcodes)) exit
+      lowest = iand(x, -x)
+      ripple = x + lowest
+      x = ior(ishft(ieor(ripple, x), -2) / lowest, ripple)
+    end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Single excitations a+_c a_d (d occupied, c empty or c = d) of every
+!> configuration: N (nSites - N) + N entries per configuration.
+  subroutine FillSingles(singles, bitcodes)
+    type(T_Coeffs_Hubbard_Singles), intent(out) :: singles
+    integer(I64), intent(in), contiguous :: bitcodes(:)
+
+    integer(I32) :: nConf, nParticles, nPer, iConf, k, c, d
+    integer(I64) :: x, nEntries
+
+    nConf = size(bitcodes)
+    nParticles = popcnt(bitcodes(1))
+    nPer = nParticles * (Coeffs_Hubbard_nSites - nParticles) + nParticles
+    nEntries = int(nConf, I64) * nPer
+    if (nEntries > huge(nConf)) error stop "coeffs.hubbard: more than 2^31 - 1 single excitations of one spin"
+
+    allocate (singles % first(nConf + 1))
+    allocate (singles % target(nEntries), singles % create(nEntries), singles % destroy(nEntries), &
+              singles % factor(nEntries))
+
+    !$omp parallel do default(shared) private(iConf, k, c, d, x) schedule(static)
+    do iConf = 1, nConf
+      singles % first(iConf) = (iConf - 1) * nPer + 1
+      k = (iConf - 1) * nPer
+      x = bitcodes(iConf)
+      do d = 1, Coeffs_Hubbard_nSites
+        if (.not. btest(x, d - 1)) cycle
+        do c = 1, Coeffs_Hubbard_nSites
+          if (c .ne. d .and. btest(x, c - 1)) cycle
+          k = k + 1
+          singles % target(k) = ConfigurationRank(ibset(ibclr(x, d - 1), c - 1))
+          singles % create(k) = c
+          singles % destroy(k) = d
+          singles % factor(k) = HopSign(x, c, d)
+        end do
+      end do
+    end do
+    !$omp end parallel do
+    singles % first(nConf + 1) = nConf * nPer + 1
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Index of the configuration x among the configurations of its number of
+!> particles: one plus its colex rank sum_t binom(position of bit t, t).
+  pure function ConfigurationRank(x) result(iConf)
+    integer(I64), intent(in) :: x
+    integer(I32) :: iConf
+
+    integer(I64) :: rest, r
+    integer(I32) :: t, pos
+
+    rest = x
+    r = 0
+    t = 0
+    do while (rest .ne. 0)
+      pos = trailz(rest)
+      t = t + 1
+      r = r + binomials(pos, t)
+      rest = ibclr(rest, pos)
+    end do
+    iConf = int(r, I32) + 1
+
+  end function
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> Sign of a+_c a_d on x (d occupied): (-1)^(occupied orbitals strictly
+!> between c and d).
+  pure function HopSign(x, c, d) result(sgn)
+    integer(I64), intent(in) :: x
+    integer(I32), intent(in) :: c
+    integer(I32), intent(in) :: d
+    real(R64) :: sgn
+
+    integer(I32) :: lo, hi
+
+    lo = min(c, d)
+    hi = max(c, d)
+    sgn = 1.0_R64
+    if (hi - lo .le. 1) return
+    ! orbitals lo + 1 .. hi - 1 are the bits lo .. hi - 2
+    if (mod(popcnt(ibits(x, lo, hi - lo - 1)), 2) .eq. 1) sgn = -1.0_R64
+
+  end function
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> y = a+_creates(1) .. a+_creates(n) a_destroys(n) .. a_destroys(1) x up to
+!> the sign sgn (0 if the excitation vanishes); every operator on orbital o
+!> picks up (-1)^(occupied orbitals below o).
+  pure subroutine ExciteBits(y, sgn, creates, destroys, x)
+    integer(I64), intent(out) :: y
+    integer(I32), intent(out) :: sgn
+    integer(I32), intent(in), contiguous :: creates(:)
+    integer(I32), intent(in), contiguous :: destroys(:)
+    integer(I64), intent(in) :: x
+
+    integer(I32) :: i, o
+
+    y = x
+    sgn = 1
+
+    do i = 1, size(destroys)
+      o = destroys(i)
+      if (.not. btest(y, o - 1)) then
+        sgn = 0
+        return
       end if
-      tbits = ExciteBits(creates, destroys, bits)
-      if (tbits .eq. 0) cycle
+      if (mod(popcnt(ibits(y, 0, o - 1)), 2) .eq. 1) sgn = -sgn
+      y = ibclr(y, o - 1)
+    end do
 
-      if (bt .eq. 1) then
-        configurationBtNew = ConfigurationsFromIndexUP(abs(tbits))
-      else
-        configurationBtNew = ConfigurationsFromIndexDN(abs(tbits))
+    do i = size(creates), 1, -1
+      o = creates(i)
+      if (btest(y, o - 1)) then
+        sgn = 0
+        return
       end if
-      factor = sign(1.0_R64, real(tbits, kind=R64))
-
-      configurations(bt) = configurationBtNew
-
-      call Coeffs_IndexFromConfigurations(iCoeffNew, configurations)
-
-      coeffs(iCoeffNew) = factor * coeffsTmp(iCoeff)
-
+      if (mod(popcnt(ibits(y, 0, o - 1)), 2) .eq. 1) sgn = -sgn
+      y = ibset(y, o - 1)
     end do
 
   end subroutine

@@ -16,14 +16,11 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_OrbBased_Tdci_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
-    use M_Orbs
-    use M_Coeffs
     use M_Method
     use M_Method_Mb_OrbBased
 
-    call Say_Fabricate("method.mb.orbbased.tdci")
+    call Say_Fabricate("method.mb.orbBased.tdci")
 
     !------------------------------------
     ! set values and procedure pointers
@@ -50,7 +47,7 @@ contains
 
     integer(I32) :: nVals1, nVals2, nG, nOS
 
-    call Say_Setup("method.mb.orbbased.tdci")
+    call Say_Setup("method.mb.orbBased.tdci")
     call Method_Mb_OrbBased_Setup
 
     nG = Grid_nPoints

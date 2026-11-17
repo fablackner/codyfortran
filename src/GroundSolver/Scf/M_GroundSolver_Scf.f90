@@ -2,7 +2,7 @@
 ! Copyright (c) 2025, CodyFortran developers and contributors
 ! SPDX-License-Identifier: BSD-3-Clause
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief SCF (Time-Dependent Hartree–Exchange) backend interface module.
+!> @brief SCF (Hartree–Fock / Kohn–Sham) backend interface module.
 !>
 !> @details
 !> Provides SCF-specific procedure pointers for the ground-state solver. SCF
@@ -64,7 +64,7 @@ module M_GroundSolver_Scf
   !> @brief Pointer to the SCF Fock operator action (matrix-vector product).
   !>
   !> This callback computes F̂·φ for the iterative diagonalizer (e.g., ARPACK).
-  procedure(I_GroundSolver_Scf_HartreeFockAction), pointer :: GroundSolver_Scf_HartreeFockAction
+  procedure(I_GroundSolver_Scf_HartreeFockAction), pointer :: GroundSolver_Scf_HartreeFockAction => null()
   abstract interface
     !> @brief Apply the SCF Fock operator to an orbital.
     !>

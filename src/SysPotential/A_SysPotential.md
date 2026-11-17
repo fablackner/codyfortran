@@ -203,9 +203,9 @@ dt ≲ 2.8/‖h‖, about 4e-4 a.u. for O. A smeared nucleus is bounded by
 2Z/(√π rc) and has no cusp to resolve, so the core mesh can be coarse and
 explicit steps of about 0.01–0.05 a.u. become possible; only the core
 physics changes. With the exact field-free part
-(`method.mb.orbBased.exactFieldFreeQ`, h0 = T + V_static propagated
-implicitly by a Crank–Nicolson/Cayley step on Fem, A_Method.md "Exact
-Field-Free Part on grid.fem") the spike does not limit the step, and point
+(`fieldFree.cayley`, h0 = T + V_static propagated
+implicitly by a Crank–Nicolson/Cayley step on Fem, src/FieldFree/A_FieldFree.md,
+"Cayley Variant") the spike does not limit the step, and point
 nuclei are the accurate choice (T_Fem_05–07: dt = 0.01–0.02 with the
 Galerkin point nuclei of H2).
 

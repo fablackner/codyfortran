@@ -62,8 +62,8 @@ xc points with quadrature weights `SysXc_weights` (Σ_p w_p f_p ≈ ∫ f d^d r)
 
 | Family | Xc points | Weights |
 |--------|-----------|---------|
-| Fem | interior nodes (= `Grid_nPoints`) | lumped-mass weights `Grid_Fem_weights` |
-| Linear | nodes (= `Grid_nPoints`) | `Grid_Linear_weights` |
+| Fem | interior nodes (= `Grid_nPoints`) | lumped-mass weights `Grid_weights` |
+| Linear | nodes (= `Grid_nPoints`) | `Grid_weights` |
 | Ylm | nRadial × nTheta × nPhi angular product quadrature | w_r 2π w_q / nPhi |
 
 ### Pointers bound by the family
@@ -262,7 +262,7 @@ call SysXc_Setup                ! after Grid_Setup, before Method_Setup
   pair potentials per spin.
 - Real-time GGA: the gradient makes the kernel grow like k², and the split
   step of TDKS is stable only if every propagated h0 mode has E Δt < π. On
-  Ylm, use `method.mb.orbBased.exactFieldFreeCut` with Ec Δt < π; on
+  Ylm, use `fieldFree.eigen.cut` with Ec Δt < π; on
   grid.fem, use a ~10× smaller time step than LDA (H2 PBE: 0.005). LDA has
   no such limit. Measurements and the mechanism: A_Method.md, "Time step
   with a GGA" in the TDKS section.

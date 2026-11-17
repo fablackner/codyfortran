@@ -12,13 +12,10 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> @brief Bind the InitializeOrb pointer for grid-point δ orbitals.
   module subroutine OrbsInit_GridPoint_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
     use M_OrbsInit
-    use M_Orbs
-    use M_Grid
 
-    call Say_Fabricate("orbsInit.gridpoint")
+    call Say_Fabricate("orbsInit.gridPoint")
 
     OrbsInit_InitializeOrb => InitializeOrb
 

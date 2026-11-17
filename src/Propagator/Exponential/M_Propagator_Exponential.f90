@@ -6,9 +6,9 @@
 !>
 !> L is the part of the generator that the method propagates exactly
 !> (`Method_PropagateExactPart`, e.g. -i h0 on Ylm grids with
-!> method.mb.orbBased.exactFieldFreeQ) and whose phi functions it provides
-!> (`Method_ApplyExactPartPhi`; not available for the Cayley exact part of
-!> exactFieldFreeQ on non-Ylm grids such as grid.fem, where fabricate stops);
+!> fieldFree.eigen) and whose phi functions it provides
+!> (`Method_ApplyExactPartPhi`; not available for the Cayley exact part
+!> fieldFree.cayley of grids such as grid.fem, where fabricate stops);
 !> N is the sum of the TimeDerivative callbacks
 !> of IntegratorList(1) and IntegratorList(2) (their Integrate procedures are
 !> not used). Schemes (`"propagator.exponential.<scheme>"`):

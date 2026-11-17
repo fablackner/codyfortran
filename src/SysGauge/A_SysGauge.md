@@ -176,10 +176,10 @@ diagonal), the same for every body type (`bt_` ignored).
 
 **Why SysGauge and not SysPotential.** Keeping the laser out of SysPotential
 keeps the potential static (time- and body-type-independent), so the exact
-field-free part of Method (`method.mb.orbBased.exactFieldFreeQ`) can treat
+field-free part (a `fieldFree` block) can treat
 h0 = T + V_static exactly (on Fem a Crank–Nicolson/Cayley step preconditioned
-by `SysKinetic_SolveShifted` with the shift −2i/dt, A_Method.md "Exact
-Field-Free Part on grid.fem") while the integrator only sees the non-stiff
+by `SysKinetic_SolveShifted` with the shift −2i/dt, src/FieldFree/A_FieldFree.md,
+"Cayley Variant") while the integrator only sees the non-stiff
 diagonal E(t) e_pol·r through the existing `ApplyLinOp => gauge` wiring.
 
 ```json

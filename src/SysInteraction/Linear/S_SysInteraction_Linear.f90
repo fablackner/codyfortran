@@ -56,7 +56,6 @@ contains
   !> @param[in]  orb        Orbital (ket)
   subroutine FillInteractionSrc(src, orbConjg, orb)
     use M_Grid
-    use M_Grid_Linear
 
     complex(R64), intent(out), allocatable :: src(:)
     complex(R64), intent(in), contiguous :: orbConjg(:)
@@ -68,7 +67,7 @@ contains
 
     if (.not. allocated(src)) allocate (src(nG))
 
-    src = conjg(orbConjg) * orb * Grid_Linear_weights(:)
+    src = conjg(orbConjg) * orb * Grid_weights(:)
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

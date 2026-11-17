@@ -42,16 +42,38 @@ contains
   !> @brief Purify a singlet-symmetry 2-RDM state by iterative defect reduction.
   !>
   !> @details
-  !> This is the core algorithm implementing the Mazziotti/Alcoba-style iterative
-  !> purification for singlet systems. The 2-RDM is decomposed into spin-adapted
-  !> blocks and both D²- and Q²-conditions are enforced simultaneously.
+  !> This is the Mazziotti/Alcoba-style iterative purification for singlet
+  !> systems: unpack the (up,down) block, reduce it
+  !> (Purification_Singlet_Reduce_PurifyRdm2ab), pack it.
   !>
   !> @param[inout] twoRdmState  Packed 2-RDM (Singlet layout: α-β block).
   !> @param[in]    h2           Two-body Hamiltonian for optional energy conservation
-  !>                            (full spin-orbital tensor, see M_Purification;
-  !>                            the (up,down) block alone is accepted as well).
+  !>                            (full spin-orbital tensor, see M_Purification).
   subroutine PurifyTwoRdmState(twoRdmState, h2)
     use M_TwoRdm_Fermionic_Singlet
+
+    complex(R64), intent(inout), contiguous  :: twoRdmState(:)
+    complex(R64), intent(in), contiguous     :: h2(:, :, :, :)
+
+    complex(R64), allocatable :: rdm2ab(:, :, :, :)        !< Full α-β 2-RDM
+    complex(R64), allocatable :: h2Tr0(:, :, :, :)         !< Trace-free energy direction
+
+    call TwoRdm_Fermionic_Singlet_FillRdm2abFromTwoRdmState(rdm2ab, twoRdmState)
+
+    if (conserveEnergyQ) then
+      call Purification_Singlet_Reduce_FillEnergyDirection(h2Tr0, h2, size(rdm2ab, 1))
+      call Purification_Singlet_Reduce_PurifyRdm2ab(rdm2ab, nSteps, threshold, h2Tr0_=h2Tr0)
+    else
+      call Purification_Singlet_Reduce_PurifyRdm2ab(rdm2ab, nSteps, threshold)
+    end if
+
+    call TwoRdm_Fermionic_Singlet_FillTwoRdmStateFromRdm2ab(twoRdmState, rdm2ab)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Purification_Singlet_Reduce_PurifyRdm2ab(rdm2ab, nSteps, threshold, h2Tr0_)
+    use M_Method_Mb
     use M_Utils_RdmHole
     use M_Utils_RdmAlgebra
     use M_Utils_RdmDefective
@@ -59,30 +81,21 @@ contains
     use M_Utils_RdmEnforceTraceM2anti
     use M_Utils_RdmProjection
 
-    complex(R64), intent(inout), contiguous  :: twoRdmState(:)
-    complex(R64), intent(in), contiguous     :: h2(:, :, :, :)
+    complex(R64), intent(inout), contiguous :: rdm2ab(:, :, :, :)
+    integer(I32), intent(in) :: nSteps
+    real(R64), intent(in) :: threshold
+    complex(R64), intent(in), contiguous, optional :: h2Tr0_(:, :, :, :)
 
-    ! Local 2-RDM arrays
-    complex(R64), allocatable :: rdm2ab(:, :, :, :)        !< Full α-β 2-RDM
-    complex(R64), allocatable :: rdm2singlet(:, :, :, :)   !< Singlet (S=0) block
-    complex(R64), allocatable :: rdm2triplet(:, :, :, :)   !< Triplet (S=1) block
-
-    ! Local 2-hole-RDM (Q-RDM) arrays
-    complex(R64), allocatable :: qrdm2ab(:, :, :, :)       !< Full α-β Q-RDM
-    complex(R64), allocatable :: qrdm2singlet(:, :, :, :)  !< Singlet Q-RDM block
-    complex(R64), allocatable :: qrdm2triplet(:, :, :, :)  !< Triplet Q-RDM block
+    ! Spin-adapted blocks of D² and of the 2-hole-RDM Q²
+    complex(R64), allocatable :: rdm2singlet(:, :, :, :), rdm2triplet(:, :, :, :)
+    complex(R64), allocatable :: qrdm2ab(:, :, :, :), qrdm2singlet(:, :, :, :), qrdm2triplet(:, :, :, :)
 
     ! Defective (negative eigenspace) parts, made trace-free
     complex(R64), allocatable :: rdm2singletDefectiveTr0(:, :, :, :)
     complex(R64), allocatable :: rdm2tripletDefectiveTr0(:, :, :, :)
     complex(R64), allocatable :: qrdm2singletDefectiveTr0(:, :, :, :)
     complex(R64), allocatable :: qrdm2tripletDefectiveTr0(:, :, :, :)
-
-    ! Energy conservation workspace
-    complex(R64), allocatable :: h2ab(:, :, :, :)          !< (up,down) block of h²
-    complex(R64), allocatable :: h2Tr0(:, :, :, :)         !< Trace-free energy functional
-    complex(R64), allocatable :: correction(:, :, :, :)    !< Accumulated correction
-    complex(R64), allocatable :: tmp(:, :, :, :)           !< Temporary workspace
+    complex(R64), allocatable :: correction(:, :, :, :)    !< Correction of one step
 
     ! Minimum eigenvalues across blocks
     real(R64)    :: minSingletRdm2, minSingletQrdm2
@@ -91,46 +104,6 @@ contains
 
     integer(I32) :: i               !< Iteration counter
     integer(I32) :: nNegative       !< Count of negative eigenvalues (diagnostic)
-    integer(I32) :: nOa             !< Number of spin-up orbitals
-
-    !---------------------------------------------------------------------------
-    ! Step 1: Unpack the 2-RDM from the compressed state vector
-    !---------------------------------------------------------------------------
-    call TwoRdm_Fermionic_Singlet_FillRdm2abFromTwoRdmState(rdm2ab, twoRdmState)
-
-    !---------------------------------------------------------------------------
-    ! Optional: Prepare trace-free h² for energy-conserving projection
-    !---------------------------------------------------------------------------
-    if (conserveEnergyQ) then
-      ! The (up,down) block of h2; a full spin-orbital h2 is reduced to it
-      nOa = size(rdm2ab, 1)
-      if (size(h2, 1) .eq. nOa) then
-        allocate (h2ab, source=h2)
-      else if (size(h2, 1) .eq. 2 * nOa) then
-        h2ab = h2(1:nOa, nOa + 1:2 * nOa, 1:nOa, nOa + 1:2 * nOa)
-      else
-        error stop "Purification_Singlet_Reduce: h2 matches neither the (up,down) block nor the spin-orbital basis"
-      end if
-
-      ! For a singlet the up-up block follows from the (up,down) block,
-      ! D_aa = D_ab - P12 D_ab, so the two-body energy as a functional of
-      ! D_ab is <4 h2 - 2 P12 h2 | D_ab> = <2 h2_singlet + 6 h2_triplet | D_ab>.
-      ! Corrections orthogonal to (trace-free) h2_singlet + 3 h2_triplet
-      ! therefore conserve the energy (the 1-RDM is unchanged anyway).
-      allocate (h2Tr0, mold=h2ab)
-      h2Tr0 = 0.0_R64
-
-      call RdmAlgebra_FillSingletPart(tmp, h2ab)
-      call RdmEnforceTraceM2sym_Apply(tmp)
-      h2Tr0 = h2Tr0 + tmp
-      deallocate (tmp)
-
-      call RdmAlgebra_FillTripletPart(tmp, h2ab)
-      call RdmEnforceTraceM2anti_Apply(tmp)
-      h2Tr0 = h2Tr0 + 3.0_R64 * tmp
-
-      if (allocated(tmp)) deallocate (tmp)
-    end if
 
     !---------------------------------------------------------------------------
     ! Step 2: Iterative purification loop
@@ -157,14 +130,14 @@ contains
 
       ! Accumulate and apply correction to D²
       correction = rdm2singletDefectiveTr0 + rdm2tripletDefectiveTr0
-      if (conserveEnergyQ) call RdmProjection_Apply(correction, h2Tr0)
+      if (present(h2Tr0_)) call RdmProjection_Apply(correction, h2Tr0_)
       rdm2ab = rdm2ab - correction
 
       !------------------------
       ! 2b. Purify Q² (hole-RDM)
       !------------------------
       ! Compute Q-RDM from updated D²
-      call RdmHole_FillQrdm2ab(qrdm2ab, rdm2ab)
+      call RdmHole_FillQrdm2ab(qrdm2ab, rdm2ab, Method_Mb_nBodies(1), Method_Mb_nBodies(2))
 
       ! Decompose into spin-adapted blocks
       call RdmAlgebra_FillSingletPart(qrdm2singlet, qrdm2ab)
@@ -179,7 +152,7 @@ contains
 
       ! Note: Q-RDM correction applied to D² (not Q²) due to the mapping
       correction = qrdm2singletDefectiveTr0 + qrdm2tripletDefectiveTr0
-      if (conserveEnergyQ) call RdmProjection_Apply(correction, h2Tr0)
+      if (present(h2Tr0_)) call RdmProjection_Apply(correction, h2Tr0_)
       rdm2ab = rdm2ab - correction
 
       !------------------------
@@ -187,7 +160,7 @@ contains
       !------------------------
       minEval = min(minSingletRdm2, minTripletRdm2, minSingletQrdm2, minTripletQrdm2)
 
-      if (i == 1 .and. minEval < threshold) then
+      if (i .eq. 1 .and. minEval < threshold) then
         write (*, *)
         write (*, '(A,E16.6)') " PURIFICATION start with min eval", minEval
       end if
@@ -197,10 +170,32 @@ contains
     write (*, '(A,E16.6, A, I6)') " PURIFICATION ended with min eval", minEval, " at step ", i
     write (*, *)
 
-    !---------------------------------------------------------------------------
-    ! Step 3: Repack the purified 2-RDM into the state vector
-    !---------------------------------------------------------------------------
-    call TwoRdm_Fermionic_Singlet_FillTwoRdmStateFromRdm2ab(twoRdmState, rdm2ab)
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Purification_Singlet_Reduce_FillEnergyDirection(h2Tr0, h2, nOa)
+    use M_Utils_RdmAlgebra
+    use M_Utils_RdmEnforceTraceM2sym
+    use M_Utils_RdmEnforceTraceM2anti
+
+    complex(R64), intent(out), allocatable :: h2Tr0(:, :, :, :)
+    complex(R64), intent(in), contiguous :: h2(:, :, :, :)
+    integer(I32), intent(in) :: nOa
+
+    complex(R64), allocatable :: h2ab(:, :, :, :), tmp(:, :, :, :)
+
+    ! The (up,down) block of the spin-orbital h2
+    if (size(h2, 1) .ne. 2 * nOa) error stop "Purification_Singlet_Reduce: h2 must be the spin-orbital tensor (2 nOa)^4"
+    h2ab = h2(1:nOa, nOa + 1:2 * nOa, 1:nOa, nOa + 1:2 * nOa)
+
+    call RdmAlgebra_FillSingletPart(tmp, h2ab)
+    call RdmEnforceTraceM2sym_Apply(tmp)
+    h2Tr0 = tmp
+    deallocate (tmp)
+
+    call RdmAlgebra_FillTripletPart(tmp, h2ab)
+    call RdmEnforceTraceM2anti_Apply(tmp)
+    h2Tr0 = h2Tr0 + 3.0_R64 * tmp
 
   end subroutine
 

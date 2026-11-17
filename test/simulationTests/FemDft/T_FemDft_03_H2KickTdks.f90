@@ -2,7 +2,7 @@
 !> Real-time TDDFT (method.mb.orbBased.tdks, adiabatic LDA) of H2 on the mesh of
 !> T_Fem_03 from the Kohn-Sham ground state of T_FemDft_02 (orb01_01.in), with
 !> the split-step propagator, the Cayley exact field-free part and the frozen
-!> Kohn-Sham reference (exactFieldFreeMeanFieldQ): h0 + U exactly, U =
+!> Kohn-Sham reference (fieldFree.cayley.meanFieldQ): h0 + U exactly, U =
 !> v_KS[rho(0+)] (= v_KS of the ground state, the kick keeps the density), and
 !> v_KS[rho(t)] - U by RK4, which vanishes at the ground state:
 !>  - kick e^(iκz): E(0+) - E(0) = N κ²/2 (the density, hence E_H and E_xc,

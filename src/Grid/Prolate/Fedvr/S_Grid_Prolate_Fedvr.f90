@@ -146,8 +146,9 @@ contains
               Grid_Prolate_xiKinMatrix(iGlobal1, iGlobal2, 0) = Grid_Prolate_xiKinMatrix(iGlobal1, iGlobal2, 0) + &
                                                                 elementWeights(kLocal) * (elementPoints(kLocal)**2 - 1.0_R64) * &
                                                                 dRef(kLocal, iLocal1) * dRef(kLocal, iLocal2) / element % size**2
-              Grid_Prolate_xiKinMatrix(iGlobal1, iGlobal2, 1) = Grid_Prolate_xiKinMatrix(iGlobal1, iGlobal2, 1) + &
-                                                                elementWeights(kLocal) * gOdd(kLocal, iLocal1) * gOdd(kLocal, iLocal2)
+              Grid_Prolate_xiKinMatrix(iGlobal1, iGlobal2, 1) = &
+                Grid_Prolate_xiKinMatrix(iGlobal1, iGlobal2, 1) + &
+                elementWeights(kLocal) * gOdd(kLocal, iLocal1) * gOdd(kLocal, iLocal2)
               Grid_Prolate_xiCentrifugalMatrix(iGlobal1, iGlobal2, 1) = &
                 Grid_Prolate_xiCentrifugalMatrix(iGlobal1, iGlobal2, 1) + &
                 elementWeights(kLocal) * vOdd(kLocal, iLocal1) * vOdd(kLocal, iLocal2)

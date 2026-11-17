@@ -33,6 +33,13 @@ submodule(M_CoeffsInit_Load) S_CoeffsInit_Load
 
   implicit none
 
+  !=============================================================================
+  ! local data
+  !=============================================================================
+
+  !> Directory of coeffs.in (coeffsInit.load.dir, "" = working directory)
+  character(len=:), allocatable :: dir
+
 contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -51,7 +58,7 @@ contains
     ! set values and procedure pointers
     !------------------------------------
 
-    CoeffsInit_Load_dir = Json_Get("coeffsInit.load.dir", "")
+    dir = Json_Get("coeffsInit.load.dir", "")
 
     CoeffsInit_Initialize => Initialize
 
@@ -78,7 +85,7 @@ contains
     character(len=:), allocatable :: filename
 
     filename = "coeffs.in"
-    if (len_trim(CoeffsInit_Load_dir) > 0) filename = trim(CoeffsInit_Load_dir)//"/"//filename
+    if (len_trim(dir) > 0) filename = trim(dir)//"/"//filename
 
     call LoadData(coeffs, filename, storage_size(coeffs))
 

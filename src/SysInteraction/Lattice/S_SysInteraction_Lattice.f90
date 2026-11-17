@@ -42,7 +42,7 @@ contains
       call SysInteraction_Lattice_OnSite_Fabricate
 
     else
-      error stop "sysInteraction.lattice is missing one of: OnSite"
+      error stop "sysInteraction.lattice is missing one of: onSite"
     end if
 
   end subroutine

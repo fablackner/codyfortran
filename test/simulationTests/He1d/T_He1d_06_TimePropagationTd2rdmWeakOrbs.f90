@@ -3,6 +3,7 @@
 !> non-stationary) He1d initial state, no reconstruction (N = 2). Checks exact
 !> energy conservation and the final natural occupations against the
 !> unrestricted RK4 reference (spin-summed 1-RDM path of the restricted case).
+!> Reads the MCTDHF ground state of T_He1d_04 (orb*.in and rdm2Bt*.in).
 program T_He1d_06_TimePropagationTd2rdmWeakOrbs
   use M_Utils_Types
   use M_Utils_Say

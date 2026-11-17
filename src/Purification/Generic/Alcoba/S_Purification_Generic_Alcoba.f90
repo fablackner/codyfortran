@@ -14,13 +14,8 @@ contains
 
     call Say_Fabricate("purification.generic.alcoba")
 
-    !------------------------------------
-    ! set values and procedure pointers
-    !------------------------------------
-
-    !------------------------------------
-    ! branch
-    !------------------------------------
+    ! Placeholder: without this stop the run would continue unpurified
+    error stop "purification.generic.alcoba is not implemented"
 
   end subroutine
 

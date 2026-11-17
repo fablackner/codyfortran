@@ -25,6 +25,7 @@ contains
     !------------------------------------
 
     alpha = Json_Get("alpha", 1.0_R64, path_="mixing.linear")
+    if (.not. (alpha > 0.0_R64 .and. alpha <= 1.0_R64)) error stop "mixing.linear.alpha must be in (0, 1]"
 
     !------------------------------------
     ! set values and procedure pointers

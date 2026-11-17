@@ -89,9 +89,6 @@ contains
 !>
 !> @param[out] twoRdmState  Linearized 2-RDM state vector
   subroutine Initialize(twoRdmState)
-    use M_Utils_Say
-    use M_Utils_DataStorage
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
     use M_TwoRdm
 

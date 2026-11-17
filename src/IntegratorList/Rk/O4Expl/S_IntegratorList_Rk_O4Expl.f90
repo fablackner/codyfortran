@@ -53,7 +53,6 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Fabricate(this)
-    use M_Utils_Json
     use M_Utils_Say
 
     class(T_IntegratorList_E_Rk_O4Expl), intent(inout) :: this
@@ -69,7 +68,6 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Setup(this)
     use M_Utils_Say
-    use M_Utils_UnusedVariables
 
     class(T_IntegratorList_E_Rk_O4Expl), intent(inout) :: this
 

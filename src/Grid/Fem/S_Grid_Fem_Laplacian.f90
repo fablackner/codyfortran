@@ -636,6 +636,7 @@ contains
   !> part = Re(f) or Im(f) (imagQ), times the 3D weights if weightedQ.
   subroutine ExtractPart(part, f, imagQ, weightedQ)
 !$  use omp_lib, only: omp_in_parallel
+    use M_Grid, only: Grid_weights
 
     real(R64), intent(out), contiguous   :: part(:)
     complex(R64), intent(in), contiguous :: f(:)
@@ -651,7 +652,7 @@ contains
       else
         part(i) = real(f(i), kind=R64)
       end if
-      if (weightedQ) part(i) = part(i) * Grid_Fem_weights(i)
+      if (weightedQ) part(i) = part(i) * Grid_weights(i)
     end do
     !$omp end parallel do
 
@@ -663,6 +664,7 @@ contains
   !> weightedQ and times factor_ (default 1), in one pass over f.
   subroutine ExtractParts(parts, f, weightedQ, factor_)
 !$  use omp_lib, only: omp_in_parallel
+    use M_Grid, only: Grid_weights
 
     real(R64), allocatable, intent(out)  :: parts(:, :)
     complex(R64), intent(in), contiguous :: f(:)
@@ -683,7 +685,7 @@ contains
     !$omp parallel do default(shared) private(i, scale) schedule(static) if (.not. omp_in_parallel())
     do i = 1, size(f)
       scale = factor
-      if (weightedQ) scale = scale * Grid_Fem_weights(i)
+      if (weightedQ) scale = scale * Grid_weights(i)
       parts(i, 1) = real(f(i), kind=R64) * scale
       if (nParts > 1) parts(i, 2) = aimag(f(i)) * scale
     end do

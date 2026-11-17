@@ -82,30 +82,17 @@ module M_TwoRdm_Fermionic_SingletTr0
   procedure(I_TwoRdm_Fermionic_SingletTr0_FillTwoRdmStateFromRdms), pointer &
     :: TwoRdm_Fermionic_SingletTr0_FillTwoRdmStateFromRdms
   abstract interface
-    !> Pack the trace-free 2-RDM and 1-RDM into the backend’s linearized format.
+    !> Pack the trace-free 2-RDM and 1-RDM into the backend’s linearized
+    !> format; the segment of an absent argument is left as it is.
     subroutine I_TwoRdm_Fermionic_SingletTr0_FillTwoRdmStateFromRdms(twoRdmState, rdm2abTr0_, rdm1a_)
       import :: R64
-      !> Output linearized 2‑RDM (pre‑allocated; size must match backend layout).
-      complex(R64), intent(out), contiguous  :: twoRdmState(:)
+      !> Linearized 2‑RDM (pre‑allocated; size must match backend layout), the
+      !> segments of the present arguments overwritten.
+      complex(R64), intent(inout), contiguous  :: twoRdmState(:)
       !> Input trace-free ab 2‑RDM tensor with shape (n, n, n, n).
       complex(R64), intent(in), contiguous, optional   :: rdm2abTr0_(:, :, :, :)
       !> Input 1-RDM tensor with shape (n, n).
       complex(R64), intent(in), contiguous, optional   :: rdm1a_(:, :)
-    end subroutine
-  end interface
-
-  !> Pointer to the procedure extracting trace-free 2-RDM and 1-RDM from linearized state.
-  procedure(I_TwoRdm_Fermionic_SingletTr0_FillRdmsFromTwoRdmState), pointer :: TwoRdm_Fermionic_SingletTr0_FillRdmsFromTwoRdmState
-  abstract interface
-    !> Unpack the backend’s linearized 2‑RDM into trace-free 2-RDM and 1-RDM.
-    subroutine I_TwoRdm_Fermionic_SingletTr0_FillRdmsFromTwoRdmState(twoRdmState, rdm2abTr0_, rdm1a_)
-      import :: R64
-      !> Input linearized 2‑RDM.
-      complex(R64), intent(in), contiguous   :: twoRdmState(:)
-      !> Output trace-free ab 2‑RDM tensor with shape (n, n, n, n).
-      complex(R64), intent(out), allocatable, optional :: rdm2abTr0_(:, :, :, :)
-      !> Output 1-RDM tensor with shape (n, n).
-      complex(R64), intent(out), allocatable, optional :: rdm1a_(:, :)
     end subroutine
   end interface
 
@@ -118,20 +105,6 @@ module M_TwoRdm_Fermionic_SingletTr0
       import :: R64
       !> Allocated on output: ab tensor with shape (n, n, n, n) over spatial orbitals.
       complex(R64), intent(out), allocatable :: rdm2ab(:, :, :, :)
-      !> Input linearized 2‑RDM.
-      complex(R64), intent(in), contiguous   :: twoRdmState(:)
-    end subroutine
-  end interface
-
-  !> Pointer to the procedure extracting the 1-RDM from the linearized 2-RDM.
-  procedure(I_TwoRdm_Fermionic_SingletTr0_FillRdm1aFromTwoRdmState), pointer &
-    :: TwoRdm_Fermionic_SingletTr0_FillRdm1aFromTwoRdmState
-  abstract interface
-    !> Extract the 1-RDM from the backend’s linearized 2‑RDM.
-    subroutine I_TwoRdm_Fermionic_SingletTr0_FillRdm1aFromTwoRdmState(rdm1a, twoRdmState)
-      import :: R64
-      !> Allocated on output: 1-RDM with shape (n, n).
-      complex(R64), intent(out), allocatable :: rdm1a(:, :)
       !> Input linearized 2‑RDM.
       complex(R64), intent(in), contiguous   :: twoRdmState(:)
     end subroutine

@@ -21,7 +21,7 @@ This quantity is central to:
 src/TwoRdmInit/
 ├── M_TwoRdmInit.f90              # Public interface (procedure pointers)
 ├── S_TwoRdmInit.f90              # Factory dispatcher + block assembly
-├── AGENTS.md                     # This file
+├── A_TwoRdmInit.md               # This file
 ├── Excited/
 │   ├── M_TwoRdmInit_Excited.f90  # Excited-state interface
 │   └── S_TwoRdmInit_Excited.f90  # Build D² from 1-RDM products
@@ -80,24 +80,14 @@ src/TwoRdmInit/
 ```json
 {
   "twoRdmInit": {
-    "excited": {
-      "creates": [3],
-      "destroys": [1],
-      "bodyType1": 1,
-      "bodyType2": 2
-    }
+    "excited": { }
   }
 }
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `creates` | int[] | [1] | Orbital indices to occupy |
-| `destroys` | int[] | [1] | Orbital indices to vacate |
-| `bodyType1` | int | 1 | Body type for creates/destroys |
-| `bodyType2` | int | 2 | Second body type |
-
-**Note**: The creates/destroys parameters are currently read but not fully wired up in the implementation. See "Known Issues" below.
+The 2-RDM of the Hartree-Fock determinant. The excitation keys `creates`,
+`destroys`, `bodyType1` and `bodyType2` are not implemented and stop at
+fabricate; see "Known Issues" below.
 
 ### Load: Read from Files
 
@@ -156,21 +146,18 @@ The 1-RDM is constructed as a diagonal matrix with occupation numbers:
 
 ## Typical Usage
 
+Programs fabricate and set up the module next to the others; the TD-2RDM
+methods (`method.mb.orbBased.td2rdm`, `td2rdmStaticOrbs`) call
+`TwoRdmInit_Initialize` in their `Method_Setup`, on their view
+`TwoRdm_twoRdmState` of `Method_state`:
+
 ```fortran
-! Initialization sequence
-call TwoRdm_Fabricate           ! Set up 2-RDM module first
-call TwoRdmInit_Fabricate       ! Reads JSON, binds implementation
-
+call TwoRdm_Fabricate           ! sets TwoRdm_nElements
+call TwoRdmInit_Fabricate       ! reads JSON, binds the implementation
+...
 call TwoRdm_Setup
-call TwoRdmInit_Setup           ! Currently no-op
-
-! Initialize the 2-RDM state
-complex(R64), allocatable :: twoRdmState(:)
-allocate(twoRdmState(TwoRdm_nTwoRdmState))
-call TwoRdmInit_Initialize(twoRdmState)
-
-! Now twoRdmState is ready for propagation
-call Propagator_Propagate(state, t0, t1)
+call TwoRdmInit_Setup           ! no-op
+call Method_Setup               ! calls TwoRdmInit_Initialize(TwoRdm_twoRdmState)
 ```
 
 ---
@@ -242,41 +229,24 @@ call Propagator_Propagate(state, t0, t1)
 
 ## Known Issues and TODOs
 
-### 1. Unused Configuration Parameters (Excited)
+### 1. Excitations Not Implemented (Excited)
 
-The `creates` and `destroys` arrays are read from JSON but the local variables `initCreatesBt1`, `initDestroysBt1`, etc. are hardcoded to `[1]`:
-
-```fortran
-! In S_TwoRdmInit_Excited.f90
-creates = Json_Get("twoRdmInit.excited.creates", [1])    ! Read but unused!
-destroys = Json_Get("twoRdmInit.excited.destroys", [1])  ! Read but unused!
-...
-allocate(initDestroysBt1, source=[1])  ! Hardcoded!
-```
-
-**Suggested fix**: Wire up the module-level `creates`/`destroys` to the block initialization logic, respecting `bodyType1`/`bodyType2`.
+The local excitation arrays `initCreatesBt1`, `initDestroysBt1`, etc. of
+`InitializeBlock` are hardcoded to `[1]` (an excitation 1 → 1 that changes
+nothing), so the backend builds the Hartree-Fock determinant. The JSON keys
+`creates`, `destroys`, `bodyType1` and `bodyType2` stop at fabricate until
+they are wired up to the block initialization, respecting the body types.
 
 ### 2. Memory Efficiency
 
 The `Initialize` routine allocates a full O(nOrbs⁴) tensor before packing. For large orbital spaces, consider direct packing strategies that work block-by-block without materializing the full tensor.
-
-### 3. Missing File Existence Check (Load)
-
-The Load implementation will crash if files don't exist. Consider adding existence checks with informative error messages:
-
-```fortran
-inquire(file=trim(filename), exist=file_exists)
-if (.not. file_exists) then
-  error stop "TwoRdmInit_Load: File not found: "//trim(filename)
-end if
-```
 
 ---
 
 ## Testing
 
 The module is exercised by TD-2RDM propagation tests:
-- `test/T_He1d_06_TimePropagationTd2rdm.f90` — Uses Load strategy
+- `test/simulationTests/He1d/T_He1d_06_TimePropagationTd2rdm.f90` — Uses Load strategy
 
 Run relevant tests:
 ```bash

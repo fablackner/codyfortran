@@ -13,7 +13,10 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   !   - Hamiltonian matrix construction (h1, h2)
   !   - Energy calculation via RDM contraction
   !
-  ! Delegates to specific methods: TDCI, TDHX, MCTDHX, TD-2RDM, TD-2RDM-StaticOrbs
+  ! Delegates to specific methods: TDCI, TDHX, MCTDHX, TD-2RDM, TD-2RDM-StaticOrbs, TDKS
+  !
+  ! The definite-m node path of the correlation operator and of h2 (Ylm grids)
+  ! is the child submodule S_Method_Mb_OrbBased_YlmNodes.
   !-----------------------------------------------------------------------------
 
   implicit none
@@ -21,20 +24,6 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   !=============================================================================
   ! local data
   !=============================================================================
-
-  !> Target group (m, body type) of the definite-m node path: its columns
-  !> (pair colPair, orbital colOrb), those of stored pairs first (nColStored,
-  !> the only ones entering h2), its orbitals, the offset of its stored
-  !> columns in the h2 columns of all groups and the 2-RDM weights
-  !> (columns x orbitals).
-  type :: T_TargetGroup
-    integer(I32), allocatable :: colPair(:)
-    integer(I32), allocatable :: colOrb(:)
-    integer(I32), allocatable :: orbs(:)
-    integer(I32) :: nColStored = 0
-    integer(I32) :: colOffset = 0
-    complex(R64), allocatable :: weights(:, :)
-  end type
 
   !> Whether the definite-m node path is bound (Method_Mb_OrbBased_Fabricate).
   logical :: ylmNodesQ = .false.
@@ -48,16 +37,38 @@ submodule(M_Method_Mb_OrbBased) S_Method_Mb_OrbBased
   !> h1 at its first call), reset by Method_Mb_OrbBased_Setup.
   complex(R64), allocatable :: h0Static(:, :)
 
-  !> Skeleton of the node path (SetupYlmNodes): ordered pairs (k2, l2), every
-  !> unordered pair followed by its swap, with M = m_k2 - m_l2 and the index of
-  !> the stored potential (negative for the swap: conjugate); the target groups
-  !> with their total stored (h2) and largest column count; the quadrature
-  !> weights.
-  integer(I32), allocatable :: nodePairK2(:), nodePairL2(:), nodePairM(:), nodePairPot(:)
-  integer(I32) :: nodeNPots = 0
-  type(T_TargetGroup), allocatable :: nodeGroups(:)
-  integer(I32) :: nodeNH2Cols = 0, nodeMaxCols = 0
-  real(R64), allocatable :: nodeWeights(:)
+  !=============================================================================
+  ! procedures of the child submodule S_Method_Mb_OrbBased_YlmNodes
+  !=============================================================================
+
+  interface
+    !> Whether the definite-m node quadrature applies: Hermitian Ylm grid and
+    !> a body-type-independent Ylm interaction within the node tables.
+    module function YlmNodesFastPathQ() result(res)
+      logical :: res
+    end function
+
+    !> Skeleton of the node path from the declared m of the stored orbitals.
+    module subroutine SetupYlmNodes
+    end subroutine
+
+    !> Method_Mb_OrbBased_ApplyCorrelationOp for orbitals of declared m.
+    module subroutine ApplyCorrelationOpYlmNodes(dOrbs, orbs, invRdm1, rdm2, time, h2_)
+      complex(R64), intent(inout), contiguous, target :: dOrbs(:, :)
+      complex(R64), intent(in), contiguous, target    :: orbs(:, :)
+      complex(R64), intent(in), contiguous             :: invRdm1(:, :)
+      complex(R64), intent(in), contiguous             :: rdm2(:, :, :, :)
+      real(R64), intent(in)                  :: time
+      complex(R64), intent(out), allocatable, optional :: h2_(:, :, :, :)
+    end subroutine
+
+    !> Method_Mb_OrbBased_FillH2 for orbitals of declared m.
+    module subroutine FillH2YlmNodes(h2, orbs, time)
+      complex(R64), intent(out), allocatable :: h2(:, :, :, :)
+      complex(R64), intent(in), contiguous   :: orbs(:, :)
+      real(R64), intent(in)                  :: time
+    end subroutine
+  end interface
 
 contains
 
@@ -69,34 +80,23 @@ contains
     ! JSON keys read:
     !   - method.mb.orbBased.nOrbs:                 Orbitals per body type
     !   - method.mb.orbBased.regularizationParameter: Numerical stability (default 1e-10)
-    !   - method.mb.orbBased.exactFieldFreeQ:       Exact field-free one-body
-    !                                               propagation in split steps (default false;
-    !                                               Ylm: eigen-decomposition, grids with
-    !                                               SysKinetic_SolveShifted: Cayley step)
-    !   - method.mb.orbBased.exactFieldFreeGpuQ:    cuBLAS variant of the exact
-    !                                               propagation (default false; Ylm)
-    !   - method.mb.orbBased.exactFieldFreeCut:     Spectral cut energy of h0
-    !                                               (default 0 = off; mctdhx and tdks,
-    !                                               Ylm only)
-    !   - method.mb.orbBased.exactFieldFreeTol, exactFieldFreeKrylovDim,
-    !     exactFieldFreeMaxRestarts:                GMRES controls of the Cayley step
-    !                                               (read at setup; 1e-12, 30, 20)
-    !   - method.mb.orbBased.exactFieldFreeMeanFieldQ: Frozen mean-field reference
-    !                                               U = J0 - K0 in the Cayley step
-    !                                               (default false; mctdhx, non-Ylm)
     !   - method.mb.orbBased.mOfOrbs:               Declared m of every spin
     !                                               orbital (Ylm grids, optional)
     !   - method.mb.orbBased.adiabaticSwitching.switchTime: interaction switched
     !                                               on over -T < t < 0
     !                                               (S_Method_Mb_OrbBased_Switching)
     !
+    ! With a "fieldFree" block (M_FieldFree, fabricated before Method) the
+    ! linear split-step operator carries only the gauge coupling.
+    !
     ! Binds default operator-application procedures, then branches to the
-    ! selected method (TDCI, TDHX, MCTDHX, TD-2RDM, or TD-2RDM-StaticOrbs).
+    ! selected method (TDCI, TDHX, MCTDHX, TD-2RDM, TD-2RDM-StaticOrbs or TDKS).
     !---------------------------------------------------------------------------
     use M_Utils_Json
     use M_Utils_Say
     use M_Utils_NoOpProcedures
     use M_Grid_Ylm
+    use M_FieldFree
     use M_Method
     use M_Method_Mb
     use M_Method_Mb_OrbBased_Tdci
@@ -106,6 +106,11 @@ contains
     use M_Method_Mb_OrbBased_Td2rdmStaticOrbs
     use M_Method_Mb_OrbBased_Tdks
 
+    !> Endings of the method.mb.orbBased.exactFieldFree* keys that became the
+    !> fieldFree block.
+    character(len=11), parameter :: FORMER_KEYS(7) = &
+                                    [character(len=11) :: "Q", "GpuQ", "Cut", "Tol", "KrylovDim", "MaxRestarts", "MeanFieldQ"]
+
     integer(I32) :: i, ibt, index, counter
 
     call Say_Fabricate("method.mb.orbBased")
@@ -114,7 +119,6 @@ contains
     ! parse orbital configuration
     !------------------------------------
 
-    allocate (Method_Mb_OrbBased_nOrbs(Method_Mb_nBodyTypes))
     Method_Mb_OrbBased_nOrbs = Json_Get("method.mb.orbBased.nOrbs", [(0, i=1, Method_Mb_nBodyTypes)])
 
     Method_Mb_OrbBased_nOrbsSum = sum(Method_Mb_OrbBased_nOrbs)
@@ -123,6 +127,10 @@ contains
     ! build orbital index mappings
     !------------------------------------
 
+    ! A repeated fabricate replaces the index mappings of the earlier one
+    if (allocated(Method_Mb_OrbBased_bodyTypeOfOrb)) deallocate (Method_Mb_OrbBased_bodyTypeOfOrb)
+    if (allocated(Method_Mb_OrbBased_nOrbsStart)) deallocate (Method_Mb_OrbBased_nOrbsStart)
+    if (allocated(Method_Mb_OrbBased_nOrbsEnd)) deallocate (Method_Mb_OrbBased_nOrbsEnd)
     allocate (Method_Mb_OrbBased_bodyTypeOfOrb(Method_Mb_OrbBased_nOrbsSum))
     allocate (Method_Mb_OrbBased_nOrbsStart(Method_Mb_nBodyTypes))
     allocate (Method_Mb_OrbBased_nOrbsEnd(Method_Mb_nBodyTypes))
@@ -200,73 +208,37 @@ contains
       Method_Mb_OrbBased_ApplyInteractionOp => NoOpProcedures_ApplyInteractionOp
     end if
 
-    ! Exact field-free one-body propagation: the linear split-step integrator
-    ! then only propagates the gauge coupling (the target bound above); the
-    ! methods with a split-step linear part bind Method_PropagateExactPart.
-    ! The four exact-part entry points are reset here, by their only owner
-    ! (no binding of an earlier fabricate survives); BindExactFieldFree binds
-    ! those of the variant, the others stay null.
-    nullify (Method_Mb_OrbBased_SetupFieldFree, Method_Mb_OrbBased_PropagateFieldFree, &
-             Method_Mb_OrbBased_ApplyFieldFreePhi, Method_Mb_OrbBased_ProjectBelowFieldFreeCut)
-    Method_Mb_OrbBased_exactFieldFreeQ = Json_Get("method.mb.orbBased.exactFieldFreeQ", .false.)
-    if (Method_Mb_OrbBased_exactFieldFreeQ) then
+    ! Exact field-free part (M_FieldFree, a "fieldFree" block; a bound
+    ! FieldFree_Propagate): the linear split-step integrator then only
+    ! propagates the gauge coupling (the target bound above) and the methods
+    ! with a split-step linear part bind Method_PropagateExactPart to
+    ! FieldFree_Propagate. A fabricate of FieldFree that did not read this
+    ! input would leave the exact part of another one (or none) bound.
+    if (Json_GetExistence("fieldFree") .neqv. associated(FieldFree_Propagate)) &
+      error stop "method.mb.orbBased: call FieldFree_Fabricate before Method_Fabricate (it reads the fieldFree block)"
+    if (associated(FieldFree_Propagate)) then
       Method_Mb_OrbBased_ApplyLinOp => ApplyDrivingOp
-      call BindExactFieldFree
     else
       Method_Mb_OrbBased_ApplyLinOp => ApplySingleBodyOpLin
     end if
 
-    ! Frozen mean-field reference of the Cayley exact part: h0 + U exactly,
-    ! the interaction minus U in the nonlinear part of MCTDHX (fermions; the
-    ! interaction must be body-type independent, checked at setup). The
-    ! variant is that bound by BindExactFieldFree.
-    Method_Mb_OrbBased_exactFieldFreeMeanFieldQ = Json_Get("method.mb.orbBased.exactFieldFreeMeanFieldQ", .false.)
-    if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) then
-      if (.not. Method_Mb_OrbBased_exactFieldFreeQ) &
-        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ requires method.mb.orbBased.exactFieldFreeQ"
-      if (.not. associated(Method_Mb_OrbBased_PropagateFieldFree, Method_Mb_OrbBased_PropagateFieldFreeCayley)) &
-        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ is only available for the Cayley exact part &
-                   &(non-Ylm grids, e.g. grid.fem); Ylm grids propagate h0 by its eigen-decomposition"
-      if (.not. (Json_GetExistence("method.mb.orbBased.mctdhx") .or. Json_GetExistence("method.mb.orbBased.tdks"))) &
-        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ is only implemented for method.mb.orbBased.mctdhx &
-                   &and method.mb.orbBased.tdks"
-      if (.not. (Json_GetExistence("sysInteraction") .or. Json_GetExistence("sysXc"))) &
-        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ requires sysInteraction or sysXc (without an &
-                   &interaction the mean field vanishes)"
-      if (any(Method_Mb_bodyStatistics .ne. 'f')) &
-        error stop "method.mb.orbBased.exactFieldFreeMeanFieldQ requires fermions (the reference is the &
-                   &Hartree-Fock or Kohn-Sham mean field of the 1-RDM)"
-    end if
+    ! The exact part was configured here before it became the fieldFree block:
+    ! an input with the former keys would silently run without it
+    do i = 1, size(FORMER_KEYS)
+      if (Json_GetExistence("method.mb.orbBased.exactFieldFree"//trim(FORMER_KEYS(i)))) then
+        write (*, '(3A)') " method.mb.orbBased.exactFieldFree", trim(FORMER_KEYS(i)), " is now in the fieldFree block: &
+                          &fieldFree.eigen (cut, gpuQ) on Ylm grids, fieldFree.cayley (tolerance, krylovDim, &
+                          &maxRestarts, meanFieldQ) on grid.fem; see src/FieldFree/A_FieldFree.md"
+        error stop "method.mb.orbBased: the exactFieldFree* keys moved to the fieldFree block"
+      end if
+    end do
 
-    ! Spectral cut of h0 (needs the eigenvectors of the exact part, i.e. the
-    ! projection bound by BindExactFieldFree); the orbital derivatives of
-    ! MCTDHX and TDKS are projected onto the kept eigenvectors
-    Method_Mb_OrbBased_exactFieldFreeCut = Json_Get("method.mb.orbBased.exactFieldFreeCut", 0.0_R64)
-    if (.not. (abs(Method_Mb_OrbBased_exactFieldFreeCut) <= 0.0_R64)) then
-      if (.not. Method_Mb_OrbBased_exactFieldFreeQ) &
-        error stop "method.mb.orbBased.exactFieldFreeCut requires method.mb.orbBased.exactFieldFreeQ"
-      if (.not. associated(Method_Mb_OrbBased_ProjectBelowFieldFreeCut)) &
-        error stop "method.mb.orbBased.exactFieldFreeCut is only available on Ylm grids &
-                   &(the Cayley exact part of other grids, e.g. grid.fem, has no h0 eigenvectors)"
-      if (.not. (Json_GetExistence("method.mb.orbBased.mctdhx") .or. Json_GetExistence("method.mb.orbBased.tdks"))) &
-        error stop "method.mb.orbBased.exactFieldFreeCut is only implemented for method.mb.orbBased.mctdhx and .tdks"
-      if (Method_Mb_OrbBased_exactFieldFreeCut < 0.0_R64) &
-        error stop "method.mb.orbBased.exactFieldFreeCut must be positive"
-      Method_Mb_OrbBased_ApplySpectralCut => Method_Mb_OrbBased_ProjectBelowFieldFreeCut
-    else
-      Method_Mb_OrbBased_ApplySpectralCut => NoOpProcedures_ApplyAbsorber
-    end if
-
-    ! A density functional (sysXc) replaces the exchange and correlation of
-    ! the interaction: only the Kohn-Sham method uses it (with a correlated
-    ! wavefunction it would count correlation twice)
-    if (Json_GetExistence("sysXc") .and. .not. Json_GetExistence("method.mb.orbBased.tdks")) &
-      error stop "sysXc (an exchange-correlation functional) is only used by method.mb.orbBased.tdks"
-
-    ! Set by the Kohn-Sham method only (no binding of an earlier fabricate survives)
-    Method_Mb_OrbBased_kohnShamQ = .false.
     ! Set by the static-orbital methods only
     Method_Mb_OrbBased_staticOrbsQ = .false.
+    ! Set by the methods that implement the option (checked after the dispatch)
+    Method_Mb_OrbBased_implementsMeanFieldReferenceQ = .false.
+    Method_Mb_OrbBased_implementsSpectralCutQ = .false.
+    Method_Mb_OrbBased_implementsSwitchingQ = .false.
 
     ! Adiabatic switching of the interaction (S_Method_Mb_OrbBased_Switching)
     Method_Mb_OrbBased_switchTime = 0.0_R64
@@ -278,10 +250,8 @@ contains
         error stop "method.mb.orbBased.adiabaticSwitching requires sysInteraction (the interaction it switches on)"
       if (any(Method_Mb_bodyStatistics .ne. 'f')) &
         error stop "method.mb.orbBased.adiabaticSwitching requires fermions (the reference is a Hartree-Fock mean field)"
-      if (Method_Mb_OrbBased_exactFieldFreeMeanFieldQ) &
-        error stop "method.mb.orbBased.adiabaticSwitching is not available with exactFieldFreeMeanFieldQ"
-      if (Json_GetExistence("method.mb.orbBased.tdci") .or. Json_GetExistence("method.mb.orbBased.tdks")) &
-        error stop "method.mb.orbBased.adiabaticSwitching is available for tdhx, mctdhx, td2rdm and td2rdmStaticOrbs"
+      if (FieldFree_meanFieldQ) &
+        error stop "method.mb.orbBased.adiabaticSwitching is not available with fieldFree.cayley.meanFieldQ"
     end if
 
     !------------------------------------
@@ -310,40 +280,20 @@ contains
       error stop "method.mb.orbBased is missing one of: tdci, tdhx, mctdhx, td2rdm, td2rdmStaticOrbs, tdks"
     end if
 
-  end subroutine
+    !------------------------------------
+    ! options that only some methods implement
+    !------------------------------------
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine BindExactFieldFree
-    !---------------------------------------------------------------------------
-    ! Binds the exact-part entry points (method.mb.orbBased.exactFieldFreeQ):
-    !   - grid.ylm: dense eigen-decomposition of the h0 blocks per l
-    !     (S_Method_Mb_OrbBased_FieldFreeEigen), with phi functions and spectral cut
-    !   - otherwise, if the kinetic backend binds SysKinetic_SolveShifted
-    !     (grid.fem): Crank-Nicolson (Cayley) step by preconditioned GMRES
-    !     (S_Method_Mb_OrbBased_FieldFreeCayley); no phi functions (MCTDHX then
-    !     does not bind Method_ApplyExactPartPhi), no spectral cut, real time
-    !     only: those two pointers stay null (nullified by the caller,
-    !     Method_Mb_OrbBased_Fabricate)
-    ! The only place that decides the variant; later checks test the bound
-    ! pointers. SysKinetic_Fabricate must precede Method_Fabricate.
-    !---------------------------------------------------------------------------
-    use M_Utils_Json
-    use M_SysKinetic
-
-    if (Json_GetExistence("grid.ylm")) then
-      Method_Mb_OrbBased_SetupFieldFree => Method_Mb_OrbBased_SetupFieldFreeEigen
-      Method_Mb_OrbBased_PropagateFieldFree => Method_Mb_OrbBased_PropagateFieldFreeEigen
-      Method_Mb_OrbBased_ApplyFieldFreePhi => Method_Mb_OrbBased_ApplyFieldFreePhiEigen
-      Method_Mb_OrbBased_ProjectBelowFieldFreeCut => Method_Mb_OrbBased_ProjectBelowFieldFreeCutEigen
-
-    else if (associated(SysKinetic_SolveShifted)) then
-      Method_Mb_OrbBased_SetupFieldFree => Method_Mb_OrbBased_SetupFieldFreeCayley
-      Method_Mb_OrbBased_PropagateFieldFree => Method_Mb_OrbBased_PropagateFieldFreeCayley
-
-    else
-      error stop "method.mb.orbBased.exactFieldFreeQ requires a Ylm grid or a kinetic backend with &
-                 &SysKinetic_SolveShifted (e.g. sysKinetic.fem; fabricate SysKinetic before Method)"
-    end if
+    ! The method declares them at its fabricate: the exact part by binding
+    ! Method_PropagateExactPart, the others by their implements*Q flags
+    if (associated(FieldFree_Propagate) .and. .not. associated(Method_PropagateExactPart)) &
+      error stop "fieldFree (the exact field-free part) is not implemented for the selected method"
+    if (FieldFree_meanFieldQ .and. .not. Method_Mb_OrbBased_implementsMeanFieldReferenceQ) &
+      error stop "fieldFree.cayley.meanFieldQ is not implemented for the selected method"
+    if (FieldFree_cutQ .and. .not. Method_Mb_OrbBased_implementsSpectralCutQ) &
+      error stop "fieldFree.eigen.cut is not implemented for the selected method"
+    if (Method_Mb_OrbBased_switchTime > 0.0_R64 .and. .not. Method_Mb_OrbBased_implementsSwitchingQ) &
+      error stop "method.mb.orbBased.adiabaticSwitching is not implemented for the selected method"
 
   end subroutine
 
@@ -359,19 +309,9 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Method_Mb_OrbBased_Setup
-    use M_Method
 
     if (allocated(h0Static)) deallocate (h0Static)
     if (ylmNodesQ) call SetupYlmNodes
-
-    ! The orbital-based methods bind Method_PropagateExactPart only with
-    ! exactFieldFreeQ, which binds the setup of the exact part
-    if (associated(Method_PropagateExactPart)) then
-      if (.not. associated(Method_Mb_OrbBased_SetupFieldFree)) &
-        error stop "Method_Mb_OrbBased_Setup: Method_PropagateExactPart is bound, but the exact field-free part is not &
-                   &(Method_Mb_OrbBased_SetupFieldFree is null; it is bound by method.mb.orbBased.exactFieldFreeQ)"
-      call Method_Mb_OrbBased_SetupFieldFree
-    end if
 
   end subroutine
 
@@ -392,6 +332,29 @@ contains
     else
       rdm1Spatial = rdm1(:nOS, :nOS)
     end if
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_Mb_OrbBased_FillStateWeights(weights)
+    use M_Grid
+    use M_Orbs
+    use M_Method
+
+    real(R64), intent(out), allocatable :: weights(:)
+
+    integer(I32) :: nHead, iOrb
+
+    allocate (weights(size(Method_state)))
+    weights(:) = 1.0_R64
+
+    ! Static orbitals are not part of the state
+    if (Method_Mb_OrbBased_staticOrbsQ) return
+
+    nHead = size(Method_state) - Grid_nPoints * Orbs_nOrbsInState
+    do iOrb = 1, Orbs_nOrbsInState
+      weights(nHead + (iOrb - 1) * Grid_nPoints + 1:nHead + iOrb * Grid_nPoints) = Grid_weights(:)
+    end do
 
   end subroutine
 
@@ -484,30 +447,6 @@ contains
     end do
 
   end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  function YlmNodesFastPathQ() result(res)
-    !---------------------------------------------------------------------------
-    ! Whether the definite-m node quadrature applies: Hermitian Ylm grid and a
-    ! body-type-independent Ylm interaction within the node tables.
-    !---------------------------------------------------------------------------
-    use M_Utils_Json
-    use M_Grid_Ylm
-    use M_SysInteraction
-    use M_SysInteraction_Ylm
-
-    logical :: res
-
-    res = .false.
-    if (Grid_Ylm_cProductQ) return
-    if (.not. Json_GetExistence("sysInteraction.ylm")) return
-    if (.not. SysInteraction_bodyTypeIndependentQ) return
-    if (SysInteraction_Ylm_lmax > Grid_Ylm_lmaxNodes) return
-    if (SysInteraction_Ylm_mmax > Grid_Ylm_mmaxNodes) return
-
-    res = .true.
-
-  end function
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   function GetEnergy(time) result(res)
@@ -1063,412 +1002,6 @@ contains
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine ApplyCorrelationOpYlmNodes(dOrbs, orbs, invRdm1, rdm2, time, h2_)
-    !---------------------------------------------------------------------------
-    ! ApplyCorrelationOp for orbitals of declared m on the Gauss-Legendre
-    ! nodes in cos(theta), where all products are pointwise: the orbitals are
-    ! transformed once, each pair potential once and dOrbs once at the end.
-    ! The pair (l2,k2) carries M = m_k2 - m_l2; only the terms with
-    ! m_k1 + M = m_j1 (correlation) and m_j1 + M = m_i1 (h2) are kept, the
-    ! others vanish. Equal to ApplyCorrelationOp up to round-off (A_Method.md).
-    !---------------------------------------------------------------------------
-    use M_Grid
-    use M_Grid_Ylm
-    use M_Orbs
-
-    complex(R64), intent(inout), contiguous, target :: dOrbs(:, :)
-    complex(R64), intent(in), contiguous, target    :: orbs(:, :)
-    complex(R64), intent(in), contiguous             :: invRdm1(:, :)
-    complex(R64), intent(in), contiguous             :: rdm2(:, :, :, :)
-    real(R64), intent(in)                  :: time
-    complex(R64), intent(out), allocatable, optional :: h2_(:, :, :, :)
-
-    complex(R64), allocatable :: rdm2spatial(:, :, :, :)
-    complex(R64), allocatable, target :: orbNodes(:, :), dOrbNodes(:, :), potNodes(:, :)
-    complex(R64), allocatable :: h2Cols(:, :), dOrb(:)
-    complex(R64), contiguous, pointer :: nodes(:, :)
-
-    integer(I32) :: nOS, nRad, nNodes, i1
-
-    nOS = Orbs_nOrbsInState
-    nRad = Grid_Ylm_nRadial
-    nNodes = Grid_Ylm_nNodes
-
-    call FillCorrelationRdm2(rdm2spatial, invRdm1, rdm2)
-    call FillTargetGroupWeights(rdm2spatial)
-
-    call FillOrbNodes(orbNodes, orbs)
-    call FillPairPotentialsYlmNodes(potNodes, orbNodes, time)
-
-    allocate (dOrbNodes, mold=orbNodes)
-    dOrbNodes(:, :) = 0.0_R64
-
-    if (present(h2_)) then
-      call AccumulateTargetSumsYlmNodes(orbNodes, potNodes, h2Cols_=h2Cols, dOrbNodes_=dOrbNodes)
-      call FillH2FromTargetColumns(h2_, h2Cols)
-    else
-      call AccumulateTargetSumsYlmNodes(orbNodes, potNodes, dOrbNodes_=dOrbNodes)
-    end if
-
-    ! Back to the Ylm representation
-    !$omp parallel default(shared) private(i1, dOrb, nodes)
-    allocate (dOrb(Grid_nPoints))
-    !$omp do
-    do i1 = 1, nOS
-      nodes(1:nRad, 1:nNodes) => dOrbNodes(:, i1)
-      call Grid_Ylm_FromNodes(dOrb, nodes, Method_Mb_OrbBased_mOfOrb(i1))
-      dOrbs(:, i1) = dOrbs(:, i1) + dOrb(:)
-    end do
-    !$omp end do
-    deallocate (dOrb)
-    !$omp end parallel
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine FillH2YlmNodes(h2, orbs, time)
-    !---------------------------------------------------------------------------
-    ! FillH2 for orbitals of declared m by the node quadrature of
-    ! ApplyCorrelationOpYlmNodes (pair potentials and h2 columns only):
-    !   h2(i1,l2,k1,k2) = 1/2 <orb_i1| V_(l2,k2) |orb_k1>,  m_i1 = m_k1 + m_k2 - m_l2.
-    !---------------------------------------------------------------------------
-    complex(R64), intent(out), allocatable :: h2(:, :, :, :)
-    complex(R64), intent(in), contiguous   :: orbs(:, :)
-    real(R64), intent(in)                  :: time
-
-    complex(R64), allocatable :: orbNodes(:, :), potNodes(:, :), h2Cols(:, :)
-
-    call FillOrbNodes(orbNodes, orbs)
-    call FillPairPotentialsYlmNodes(potNodes, orbNodes, time)
-    call AccumulateTargetSumsYlmNodes(orbNodes, potNodes, h2Cols_=h2Cols)
-    call FillH2FromTargetColumns(h2, h2Cols)
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine SetupYlmNodes
-    !---------------------------------------------------------------------------
-    ! Skeleton of the node path from the declared m of the stored orbitals: the
-    ! pair list, the target groups (the blocks Orbs_blockOfOrb) of the
-    ! selection rule m_k + M_iP = m_j with their columns (iP, k), and the
-    ! quadrature weights on the node points.
-    !---------------------------------------------------------------------------
-    use M_Grid_Ylm
-    use M_SysInteraction_Ylm
-    use M_Orbs
-
-    integer(I32), allocatable :: mOrb(:), btOrb(:), targetGroup(:, :), pairOfCol(:, :), orbOfCol(:, :)
-    logical, allocatable :: storedQ(:, :)
-    integer(I32) :: nOS, nPairs, iG, iP, j1, k1, k2, l2
-
-    nOS = Orbs_nOrbsInState
-    mOrb = Method_Mb_OrbBased_mOfOrb(1:nOS)
-    btOrb = Method_Mb_OrbBased_bodyTypeOfOrb(1:nOS)
-
-    ! Ordered pairs (k2, l2) of equal body type within the |m| cap of the
-    ! potentials (pairs beyond it are left out, as in the generic operator)
-    nPairs = count(spread(btOrb, 1, nOS) .eq. spread(btOrb, 2, nOS) .and. &
-                   abs(spread(mOrb, 1, nOS) - spread(mOrb, 2, nOS)) <= SysInteraction_Ylm_mmax)
-    allocate (nodePairK2(nPairs), nodePairL2(nPairs), nodePairM(nPairs), nodePairPot(nPairs))
-
-    iP = 0
-    do l2 = 1, nOS
-      do k2 = l2, nOS
-        if (btOrb(l2) .ne. btOrb(k2)) cycle
-        if (abs(mOrb(k2) - mOrb(l2)) > SysInteraction_Ylm_mmax) cycle
-        iP = iP + 1
-        nodeNPots = nodeNPots + 1
-        nodePairK2(iP) = k2
-        nodePairL2(iP) = l2
-        nodePairM(iP) = mOrb(k2) - mOrb(l2)
-        nodePairPot(iP) = nodeNPots
-        if (k2 .ne. l2) then
-          iP = iP + 1
-          nodePairK2(iP) = l2
-          nodePairL2(iP) = k2
-          nodePairM(iP) = -nodePairM(iP - 1)
-          nodePairPot(iP) = -nodeNPots
-        end if
-      end do
-    end do
-
-    ! Target group of the column (iP, k): the block of the orbitals with
-    ! m_k + M_iP and the body type of k (0 if there is none)
-    allocate (targetGroup(nOS, nPairs))
-    do iP = 1, nPairs
-      do k1 = 1, nOS
-        j1 = findloc(mOrb .eq. mOrb(k1) + nodePairM(iP) .and. btOrb .eq. btOrb(k1), .true., dim=1)
-        targetGroup(k1, iP) = 0
-        if (j1 > 0) targetGroup(k1, iP) = Orbs_blockOfOrb(j1)
-      end do
-    end do
-    orbOfCol = spread([(k1, k1=1, nOS)], 2, nPairs)
-    pairOfCol = spread([(iP, iP=1, nPairs)], 1, nOS)
-    storedQ = spread(nodePairPot > 0, 1, nOS)
-
-    allocate (nodeGroups(maxval(Orbs_blockOfOrb)))
-    do iG = 1, size(nodeGroups)
-      associate (g => nodeGroups(iG))
-        g % orbs = pack([(k1, k1=1, nOS)], Orbs_blockOfOrb .eq. iG)
-        g % colPair = [pack(pairOfCol, targetGroup .eq. iG .and. storedQ), &
-                       pack(pairOfCol, targetGroup .eq. iG .and. .not. storedQ)]
-        g % colOrb = [pack(orbOfCol, targetGroup .eq. iG .and. storedQ), &
-                      pack(orbOfCol, targetGroup .eq. iG .and. .not. storedQ)]
-        g % nColStored = count(targetGroup .eq. iG .and. storedQ)
-        allocate (g % weights(size(g % colPair), size(g % orbs)))
-        g % colOffset = nodeNH2Cols
-        nodeNH2Cols = nodeNH2Cols + g % nColStored
-        nodeMaxCols = max(nodeMaxCols, size(g % colPair))
-      end associate
-    end do
-
-    ! Quadrature weights of the full measure on the node points
-    nodeWeights = reshape(spread(Grid_Ylm_radialWeights(:), 2, Grid_Ylm_nNodes) * &
-                          spread(Grid_Ylm_nodeWeights(:), 1, Grid_Ylm_nRadial), [Grid_Ylm_nRadial * Grid_Ylm_nNodes])
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine FillTargetGroupWeights(rdm2spatial)
-    !---------------------------------------------------------------------------
-    ! Weights of the correlation sum of every group of nodeGroups:
-    !   weights((iP,k), j) = rdm2spatial(k, k2, j, l2),  iP = (k2, l2).
-    !---------------------------------------------------------------------------
-    complex(R64), intent(in), contiguous :: rdm2spatial(:, :, :, :)
-
-    integer(I32) :: iG, iC, iJ, iP
-
-    do iG = 1, size(nodeGroups)
-      associate (g => nodeGroups(iG))
-        do iJ = 1, size(g % orbs)
-          do iC = 1, size(g % colPair)
-            iP = g % colPair(iC)
-            g % weights(iC, iJ) = rdm2spatial(g % colOrb(iC), nodePairK2(iP), g % orbs(iJ), nodePairL2(iP))
-          end do
-        end do
-      end associate
-    end do
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine FillOrbNodes(orbNodes, orbs)
-    !---------------------------------------------------------------------------
-    ! Orbitals on the angular nodes (channels of their declared m), flattened
-    ! to (node point, orbital).
-    !---------------------------------------------------------------------------
-    use M_Grid_Ylm
-    use M_Orbs
-
-    complex(R64), intent(out), allocatable, target :: orbNodes(:, :)
-    complex(R64), intent(in), contiguous           :: orbs(:, :)
-
-    complex(R64), contiguous, pointer :: nodes(:, :)
-    integer(I32) :: nRad, nNodes, i1
-
-    nRad = Grid_Ylm_nRadial
-    nNodes = Grid_Ylm_nNodes
-    allocate (orbNodes(nRad * nNodes, Orbs_nOrbsInState))
-
-    !$omp parallel do default(shared) private(i1, nodes)
-    do i1 = 1, Orbs_nOrbsInState
-      nodes(1:nRad, 1:nNodes) => orbNodes(:, i1)
-      call Grid_Ylm_ToNodes(nodes, orbs(:, i1), Method_Mb_OrbBased_mOfOrb(i1))
-    end do
-    !$omp end parallel do
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine FillPairPotentialsYlmNodes(potNodes, orbNodes, time)
-    !---------------------------------------------------------------------------
-    ! Pair potentials V_(l2,k2) of the sources conjg(phi_l2) phi_k2 of the
-    ! unordered pairs on the nodes, in parallel over the pairs, on the channel
-    ! matrix of the single m = m_k2 - m_l2 of the pair.
-    !---------------------------------------------------------------------------
-    use M_Grid_Ylm
-    use M_SysInteraction_Ylm
-
-    complex(R64), intent(out), allocatable, target :: potNodes(:, :)
-    complex(R64), intent(in), contiguous, target   :: orbNodes(:, :)
-    real(R64), intent(in)                          :: time
-
-    complex(R64), allocatable, target :: srcNodes(:)
-    complex(R64), allocatable :: srcM(:, :), potM(:, :)
-    complex(R64), contiguous, pointer :: nodes(:, :)
-    integer(I32) :: nRad, nNodes, nL, iP, iL, mP
-    real(R64) :: lambda
-
-    nRad = Grid_Ylm_nRadial
-    nNodes = Grid_Ylm_nNodes
-    allocate (potNodes(nRad * nNodes, nodeNPots))
-    ! switching factor of the interaction (S_Method_Mb_OrbBased_Switching)
-    lambda = Method_Mb_OrbBased_SwitchFactor(time)
-
-    !$omp parallel default(shared) private(iP, iL, mP, nL, srcNodes, srcM, potM, nodes)
-    allocate (srcNodes(nRad * nNodes))
-    !$omp do schedule(dynamic)
-    do iP = 1, size(nodePairPot)
-      if (nodePairPot(iP) < 0) cycle
-      mP = nodePairM(iP)
-      nL = SysInteraction_Ylm_lmax - abs(mP) + 1
-
-      srcNodes(:) = conjg(orbNodes(:, nodePairL2(iP))) * orbNodes(:, nodePairK2(iP))
-      nodes(1:nRad, 1:nNodes) => srcNodes
-      allocate (srcM(nRad, nL), potM(nRad, nL))
-      call Grid_Ylm_NodesToChannels(srcM, nodes, mP)
-      do iL = 1, nL
-        srcM(:, iL) = srcM(:, iL) * Grid_Ylm_radialMetricWeights(:)
-      end do
-      if (lambda < 1.0_R64) srcM(:, :) = lambda * srcM(:, :)
-
-      call SysInteraction_Ylm_FillInteractionPotentialM(potM, srcM, mP, time)
-
-      nodes(1:nRad, 1:nNodes) => potNodes(:, nodePairPot(iP))
-      call Grid_Ylm_ChannelsToNodes(nodes, potM, mP)
-      deallocate (srcM, potM)
-    end do
-    !$omp end do
-    deallocate (srcNodes)
-    !$omp end parallel
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine AccumulateTargetSumsYlmNodes(orbNodes, potNodes, h2Cols_, dOrbNodes_)
-    !---------------------------------------------------------------------------
-    ! Pointwise sums of the node path over blocks of nodes, per target group:
-    ! the products X = V_iP * orbs(:,k) of the columns (iP, k) of the group
-    ! enter two ZGEMMs (i, j in the group),
-    !   dOrbNodes_(:,j) += X weights,
-    !   h2Cols_(i, colOffset + (iP,k)) = sum w conjg(orbs(:,i)) X(:,(iP,k)),
-    ! the latter for the columns of stored pairs only (FillH2FromTargetColumns).
-    !---------------------------------------------------------------------------
-    use M_Utils_BlasLib, only: ZGEMM
-    use M_Orbs
-
-    complex(R64), intent(in), contiguous              :: orbNodes(:, :)
-    complex(R64), intent(in), contiguous              :: potNodes(:, :)
-    complex(R64), intent(out), allocatable, optional  :: h2Cols_(:, :)
-    complex(R64), intent(inout), contiguous, optional :: dOrbNodes_(:, :)
-
-    !> Nodes per block of the pointwise sums (block work arrays stay in cache).
-    integer(I32), parameter :: blockSize = 128
-
-    complex(R64), allocatable :: x(:, :), orbW(:, :), dOrbBlock(:, :), h2Private(:, :)
-    integer(I32) :: nOS, nPts, iB, nB, iG, iC, iJ, nC, nCS, nJ, iP, k1, j1
-    logical :: h2Q, dOrbQ
-
-    nOS = Orbs_nOrbsInState
-    nPts = size(orbNodes, 1)
-    h2Q = present(h2Cols_)
-    dOrbQ = present(dOrbNodes_)
-
-    if (h2Q) then
-      allocate (h2Cols_(nOS, nodeNH2Cols))
-      h2Cols_(:, :) = 0.0_R64
-    end if
-
-    !$omp parallel default(shared) private(iB, nB, iG, iC, iJ, nC, nCS, nJ, iP, k1, j1, x, orbW, dOrbBlock, h2Private)
-    allocate (x(blockSize, nodeMaxCols))
-    allocate (orbW(blockSize, nOS), dOrbBlock(blockSize, nOS))
-    if (h2Q) then
-      allocate (h2Private(nOS, nodeNH2Cols))
-      h2Private(:, :) = 0.0_R64
-    end if
-
-    !$omp do schedule(static)
-    do iB = 1, nPts, blockSize
-      nB = min(blockSize, nPts - iB + 1)
-
-      do iG = 1, size(nodeGroups)
-        nC = size(nodeGroups(iG) % colPair)
-        nCS = nodeGroups(iG) % nColStored
-        nJ = size(nodeGroups(iG) % orbs)
-        if (.not. dOrbQ) nC = nCS
-        if (nC .eq. 0) cycle
-
-        do iC = 1, nC
-          iP = nodeGroups(iG) % colPair(iC)
-          k1 = nodeGroups(iG) % colOrb(iC)
-          if (nodePairPot(iP) > 0) then
-            x(1:nB, iC) = potNodes(iB:iB + nB - 1, nodePairPot(iP)) * orbNodes(iB:iB + nB - 1, k1)
-          else
-            x(1:nB, iC) = conjg(potNodes(iB:iB + nB - 1, -nodePairPot(iP))) * orbNodes(iB:iB + nB - 1, k1)
-          end if
-        end do
-
-        if (dOrbQ) then
-          call ZGEMM('N', 'N', nB, nJ, nC, (1.0_R64, 0.0_R64), x, blockSize, nodeGroups(iG) % weights, nC, &
-                     (0.0_R64, 0.0_R64), dOrbBlock, blockSize)
-          do iJ = 1, nJ
-            j1 = nodeGroups(iG) % orbs(iJ)
-            dOrbNodes_(iB:iB + nB - 1, j1) = dOrbNodes_(iB:iB + nB - 1, j1) + dOrbBlock(1:nB, iJ)
-          end do
-        end if
-
-        if (h2Q .and. nCS > 0) then
-          do iJ = 1, nJ
-            orbW(1:nB, iJ) = orbNodes(iB:iB + nB - 1, nodeGroups(iG) % orbs(iJ)) * nodeWeights(iB:iB + nB - 1)
-          end do
-          call ZGEMM('C', 'N', nJ, nCS, nB, (1.0_R64, 0.0_R64), orbW, blockSize, x, blockSize, &
-                     (1.0_R64, 0.0_R64), h2Private(1, nodeGroups(iG) % colOffset + 1), nOS)
-        end if
-      end do
-    end do
-    !$omp end do
-
-    if (h2Q) then
-      !$omp critical
-      h2Cols_(:, :) = h2Cols_(:, :) + h2Private(:, :)
-      !$omp end critical
-    end if
-    !$omp end parallel
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  subroutine FillH2FromTargetColumns(h2, h2Cols)
-    !---------------------------------------------------------------------------
-    !   h2(i1,l2,k,k2) = 1/2 <orb_i1| V_(l2,k2) |orb_k>  for the column (iP,k)
-    ! of a stored pair, the swapped pair by the Hermitian symmetry
-    !   h2(k,k2,i1,l2) = conjg(h2(i1,l2,k,k2))
-    ! (row k lies in the group of the swapped column (iP',i1); a diagonal pair
-    ! k2 = l2 is its own swapped pair), zero elsewhere.
-    ! Valid for a Hermitian metric only (precondition of the node path); a
-    ! c-product (ECS) variant must compute the swapped columns instead.
-    !---------------------------------------------------------------------------
-    complex(R64), intent(out), allocatable :: h2(:, :, :, :)
-    complex(R64), intent(in), contiguous   :: h2Cols(:, :)
-
-    integer(I32) :: nO, iG, iC, iJ, iP, i1, k1
-    complex(R64) :: h2Val
-
-    nO = Method_Mb_OrbBased_nOrbsSum
-
-    allocate (h2(nO, nO, nO, nO))
-    h2(:, :, :, :) = 0.0_R64
-
-    do iG = 1, size(nodeGroups)
-      associate (g => nodeGroups(iG))
-        do iC = 1, g % nColStored
-          iP = g % colPair(iC)
-          k1 = g % colOrb(iC)
-          do iJ = 1, size(g % orbs)
-            i1 = g % orbs(iJ)
-            h2Val = 0.5_R64 * h2Cols(iJ, g % colOffset + iC)
-            h2(i1, nodePairL2(iP), k1, nodePairK2(iP)) = h2Val
-            if (nodePairK2(iP) .ne. nodePairL2(iP)) h2(k1, nodePairK2(iP), i1, nodePairL2(iP)) = conjg(h2Val)
-          end do
-        end do
-      end associate
-    end do
-
-    call DuplicateRestrictedSpinBlocks(h2)
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   subroutine FillCorrelationRdm2(rdm2spatial, invRdm1, rdm2)
     !---------------------------------------------------------------------------
     ! Spatial 2-RDM contracted with the inverse 1-RDM M = invRdm1, the weights
@@ -1643,7 +1176,7 @@ contains
     ! The time-dependent one-body terms outside h0 = T + V_ext: the gauge
     ! coupling and the switching reference (1 - lambda) U0 (moving orbitals;
     ! S_Method_Mb_OrbBased_Switching). The linear split-step operator with
-    ! exactFieldFreeQ.
+    ! an exact field-free part.
     !---------------------------------------------------------------------------
     complex(R64), intent(inout), contiguous :: dOrbs(:, :)
     complex(R64), intent(in), contiguous    :: orbs(:, :)

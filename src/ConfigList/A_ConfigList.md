@@ -20,11 +20,11 @@ M_ConfigList                          ← Abstract interface + global container
             │
             └── M_ConfigList_AllActive    ← "All-active" truncation base
                     │
-                    ├── Fermions/
+                    ├── Fermionic/
                     │   ├── M_ConfigList_AllActive_Fermionic  ← Type definition
                     │   └── S_ConfigList_AllActive_Fermionic  ← Bit-pattern encoding, ±1 signs
                     │
-                    └── Bosons/
+                    └── Bosonic/
                         ├── M_ConfigList_AllActive_Bosonic    ← Type definition
                         └── S_ConfigList_AllActive_Bosonic    ← Base-(N+1) encoding, √n factors
 ```
@@ -70,9 +70,9 @@ JSON Input                    Runtime
   "configList": {             ConfigList_Fabricate()
     "allActive1": {               │
       "fermionic": {              ├─→ Allocate concrete type
-        "bodyTarget": 1,          ├─→ Read params, compute nConfigurations
-        "nExcitations": 2         │
-      }                       ConfigList_Setup()
+        "bodyTarget": 1           ├─→ Read params, compute nConfigurations
+      }                           │
+                              ConfigList_Setup()
     }                             │
   }                               ├─→ Build codeFromConfig mapping
 }                                 ├─→ Enumerate all singles/doubles
@@ -82,6 +82,12 @@ JSON Input                    Runtime
                                   │
                                   └─→ Apply a†_i a_j |iC⟩, return |iCNew⟩ and factor
 ```
+
+The element of body type i must be the i-th element (`bodyTarget` = i), one
+element per body type. The space is always the full CI space of the body
+type: `nExcitations` (default nBodies) must reach the highest excitation
+rank, min(nBodies, nOrbs − nBodies) for fermions and nBodies for bosons; a
+truncation below it is not implemented and stops at fabricate.
 
 ---
 
@@ -126,7 +132,7 @@ call element%ExciteConfiguration(iCNew, factor, [i1, i2], [j1, j2], iC)
 
 ### Adding New Statistics (e.g., anyons)
 
-Follow the pattern in `AllActive/Fermions/` or `AllActive/Bosons/`:
+Follow the pattern in `AllActive/Fermionic/` or `AllActive/Bosonic/`:
 1. Create `M_ConfigList_AllActive_Anyonic.f90` with type extending `T_ConfigList_E_AllActive`
 2. Implement statistics-specific `ExciteConfiguration` with fractional phase
 3. Register in `S_ConfigList_AllActive.f90` allocator dispatch
@@ -197,16 +203,10 @@ M_ConfigList
 
 ## Testing
 
-Tests are located in `test/` with corresponding JSON input files:
-```bash
-cd build && ctest -R T_ConfigList
-```
-
-Typical test pattern:
-1. Fabricate from test JSON
-2. Setup
-3. Verify nConfigurations matches analytical formula
-4. Test specific excitations and verify factors
+There is no component test of ConfigList alone. Its fermionic and bosonic
+tables are exercised by `test/componentTests/Coeffs/Generic/T_Coeffs_Generic_Sector`
+and by every CI test (`test/simulationTests/FermiHubbard`, `BoseHubbard`,
+`He1d`, `Ne3d`).
 
 ---
 

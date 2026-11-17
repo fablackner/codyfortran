@@ -82,7 +82,9 @@ Expects binary file `coeffs.in` in working directory.
   }
 }
 ```
-Applies `â†₃ â₁` to both body types (e.g., spin-up and spin-down).
+Applies `â†₃ â₁` to both body types (e.g., spin-up and spin-down), once if
+`bodyType1 = bodyType2`, and normalizes the result. An excitation that
+annihilates the reference configuration stops.
 
 ---
 
@@ -148,7 +150,7 @@ end subroutine
 ## Common Pitfalls
 
 - **Dimension mismatch:** `coeffs(:)` must match the CI space size from `ConfigList`. The Load backend assumes the file has exactly the right size.
-- **Body types in Excited:** For single-species systems, set `bodyType1 = bodyType2 = 1`.
+- **Body types in Excited:** For single-species systems `bodyType2` defaults to 1, and the excitation is applied once.
 - **Branching order:** In `S_CoeffsInit.f90`, Load takes precedence over Unary over Excited. Only one backend is activated.
 - **Total-M sector:** with `coeffs.generic.totalM` the initial state must lie in the sector (see Sector projection).
 

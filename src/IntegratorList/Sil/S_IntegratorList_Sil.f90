@@ -82,7 +82,7 @@ contains
 
     class(T_IntegratorList_E_Sil), intent(inout) :: this
 
-    call Say_Fabricate(this % path//".sil")
+    call Say_Fabricate(this % path)
 
     !------------------------------------
     ! set values and procedure pointers
@@ -101,7 +101,7 @@ contains
 
     class(T_IntegratorList_E_Sil), intent(inout) :: this
 
-    call Say_Setup(this % path//".sil")
+    call Say_Setup(this % path)
 
   end subroutine
 

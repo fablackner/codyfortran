@@ -126,10 +126,6 @@ module M_Grid_Prolate
   !> identical for every m block.
   real(R64), allocatable :: Grid_Prolate_spatialWeights(:)
 
-  !> Total integration weights for each (xi, eta, m) entry in flattened order
-  !> (spatialWeights repeated per m block).
-  real(R64), allocatable :: Grid_Prolate_weights(:)
-
   !> Component-wise coordinates for each flattened entry.
   real(R64), allocatable :: Grid_Prolate_xiCoord(:)
   real(R64), allocatable :: Grid_Prolate_etaCoord(:)

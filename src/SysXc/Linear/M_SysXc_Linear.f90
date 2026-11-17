@@ -6,7 +6,7 @@
 !>
 !> @details
 !> The xc points are the nodes of grid.linear (const or fedvr) with the
-!> weights Grid_Linear_weights; densities, potentials and the Hartree source
+!> weights Grid_weights; densities, potentials and the Hartree source
 !> are the nodal defaults of SysXc (S_SysXc). Only the one-dimensional LDA
 !> functionals of Libxc qualify (SysXc_dimension = 1; Libxc has no 1D
 !> gradient functionals), e.g. for the soft-Coulomb interaction

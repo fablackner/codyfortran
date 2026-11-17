@@ -89,5 +89,6 @@ program T_Ne3d_10_TimePropagationMctdhxLaserVelocityBlanesMoan
 contains
 
   include 'Ne3dMctdhxLaser.inc'
+  include 'Ne3dMetricNorm.inc'
 
 end program

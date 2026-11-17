@@ -49,14 +49,13 @@ contains
   subroutine Setup
     use M_Utils_Say
     use M_Grid
-    use M_Grid_Linear
     use M_SysXc
 
     call Say_Setup("sysXc.linear")
 
-    if (.not. allocated(Grid_Linear_weights)) error stop "sysXc.linear: call Grid_Setup before SysXc_Setup"
+    if (.not. allocated(Grid_weights)) error stop "sysXc.linear: call Grid_Setup before SysXc_Setup"
     SysXc_nPoints = Grid_nPoints
-    SysXc_weights = Grid_Linear_weights
+    SysXc_weights = Grid_weights
 
   end subroutine
 

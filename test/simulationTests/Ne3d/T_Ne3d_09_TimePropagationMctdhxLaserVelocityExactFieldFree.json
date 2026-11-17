@@ -2,7 +2,6 @@
     "grid": {
         "ylm": {
             "lmax": 1,
-            "rmin": 0.0,
             "rmax": 5.0,
             "fedvr": {
                 "nElements": 2,
@@ -47,6 +46,9 @@
             }
         }
     },
+    "fieldFree": {
+        "eigen": { }
+    },
     "method": {
         "mb": {
             "nBodyTypes": 2,
@@ -55,7 +57,6 @@
             "orbBased": {
                 "nOrbs": [ 5, 5 ],
                 "mOfOrbs": [ 0, 0, -1, 0, 1, 0, 0, -1, 0, 1 ],
-                "exactFieldFreeQ": true,
                 "mctdhx": { }
             }
         }

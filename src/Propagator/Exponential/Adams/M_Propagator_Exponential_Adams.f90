@@ -15,7 +15,7 @@
 !> N is interpolated in time, so components of N that oscillate fast with the
 !> phases of L (e.g. high-energy orbital components coupled by N) limit the
 !> step size: h times the largest exactly propagated frequency should stay
-!> well below 1 (for the spectral cut: h * method.mb.orbBased.exactFieldFreeCut).
+!> well below 1 (for the spectral cut: h * fieldFree.eigen.cut).
 module M_Propagator_Exponential_Adams
   use M_Utils_Types
 

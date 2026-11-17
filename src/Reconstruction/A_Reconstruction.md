@@ -91,7 +91,10 @@ changing the driver, each one wrapping the closure bound before it:
   and N2.
 - `Singlet/Anchor/` (`anchor`): the closure error at a reference state.
 
-The Generic and SingletTr0 schemes bind their own AddCollisionOp. Cost per
+The Generic schemes bind their own AddCollisionOp; the SingletTr0 schemes,
+like the Singlet ones, bind only a closure
+(`Reconstruction_SingletTr0_FillRdm3aab`), and the family driver adds the
+collision operators of the 2-RDM and the 1-RDM. Cost per
 derivative (NY with ccQ, static orbitals, ethylene, 14 orbitals, 8 threads):
 0.23 s, 0.18 s without ccQ. SingletTr0 has no ccQ; for its accuracy see the
 ethylene section of `app/README.md`.
@@ -134,7 +137,7 @@ A family block takes exactly one scheme, for example:
 {
   "reconstruction": {
     "generic": {
-      "genericValdemoro": {}
+      "valdemoro": {}
     }
   }
 }
@@ -144,7 +147,7 @@ A family block takes exactly one scheme, for example:
 {
   "reconstruction": {
     "singlet": {
-      "singletNy": { "ccQ": true }
+      "ny": { "ccQ": true }
     }
   }
 }
@@ -164,7 +167,7 @@ A family block takes exactly one scheme, for example:
 
 | Path | Type | Default | Description |
 |------|------|---------|-------------|
-| `reconstruction.singlet.<scheme>.ccQ` | bool | false | Contraction consistency of D3 (valdemoro, singletNy) |
+| `reconstruction.singlet.<scheme>.ccQ` | bool | false | Contraction consistency of D3 (valdemoro, ny) |
 | `reconstruction.singlet.triples.moellerPlesset` | object | absent | Connected triples (`Singlet/Triples/A_Reconstruction_Singlet_Triples.md`) |
 | `reconstruction.singlet.anchor` | object | absent | Anchored closure (`Singlet/Anchor/A_Reconstruction_Singlet_Anchor.md`) |
 
@@ -177,7 +180,11 @@ in `Reconstruction_Singlet_Fabricate` that sets `scheme` and calls it; the
 family then reads `<scheme>.ccQ`. CMake picks up new
 files by its glob.
 
-Any other scheme (Generic, SingletTr0, or a collision operator of its own):
+A SingletTr0 scheme binds only `Reconstruction_SingletTr0_FillRdm3aab` (the
+same closure interface) and gets a branch in
+`Reconstruction_SingletTr0_Fabricate`.
+
+Any other scheme (Generic, or a collision operator of its own):
 
 1. **Create directory** under appropriate family:
    ```
@@ -209,10 +216,10 @@ Any other scheme (Generic, SingletTr0, or a collision operator of its own):
    end submodule
    ```
 
-4. **Register in parent factory** (e.g., `S_Reconstruction_SingletTr0.f90`):
+4. **Register in parent factory** (e.g., `S_Reconstruction_Generic.f90`):
    ```fortran
-   else if (Json_GetExistence("reconstruction.singletTr0.myScheme")) then
-     call Reconstruction_SingletTr0_MyScheme_Fabricate
+   else if (Json_GetExistence("reconstruction.generic.myScheme")) then
+     call Reconstruction_Generic_MyScheme_Fabricate
    ```
 
 ## Dependencies
@@ -232,7 +239,9 @@ Any other scheme (Generic, SingletTr0, or a collision operator of its own):
 ## Testing
 
 - `test/simulationTests/He1d/T_He1d_06_TimePropagationTd2rdm*`: TD-2RDM
-  propagation (generic and singlet, weak orbitals, split step).
+  propagation with `singlet.valdemoro` (the WeakOrbs variants bind a no-op
+  collision operator, exact for N = 2); `T_He1d_15` with `singlet.ny`.
+  The `generic.valdemoro` scheme and `singletTr0.valdemoro` have no test.
 - `test/simulationTests/Be3d/T_Be3d_04_Td2rdmSpectralAnchor` pins the NY
   closure at a correlated Be state (the anchor tests: `Singlet/Anchor/`).
 - `test/componentTests/Reconstruction/Singlet/Triples/T_Reconstruction_Singlet_Triples`:

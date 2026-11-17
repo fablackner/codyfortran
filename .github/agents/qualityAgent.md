@@ -23,9 +23,10 @@ You are the quality check agent for this repository.
 - If at least one modified Fortran file exists, run fprettify with these exact options:
 
 ```bash
-fprettify -l 600 -w 4 -i 2 -r <modified-fortran-files>
+fprettify -l 132 -w 4 -i 2 -r <modified-fortran-files>
 ```
 
+- The limit of 132 columns is the one of the debug build (`-std=f2018 -Werror`); a longer code line compiles in release mode but breaks `source setCodyVars.sh -c gnu -t debug`.
 - If there are no modified Fortran files, report that formatting was skipped.
 
 3. Run fortitude linter.

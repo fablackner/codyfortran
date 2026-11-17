@@ -41,6 +41,11 @@
             }
         }
     },
+    "fieldFree": {
+        "eigen": {
+            "cut": 40.0
+        }
+    },
     "method": {
         "mb": {
             "nBodyTypes": 2,
@@ -48,8 +53,6 @@
             "bodyStatistics": [ "f", "f" ],
             "orbBased": {
                 "nOrbs": [ 1, 1 ],
-                "exactFieldFreeQ": true,
-                "exactFieldFreeCut": 40.0,
                 "tdks": { }
             }
         }

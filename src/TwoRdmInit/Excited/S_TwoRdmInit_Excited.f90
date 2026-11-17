@@ -22,27 +22,15 @@
 !>
 !> @par Algorithm
 !>   1. Build diagonal 1-RDM with occupation n_i = 1 for i <= nBodies
-!>   2. Modify occupations based on creates/destroys configuration
-!>   3. Compute 2-RDM as product of 1-RDMs with appropriate symmetry
+!>   2. Compute 2-RDM as product of 1-RDMs with appropriate symmetry
+!>
+!> The occupations are those of the Hartree-Fock determinant: the excitation
+!> keys (creates, destroys, bodyType1, bodyType2) are not implemented and are
+!> refused at fabricate (InitializeBlock applies the fixed excitation
+!> 1 -> 1, see its note).
 submodule(M_TwoRdmInit_Excited) S_TwoRdmInit_Excited
 
   implicit none
-
-  !-----------------------------------------------------------------------------
-  ! Module-level configuration (populated by Fabricate)
-  !-----------------------------------------------------------------------------
-
-  !> Orbital indices to be populated (creation operators applied)
-  integer(I32), allocatable :: creates(:)
-
-  !> Orbital indices to be vacated (annihilation operators applied)
-  integer(I32), allocatable :: destroys(:)
-
-  !> Body type index for first particle species (default: 1 = alpha)
-  integer(I32) :: bodyType1 = 1
-
-  !> Body type index for second particle species (default: 2 = beta)
-  integer(I32) :: bodyType2 = 2
 
 contains
 
@@ -63,10 +51,11 @@ contains
     ! set values and procedure pointers
     !------------------------------------
 
-    creates = Json_Get("twoRdmInit.excited.creates", [1])
-    destroys = Json_Get("twoRdmInit.excited.destroys", [1])
-    bodyType1 = Json_Get("twoRdmInit.excited.bodyType1", 1)
-    bodyType2 = Json_Get("twoRdmInit.excited.bodyType2", 2)
+    ! Not implemented: without this stop the keys would be ignored silently
+    if (Json_GetExistence("twoRdmInit.excited.creates") .or. Json_GetExistence("twoRdmInit.excited.destroys") .or. &
+        Json_GetExistence("twoRdmInit.excited.bodyType1") .or. Json_GetExistence("twoRdmInit.excited.bodyType2")) &
+      error stop "twoRdmInit.excited builds the Hartree-Fock determinant: creates, destroys, bodyType1 and bodyType2 &
+                 &are not implemented"
 
     ! Map the local implementation to the main procedure pointer
     TwoRdmInit_InitializeBlock => InitializeBlock
@@ -103,10 +92,9 @@ contains
 !> @param[in]  bt1     Body type for indices i1, j1
 !> @param[in]  bt2     Body type for indices i2, j2
 !>
-!> @note The local initDestroys/initCreates arrays are currently hardcoded
-!>       to [1], meaning the module-level creates/destroys from JSON are
-!>       read but not fully utilized. This appears to be incomplete.
-!>       TODO: Wire up the module-level creates/destroys properly.
+!> @note The local initDestroys/initCreates arrays are hardcoded to [1] (an
+!>       excitation 1 -> 1 that changes nothing); the excitation keys of the
+!>       JSON are refused at fabricate until they are wired up here.
   subroutine InitializeBlock(rdm2Bt, bt1, bt2)
     use M_Method_Mb
     use M_Method_Mb_OrbBased

@@ -19,7 +19,7 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> Exactly one scheme key must be present:
-!>   - `"propagator.exponential.krogstad4"` → Krogstad step (this submodule)
+!>   - `"propagator.exponential.krogstad4"` → Propagator_Exponential_Krogstad4_Fabricate
 !>   - `"propagator.exponential.adams"` → Propagator_Exponential_Adams_Fabricate
 !>   - `"propagator.exponential.adamsLawson"` → Propagator_Exponential_AdamsLawson_Fabricate
   module subroutine Propagator_Exponential_Fabricate
@@ -27,7 +27,7 @@ contains
     use M_Utils_Json
     use M_IntegratorList
     use M_Method
-    use M_Propagator
+    use M_Propagator_Exponential_Krogstad4
     use M_Propagator_Exponential_Adams
     use M_Propagator_Exponential_AdamsLawson
 
@@ -37,13 +37,12 @@ contains
     ! applicability
     !------------------------------------
 
-    ! The Cayley exact part (method.mb.orbBased.exactFieldFreeQ on non-Ylm
-    ! grids, e.g. grid.fem) binds Method_PropagateExactPart but no phi functions
+    ! The Cayley exact part (fieldFree.cayley, e.g. on grid.fem) binds
+    ! Method_PropagateExactPart but no phi functions
     if (.not. (associated(Method_PropagateExactPart) .and. associated(Method_ApplyExactPartPhi))) &
       error stop "propagator.exponential requires a method with an exactly propagated part and its phi functions &
-                 &(method.mb.orbBased.exactFieldFreeQ with mctdhx on a Ylm grid); exactFieldFreeQ on non-Ylm grids &
-                 &(e.g. grid.fem) is a Cayley step without phi functions: use propagator.splitStep with &
-                 &exactPartScheme strang"
+                 &(fieldFree.eigen with mctdhx or tdks on a Ylm grid); fieldFree.cayley (e.g. grid.fem) is a Cayley &
+                 &step without phi functions: use propagator.splitStep with exactPartScheme strang"
     if (IntegratorList(1) % e % imagTimeQ .or. IntegratorList(2) % e % imagTimeQ) &
       error stop "propagator.exponential: imaginary time is not supported"
 
@@ -52,7 +51,7 @@ contains
     !------------------------------------
 
     if (Json_GetExistence("propagator.exponential.krogstad4")) then
-      Propagator_Propagate => Propagator_Exponential_KrogstadStep
+      call Propagator_Exponential_Krogstad4_Fabricate
 
     else if (Json_GetExistence("propagator.exponential.adams")) then
       call Propagator_Exponential_Adams_Fabricate

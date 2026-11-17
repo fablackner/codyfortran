@@ -21,9 +21,7 @@ contains
 !> Sets TwoRdm_nElements to nOrbs⁴ and wires all procedure pointers to the
 !> generic implementations.
   module subroutine TwoRdm_Fermionic_Generic_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
     use M_TwoRdm
 
@@ -58,7 +56,6 @@ contains
 !> @param[in]    twoRdmState   Input linearized 2-RDM
 !> @param[in]    h1            One-body Hamiltonian matrix (nOrbs × nOrbs)
   subroutine ApplyCommutatorH1(dTwoRdmState, twoRdmState, h1)
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
     use M_TwoRdm
 
@@ -117,7 +114,6 @@ contains
 !> @param[in]    twoRdmState   Input linearized 2-RDM
 !> @param[in]    h2            Two-body interaction tensor (nOrbs⁴)
   subroutine ApplyCommutatorH2(dTwoRdmState, twoRdmState, h2)
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
     use M_TwoRdm
 
@@ -182,10 +178,9 @@ contains
 
     complex(R64), allocatable :: rdm2(:, :, :, :)
 
-    integer(I32) :: i, j, k, nE, nO
+    integer(I32) :: i, j, k, nO
 
     nO = Method_Mb_OrbBased_nOrbsSum
-    nE = TwoRdm_nElements
 
     call TwoRdm_FillRdm2FromTwoRdmState(rdm2, twoRdmState)
 
@@ -218,7 +213,6 @@ contains
 !> @param[out] rdm2         Allocated on output: 2-RDM tensor (nOrbs⁴)
 !> @param[in]  twoRdmState  Input linearized 2-RDM
   subroutine FillRdm2FromTwoRdmState(rdm2, twoRdmState)
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(out), allocatable :: rdm2(:, :, :, :)
@@ -258,7 +252,6 @@ contains
 !> @param[out] twoRdmState  Output linearized 2-RDM (pre-allocated)
 !> @param[in]  rdm2         Input 2-RDM tensor (nOrbs⁴)
   subroutine FillTwoRdmStateFromRdm2(twoRdmState, rdm2)
-    use M_Method_Mb
     use M_Method_Mb_OrbBased
 
     complex(R64), intent(out), contiguous  :: twoRdmState(:)

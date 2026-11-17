@@ -17,10 +17,8 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine SysPotential_Lattice_Harmonic_StdImpl_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
     use M_SysPotential
-    use M_SysPotential_Lattice
 
     call Say_Fabricate("sysPotential.lattice.harmonic.stdImpl")
 

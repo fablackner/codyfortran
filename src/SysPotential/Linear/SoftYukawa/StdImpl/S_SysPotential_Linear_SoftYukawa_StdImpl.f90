@@ -22,10 +22,8 @@ contains
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine SysPotential_Linear_SoftYukawa_StdImpl_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
     use M_SysPotential
-    use M_SysPotential_Linear
 
     call Say_Fabricate("sysPotential.linear.softYukawa.stdImpl")
 

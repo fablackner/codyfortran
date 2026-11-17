@@ -67,6 +67,7 @@ module M_Utils_RdmAlgebra
   public :: RdmAlgebra_FillSymProduct
   public :: RdmAlgebra_FillSingletPart
   public :: RdmAlgebra_FillTripletPart
+  public :: RdmAlgebra_AddCommutatorH1ab
   public :: RdmAlgebra_AddCommutatorH2ab
 
 contains
@@ -423,6 +424,45 @@ contains
             end do
           end do
         end if
+      end do
+    end do
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  !> dRdm2ab += [h1, rdm2ab] for the up-down block of a ket-first 2-RDM (h1 in
+  !> spin orbitals, up block first): the up indices i1, j1 with h1(1:nOa,
+  !> 1:nOa), the down indices i2, j2 with the down block h1(nOa + 1:,
+  !> nOa + 1:); the contraction index runs over nOa, so nOa = nOb.
+  subroutine RdmAlgebra_AddCommutatorH1ab(dRdm2ab, rdm2ab, h1)
+    complex(R64), intent(inout), contiguous :: dRdm2ab(:, :, :, :)
+    complex(R64), intent(in), contiguous    :: rdm2ab(:, :, :, :)
+    complex(R64), intent(in), contiguous    :: h1(:, :)
+
+    integer(I32) :: nOa, nOb
+    integer(I32) :: i1, i2, j1, j2, k
+
+    nOa = size(rdm2ab, 1)
+    nOb = size(rdm2ab, 2)
+
+    do j2 = 1, nOb
+      do j1 = 1, nOa
+
+        do i2 = 1, nOb
+          do i1 = 1, nOa
+
+            do k = 1, nOa
+
+              dRdm2ab(i1, i2, j1, j2) = dRdm2ab(i1, i2, j1, j2) + h1(i1, k) * rdm2ab(k, i2, j1, j2)
+              dRdm2ab(i1, i2, j1, j2) = dRdm2ab(i1, i2, j1, j2) + h1(i2 + nOa, k + nOa) * rdm2ab(i1, k, j1, j2)
+
+              dRdm2ab(i1, i2, j1, j2) = dRdm2ab(i1, i2, j1, j2) - h1(k, j1) * rdm2ab(i1, i2, k, j2)
+              dRdm2ab(i1, i2, j1, j2) = dRdm2ab(i1, i2, j1, j2) - h1(k + nOa, j2 + nOa) * rdm2ab(i1, i2, j1, k)
+
+            end do
+
+          end do
+        end do
       end do
     end do
 

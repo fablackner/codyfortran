@@ -24,7 +24,6 @@ contains
 !> - `Propagator_Setup` remains at its default (no-op or prior binding)
   module subroutine Propagator_Single_Fabricate
     use M_Utils_Say
-    use M_Utils_Json
     use M_Propagator
 
     call Say_Fabricate("propagator.single")

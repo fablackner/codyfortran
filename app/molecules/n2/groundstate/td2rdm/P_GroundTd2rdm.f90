@@ -220,7 +220,7 @@ contains
     call TwoRdm_FillRdm2FromTwoRdmState(rdm2, TwoRdm_twoRdmState)
     call RdmDiagonalize_Rdm1(natOcc, natOrbs, rdm1(1:n, 1:n))
     call RdmTrace_FillRdm2abFromRdm2(rdm2ab, rdm2, n, n)
-    call RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2ab)
+    call RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2ab, Method_Mb_nBodies(1), Method_Mb_nBodies(2))
     energy = Method_GetEnergy(t)
 
     write (io, '(F10.4, F8.4, F24.14, 2ES13.4, *(ES15.7))') t, Method_Mb_OrbBased_SwitchFactor(t), energy, &

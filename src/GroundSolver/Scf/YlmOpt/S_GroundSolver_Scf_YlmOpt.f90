@@ -89,7 +89,6 @@ contains
     use M_Utils_Say
     use M_Utils_Json
     use M_GroundSolver
-    use M_GroundSolver_Scf
 
     call Say_Fabricate("groundSolver.scf.ylmOpt")
 
@@ -109,6 +108,7 @@ contains
     GroundSolver_Setup => Setup
     GroundSolver_Approach => Approach
     GroundSolver_Scf_YlmOpt_HartreeFockAction => HartreeFockAction
+    GroundSolver_implementsDeclaredMQ = .true.
 
   end subroutine
 
@@ -119,28 +119,48 @@ contains
   !> Allocates radial potentials and full-grid temporaries. The potential size
   !> holds all (l,m) channels of the interaction expansion × nRadial.
   subroutine Setup
+    use M_Utils_Json
     use M_Utils_Say
     use M_Grid
     use M_Grid_Ylm
     use M_SysInteraction_Ylm
+    use M_OrbsInit_Ylm_HydrogenLike
     use M_GroundSolver
-    use M_Orbs
-
     integer(I32) :: potSize
 
     call Say_Setup("groundSolver.scf.ylmOpt")
 
+    ! The eigenvectors are mapped to the orbitals by the (n, l, m) of their
+    ! hydrogen-like start
+    if (.not. Json_GetExistence("orbsInit.ylm.hydrogenLike") .or. Json_GetExistence("orbsInit.load")) &
+      error stop "groundSolver.scf.ylmOpt takes the (n, l, m) of every orbital from orbsInit.ylm.hydrogenLike &
+                 &(without orbsInit.load)"
+    if (.not. allocated(OrbsInit_Ylm_HydrogenLike_n)) &
+      error stop "groundSolver.scf.ylmOpt: call OrbsInit_Fabricate before GroundSolver_Setup"
+    if (size(OrbsInit_Ylm_HydrogenLike_n) < GroundSolver_NumberOfSpinUpOrbs()) &
+      error stop "groundSolver.scf.ylmOpt: orbsInit.ylm.hydrogenLike needs (n, l, m) for every spin-up orbital"
+
     potSize = SysInteraction_Ylm_nPoints
 
+    if (allocated(src)) deallocate (src)
     allocate (src(potSize))
+    if (allocated(srcTmp)) deallocate (srcTmp)
     allocate (srcTmp(potSize))
+    if (allocated(interactionPotential)) deallocate (interactionPotential)
     allocate (interactionPotential(potSize))
+    if (allocated(dOrbLmTmp)) deallocate (dOrbLmTmp)
     allocate (dOrbLmTmp(Grid_Ylm_nRadial))
+    if (allocated(potLm)) deallocate (potLm)
     allocate (potLm(Grid_Ylm_nRadial))
+    if (allocated(hartreePotentialRaw)) deallocate (hartreePotentialRaw)
     allocate (hartreePotentialRaw(Grid_Ylm_nRadial))
+    if (allocated(srcLm)) deallocate (srcLm)
     allocate (srcLm(Grid_Ylm_nRadial))
+    if (allocated(orb)) deallocate (orb)
     allocate (orb(Grid_nPoints))
+    if (allocated(dOrbTmp)) deallocate (dOrbTmp)
     allocate (dOrbTmp(Grid_nPoints))
+    if (allocated(orbsRaw)) deallocate (orbsRaw)
     allocate (orbsRaw(Grid_nPoints, GroundSolver_NumberOfSpinUpOrbs()))
 
   end subroutine
@@ -161,12 +181,9 @@ contains
   subroutine HartreeFockAction(dOrbLm, orbLm, l, time)
     use M_Utils_SphericalHarmonics
     use M_SysKinetic_Ylm
-    use M_SysPotential_Ylm
     use M_SysInteraction
-    use M_Method_Mb_OrbBased
     use M_GroundSolver
     use M_Orbs
-    use M_Grid
     use M_Grid_Ylm
 
     complex(R64), intent(out), contiguous, target :: dOrbLm(:)
@@ -225,7 +242,6 @@ contains
   !> @param[inout] state  Packed orbital state
   !> @param[in]    time   Time for potential evaluation
   subroutine Approach(state, time)
-    use M_Mixing
     use M_Grid
     use M_Grid_Ylm
     use M_DiagonalizerList
@@ -240,7 +256,6 @@ contains
     real(R64), intent(in) :: time
 
     complex(R64), contiguous, pointer :: orbs(:, :)
-    complex(R64), contiguous, pointer :: orbsRawFlat(:)
     integer(I32) :: nG, nOS, nUp, j
     integer(I32) :: n, l, m, nr
 
@@ -286,33 +301,13 @@ contains
       call Grid_Ylm_SetLmComponent(orbsRaw(:, j), l, m, DiagonalizerList(l + 1) % e % evecs(:, nr + 1))
     end do
 
-    ! Step 5: The radial eigenvectors are normalized in the Euclidean metric;
-    ! alignment and mixing require orthonormality with respect to the grid
-    ! metric (Grid_InnerProduct), then gauge-align the new orbitals with the
-    ! old ones (removes the arbitrary phase of the radial eigenvectors),
-    ! then mix and copy spins
-    call Grid_Orthonormalize(orbsRaw)
+    ! Step 5: The radial eigenvectors are normalized in the Euclidean metric:
+    ! orthonormalize in the grid metric and gauge-align on the old orbitals
     ! (per block of equal declared m: never mixes orbitals of different m)
-    call Orbs_AlignOnReference(orbsRaw, orbs(:, 1:nUp), blockOf_=Orbs_blockOfOrb(1:nUp))
+    call GroundSolver_AlignOrbitals(orbsRaw, orbs(:, 1:nUp), blockOf_=Orbs_blockOfOrb(1:nUp))
 
-    if (mixTarget .eq. "orbitals") then
-      orbsRawFlat(1:nG * nUp) => orbsRaw
-      call Mixing_Mix(state(1:nG * nUp), orbsRawFlat)
-    else
-      do j = 1, nUp
-        orbs(:, j) = orbsRaw(:, j)
-      end do
-    end if
-
-    ! Restricted: the state holds only the shared spatial set, no copy needed
-    if (.not. Orbs_restrictedQ) then
-      do j = 1, nUp
-        orbs(:, nUp + j) = orbs(:, j)  ! Copy spin-up → spin-down
-      end do
-    end if
-
-    ! Step 6: Gram–Schmidt orthonormalize
-    call Orbs_Orthonormalize(orbs)
+    ! Step 6: mix or replace, copy spin-up → spin-down, orthonormalize
+    call GroundSolver_StoreOrbitals(state(1:nG * nOS), orbsRaw, mixQ=mixTarget .eq. "orbitals")
 
   end subroutine
 

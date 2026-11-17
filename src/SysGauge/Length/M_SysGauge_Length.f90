@@ -18,9 +18,9 @@
 !> envelope maximum (cep = 0: cos-like pulse).
 !>
 !> Why a SysGauge backend although the operator is diagonal: SysPotential
-!> stays static, so the exact field-free part (method.mb.orbBased.
-!> exactFieldFreeQ) can propagate h0 = T + V_static exactly while the
-!> integrator only sees this non-stiff time-dependent term.
+!> stays static, so the exact field-free part (a fieldFree block) can
+!> propagate h0 = T + V_static exactly while the integrator only sees this
+!> non-stiff time-dependent term.
 !>
 !> JSON Configuration (<family>: fem or prolate)
 !> ------------------

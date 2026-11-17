@@ -75,7 +75,7 @@ for a field along the bond.
 
 ```json
 "reconstruction": { "singlet": {
-    "singletNy": { "ccQ": true },
+    "ny": { "ccQ": true },
     "anchor": { "dir": "../../groundstate/mcscf", "nTransitions": 12 }
 } }
 ```

@@ -6,7 +6,7 @@
 !> Hartree-potential mixing with α = 0.7) and the preconditioned eigensolver
 !> diagonalizerList.lobpcg: ApplyPrecOnVec => GroundSolver_PreconditionAction
 !> ((T + max(−θ, σ_min))⁻¹ by the exact FDM solve SysKinetic_SolveShifted),
-!> metricWeights = Grid_Fem_weights, no guard columns and tol 1e-7 (nGuard 0
+!> metricWeights = Grid_weights, no guard columns and tol 1e-7 (nGuard 0
 !> instead of 2: ε equal to 2e-10 with a third fewer Fock products; tol 1e-7
 !> instead of 1e-8: ε equal to 2e-8 with 20 % fewer products, since the
 !> occupied-virtual gap, not the HOMO-1/HOMO gap, sets the accuracy of the

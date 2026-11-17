@@ -78,7 +78,6 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   module subroutine Setup(this)
     use M_Utils_Say
-    use M_Utils_UnusedVariables
 
     class(T_DiagonalizerList_E_Arpack), intent(inout) :: this
 

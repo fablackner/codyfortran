@@ -3,7 +3,6 @@
         "ylm": {
             "lmax": 1,
             "mmax": 1,
-            "rmin": 0.0,
             "rmax": 160.0,
             "fedvr": {
                 "nElements": 40,
@@ -36,6 +35,11 @@
                 "strength": 1.0,
                 "blockEq": {}
             }
+        }
+    },
+    "fieldFree": {
+        "eigen": {
+            "cut": 1000.0
         }
     },
     "method": {
@@ -74,9 +78,7 @@
                     0,
                     1
                 ],
-                "mctdhx": {},
-                "exactFieldFreeQ": true,
-                "exactFieldFreeCut": 1000.0
+                "mctdhx": {}
             }
         }
     },

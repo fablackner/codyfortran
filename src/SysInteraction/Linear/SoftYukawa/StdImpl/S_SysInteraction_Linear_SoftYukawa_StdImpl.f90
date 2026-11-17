@@ -16,11 +16,8 @@ contains
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> @brief Bind the direct-convolution SoftYukawa implementation.
   module subroutine SysInteraction_Linear_SoftYukawa_StdImpl_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
     use M_SysInteraction
-    use M_SysInteraction_Linear
-    use M_SysInteraction_Linear_SoftYukawa
 
     call Say_Fabricate("sysInteraction.linear.softYukawa.stdImpl")
 
@@ -69,7 +66,6 @@ contains
     use M_Utils_UnusedVariables
     use M_Utils_Constants
     use M_Grid
-    use M_Grid_Linear
     use M_Utils_ConvolutionIntegral
     implicit none
 

@@ -8,7 +8,7 @@
 !> Extends the Valdemoro approximation by the NY 3-cumulant: products of two
 !> 2-cumulants contracted through R = 2 P_occ - 1.
 !>
-!> **JSON path**: `reconstruction.singlet.singletNy`
+!> **JSON path**: `reconstruction.singlet.ny`
 !>
 !> **Options** (read by the family, S_Reconstruction_Singlet):
 !> - `ccQ` (bool, default=false): Apply contraction-consistent trace constraints

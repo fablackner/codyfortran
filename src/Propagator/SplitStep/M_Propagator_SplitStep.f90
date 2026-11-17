@@ -10,7 +10,8 @@
 !>
 !> Example (second order):
 !> \[
-!>   e^{-i\hat{H}\Delta t} \approx e^{-i\hat{A}\Delta t/2}\, e^{-i\hat{B}\Delta t}\, e^{-i\hat{A}\Delta t/2} + \mathcal{O}(\Delta t^3)
+!>   e^{-i\hat{H}\Delta t} \approx e^{-i\hat{A}\Delta t/2}\, e^{-i\hat{B}\Delta t}\, e^{-i\hat{A}\Delta t/2}
+!>   + \mathcal{O}(\Delta t^3)
 !> \]
 !>
 !> Specific composition orders are implemented in submodules such as

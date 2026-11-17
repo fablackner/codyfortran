@@ -42,6 +42,16 @@ contains
     call Say_Fabricate("purification")
 
     !------------------------------------
+    ! set values and procedure pointers
+    !------------------------------------
+
+    ! Nothing of an earlier fabricate survives; the backend binds what it
+    ! provides
+    Purification_Setup => NoOpProcedures_Setup
+    Purification_PurifyTwoRdmState => NoOpProcedures_PurifyTwoRdmState
+    Purification_usesH2Q = .false.
+
+    !------------------------------------
     ! branch: select purification family
     !------------------------------------
 
@@ -58,7 +68,7 @@ contains
       call Purification_SingletTr0_Fabricate
 
     else
-      ! No purification configured - pointers remain bound to no-ops
+      ! No purification configured: the no-ops bound above
       write (*, '(1X, A, A, A)') red, 'de: Purification => noPurification', reset
 
     end if

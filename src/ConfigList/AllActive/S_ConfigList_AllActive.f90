@@ -26,15 +26,16 @@
 !>
 !> ## orbCode Encoding
 !>
-!> Orbital indices are packed into a single integer for cache-friendly storage:
+!> Orbital indices (global, 1-based: shifted by the orbitals of the earlier
+!> body types) are packed into a single integer for cache-friendly storage:
 !> ```
-!>   Singles:  orbCode = 1 * nO + i  then  orbCode * nO + j
+!>   Singles:  orbCode = (i - 1) * nO + j
 !>             → decodes as a†_i a_j
 !>
-!>   Doubles:  orbCode = (((1 * nO + i1) * nO + j1) * nO + i2) * nO + j2
+!>   Doubles:  orbCode = (((i1 - 1) * nO + j1 - 1) * nO + i2 - 1) * nO + j2
 !>             → decodes as a†_i1 a†_i2 a_j2 a_j1
 !> ```
-!> The leading "1" ensures non-zero orbCode even for orbital index 0.
+!> Both are 1-based indices into the linearized one- and two-body tensors.
 submodule(M_ConfigList_AllActive) S_ConfigList_AllActive
 
   implicit none
@@ -52,7 +53,6 @@ contains
 !> type to allocate. Exactly one must be present.
   module subroutine ConfigList_AllActive_Allocate(e, path)
     use M_Utils_Json
-    use M_Utils_Say
     use M_ConfigList_AllActive_Fermionic, only: ConfigList_E_AllActive_Fermionic_Allocate
     use M_ConfigList_AllActive_Bosonic, only: ConfigList_E_AllActive_Bosonic_Allocate
 
@@ -139,7 +139,7 @@ contains
 !> Column-major: `excitedC(k, iC)` is the k-th target from config iC.
 !> This gives cache-friendly iteration when processing one config at a time.
   subroutine SetupSinglesData(this)
-    use M_Method_Mb
+    use M_ConfigList, only: T_ConfigList_Excitation
     use M_Method_Mb_OrbBased
 
     class(T_ConfigList_E_AllActive), intent(inout) :: this
@@ -147,15 +147,15 @@ contains
     integer(I32) :: i1, j1, iC, iCNew
     integer(I32) :: nConnectedSinglesMax
     real(R64) :: factor
-    integer(I32) :: k, bt, nOBt, nConfigurations, orbCode, shift, nO, nBBt
+    integer(I32) :: k, bt, nOBt, nConfigurations, orbCode, shift, nO
 
     bt = this % bodyTarget
     nOBt = Method_Mb_OrbBased_nOrbs(bt)
-    nBBt = Method_Mb_nBodies(bt)
     nO = Method_Mb_OrbBased_nOrbsSum
     shift = sum(Method_Mb_OrbBased_nOrbs(1:bt - 1))
     nConfigurations = this % nConfigurations
 
+    this % singles = T_ConfigList_Excitation()
     allocate (this % singles % nConnected(nConfigurations))
 
     !---------------------------------------------------------------------------
@@ -209,8 +209,8 @@ contains
 
           k = k + 1
 
-          ! Encode orbital indices: orbCode = (i1 + shift) * nO + (j1 + shift)
-          ! with leading 1 to avoid zero for i1=j1=0
+          ! Encode orbital indices: orbCode = (i - 1) * nO + j with the global
+          ! indices i = i1 + shift, j = j1 + shift
           orbCode = 1
           orbCode = (orbCode - 1) * nO + (i1 + shift)
           orbCode = (orbCode - 1) * nO + (j1 + shift)
@@ -248,23 +248,23 @@ contains
 !> This covers all unique double excitations for both fermions (where i1≠i2
 !> by Pauli) and bosons (where i1=i2 is valid).
   subroutine SetupDoublesData(this)
-    use M_Method_Mb
+    use M_ConfigList, only: T_ConfigList_Excitation
     use M_Method_Mb_OrbBased
 
     class(T_ConfigList_E_AllActive), intent(inout) :: this
 
     integer(I32) :: i1, i2, j1, j2, iC, iCNew
-    integer(I32) :: k, bt, nOBt, nConfigurations, orbCode, shift, nO, nBBt
+    integer(I32) :: k, bt, nOBt, nConfigurations, orbCode, shift, nO
     integer(I32) :: nConnectedDoublesMax
     real(R64) :: factor
 
     bt = this % bodyTarget
     nOBt = Method_Mb_OrbBased_nOrbs(bt)
-    nBBt = Method_Mb_nBodies(bt)
     nO = Method_Mb_OrbBased_nOrbsSum
     shift = sum(Method_Mb_OrbBased_nOrbs(1:bt - 1))
     nConfigurations = this % nConfigurations
 
+    this % doubles = T_ConfigList_Excitation()
     allocate (this % doubles % nConnected(nConfigurations))
 
     !---------------------------------------------------------------------------

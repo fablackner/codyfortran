@@ -13,7 +13,7 @@
 !>
 !> where A denotes antisymmetrization and Δ² = D² - A[D¹D¹] is the 2-body cumulant.
 !>
-!> **JSON path**: `reconstruction.generic.genericValdemoro`
+!> **JSON path**: `reconstruction.generic.valdemoro`
 !>
 !> @see C. Valdemoro, Phys. Rev. A 45, 4462 (1992)
 module M_Reconstruction_Generic_Valdemoro
@@ -26,11 +26,7 @@ module M_Reconstruction_Generic_Valdemoro
   !=============================================================================
 
   interface
-    !> Bind the generic Valdemoro implementation at runtime.
-    !>
-    !> Wires `Reconstruction_Generic_FillCollisionOp2` in
-    !> `M_Reconstruction_Generic` to the Valdemoro-specific routine and may
-    !> perform light initialization specific to this variant.
+    !> Binds Reconstruction_AddCollisionOp.
     module subroutine Reconstruction_Generic_Valdemoro_Fabricate
     end subroutine
   end interface

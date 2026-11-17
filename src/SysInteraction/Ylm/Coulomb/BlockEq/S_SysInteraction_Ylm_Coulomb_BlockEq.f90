@@ -42,12 +42,11 @@ contains
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   !> @brief Bind the block-equation Coulomb solver.
   module subroutine SysInteraction_Ylm_Coulomb_BlockEq_Fabricate
-    use M_Utils_Json
     use M_Utils_Say
     use M_SysInteraction
     use M_SysInteraction_Ylm
 
-    call Say_Fabricate("sysInteraction.ylm.coulomb.BlockEq")
+    call Say_Fabricate("sysInteraction.ylm.coulomb.blockEq")
 
     !------------------------------------
     ! set values and procedure pointers

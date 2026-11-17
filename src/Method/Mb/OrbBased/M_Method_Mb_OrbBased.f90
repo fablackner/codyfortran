@@ -10,12 +10,19 @@
 !> Concrete implementations are bound at runtime by
 !> `Method_Mb_OrbBased_Fabricate`.
 !>
-!> S_Method_Mb_OrbBased_FieldFreeMeanField (the frozen mean-field reference
-!> U) is an add-on of the Cayley variant of the exact field-free part, not a
-!> third exact-part variant next to FieldFreeEigen and FieldFreeCayley.
-!> S_Method_Mb_OrbBased_Switching switches the interaction on adiabatically
-!> (method.mb.orbBased.adiabaticSwitching) with the same frozen mean field
-!> as its reference.
+!> Submodules: S_Method_Mb_OrbBased (fabricate, operators, h1 and h2) with
+!> its child S_Method_Mb_OrbBased_YlmNodes (the definite-m node path of the
+!> correlation operator and of h2 on Ylm grids; a nested submodule adds
+!> nothing to this interface, what its parent calls is declared in the
+!> parent); S_Method_Mb_OrbBased_MeanField (the frozen mean field of a 1-RDM)
+!> and S_Method_Mb_OrbBased_Switching, which switches the interaction on
+!> adiabatically (method.mb.orbBased.adiabaticSwitching) with such a mean
+!> field as its reference.
+!>
+!> The exact field-free part of the orbital propagation is its own module,
+!> M_FieldFree ("fieldFree" block): with it the methods bind
+!> Method_PropagateExactPart to FieldFree_Propagate and
+!> Method_Mb_OrbBased_ApplyLinOp carries only the gauge coupling.
 module M_Method_Mb_OrbBased
   use M_Utils_Types
 
@@ -50,10 +57,7 @@ module M_Method_Mb_OrbBased
 
     !> Setup shared by the orbital-based methods, called first by their
     !> Method_Setup (after the Grid and Sys* setups and Orbs_Fabricate): builds
-    !> the skeleton of the definite-m node path if it is bound and the
-    !> exact field-free part (Method_Mb_OrbBased_SetupFieldFree) if the method
-    !> binds Method_PropagateExactPart (error stop if that setup is not bound,
-    !> e.g. Method_PropagateExactPart bound by other code).
+    !> the skeleton of the definite-m node path if it is bound.
     module subroutine Method_Mb_OrbBased_Setup
     end subroutine
 
@@ -90,21 +94,6 @@ module M_Method_Mb_OrbBased
       real(R64), intent(in)                    :: time
     end subroutine
 
-    !> Eigen variant of Method_Mb_OrbBased_SetupFieldFree (Ylm grids): builds
-    !> and diagonalizes the blocks of the field-free one-body Hamiltonian
-    !> h0 = T + V_ext per l and checks the requirements of the exact part
-    !> (S_Method_Mb_OrbBased_FieldFreeEigen).
-    module subroutine Method_Mb_OrbBased_SetupFieldFreeEigen
-    end subroutine
-
-    !> Cayley variant of Method_Mb_OrbBased_SetupFieldFree (grids whose
-    !> kinetic backend binds SysKinetic_SolveShifted, e.g. grid.fem): checks
-    !> that h0 = T + V_static is static, caches V_static, reads the GMRES
-    !> controls and ends with Method_Mb_OrbBased_SetupFieldFreeMeanField
-    !> (S_Method_Mb_OrbBased_FieldFreeCayley).
-    module subroutine Method_Mb_OrbBased_SetupFieldFreeCayley
-    end subroutine
-
     !> Fills the spatial 1-RDM in the orbitals of the state: rdm1 itself for
     !> unrestricted or single-species (nOrbsSum = nOrbsInState), the sum of
     !> the two spin blocks for restricted (nOrbsSum = 2 nOrbsInState).
@@ -113,6 +102,15 @@ module M_Method_Mb_OrbBased
       complex(R64), intent(out), allocatable :: rdm1Spatial(:, :)
       !> One-body reduced density matrix (nOrbsSum x nOrbsSum).
       complex(R64), intent(in), contiguous   :: rdm1(:, :)
+    end subroutine
+
+    !> Diagonal metric of the packed state Method_state (after Method_Setup),
+    !> the metricWeights of integrators and diagonalizers that act on it: 1
+    !> for the many-body part (CI coefficients or 2-RDM), Grid_weights for
+    !> every orbital of the state (moving orbitals, the tail of Method_state).
+    module subroutine Method_Mb_OrbBased_FillStateWeights(weights)
+      !> Output: weights (size of Method_state).
+      real(R64), intent(out), allocatable :: weights(:)
     end subroutine
 
     !> CI Hamiltonian of the stored matrices Method_Mb_OrbBased_h1 and
@@ -165,112 +163,6 @@ module M_Method_Mb_OrbBased
       complex(R64), intent(in), contiguous :: rdm2(:, :, :, :)
     end subroutine
 
-    !> Eigen variant of Method_Mb_OrbBased_PropagateFieldFree (Ylm grids):
-    !> orbs <- exp(-i h0 dt) orbs, or exp(-h0 dt) orbs if imagTimeQ, in the
-    !> eigenbasis of the blocks of Method_Mb_OrbBased_SetupFieldFreeEigen.
-    module subroutine Method_Mb_OrbBased_PropagateFieldFreeEigen(orbs, dt, imagTimeQ)
-      !> Orbitals (nPoints x nOrbsInState), propagated in place.
-      complex(R64), intent(inout), contiguous :: orbs(:, :)
-      !> Time step (may be negative).
-      real(R64), intent(in) :: dt
-      !> Imaginary-time propagation exp(-h0 dt).
-      logical, intent(in) :: imagTimeQ
-    end subroutine
-
-    !> Cayley variant of Method_Mb_OrbBased_PropagateFieldFree (grids with
-    !> SysKinetic_SolveShifted): orbs <- (1 + i dt h0/2)^-1 (1 - i dt h0/2) orbs
-    !> per orbital, solved by right-preconditioned GMRES in the grid metric
-    !> (M_Utils_Gmres); h0 + U instead of h0 once the frozen mean-field
-    !> reference U is built (exactFieldFreeMeanFieldQ). Real time only (error
-    !> stop if imagTimeQ). Not reentrant (shared GMRES context, work vectors
-    !> and step data; error stop inside an active OpenMP parallel region).
-    module subroutine Method_Mb_OrbBased_PropagateFieldFreeCayley(orbs, dt, imagTimeQ)
-      !> Orbitals (nPoints x nOrbsInState), propagated in place.
-      complex(R64), intent(inout), contiguous :: orbs(:, :)
-      !> Time step (may be negative).
-      real(R64), intent(in) :: dt
-      !> Imaginary-time propagation (not supported: error stop).
-      logical, intent(in) :: imagTimeQ
-    end subroutine
-
-    !> Internal plumbing of the Cayley exact part (called only by
-    !> S_Method_Mb_OrbBased_FieldFreeCayley, not for programs): the setup of
-    !> the frozen mean-field reference, called at the end of
-    !> Method_Mb_OrbBased_SetupFieldFreeCayley, so every setup of the Cayley
-    !> part releases the reference. Releases a reference built before and,
-    !> with exactFieldFreeMeanFieldQ, checks that the interaction is
-    !> body-type independent and prints the mean-field line of the setup.
-    !> The reference and its procedures live in
-    !> S_Method_Mb_OrbBased_FieldFreeMeanField.
-    module subroutine Method_Mb_OrbBased_SetupFieldFreeMeanField
-    end subroutine
-
-    !> Builds the frozen mean-field reference U = J0 - K0 of the Cayley exact
-    !> part (method.mb.orbBased.exactFieldFreeMeanFieldQ; replaces one built
-    !> earlier): J0 the Hartree potential of the density of rdm1 (one
-    !> potential solve of the total source, SysInteraction_FillDirectPotential),
-    !> K0 the exchange operator of rdm1 within every body type (restricted
-    !> storage: the spin-up block for all stored orbitals), compressed by
-    !> SysInteraction_FillExchangeAce on the stored orbitals of that body
-    !> type (n(n+1)/2 pair potentials). For a single determinant h0 + U is
-    !> its Fock operator. From then on the Cayley step propagates h0 + U
-    !> (S_Method_Mb_OrbBased_FieldFreeCayley, through
-    !> Method_Mb_OrbBased_ApplyFieldFreeMeanFieldOnOrb).
-    !> MCTDHX builds it from the state at its first exact-part (or nonlinear)
-    !> call after Method_Setup unless a program called this before (for a
-    !> kick: from the ground state before the kick, which leaves no static
-    !> part in the remainder; continued runs: from the same state again;
-    !> A_Method.md, "Which state").
-    module subroutine Method_Mb_OrbBased_BuildFieldFreeMeanField(orbs, rdm1, time)
-      !> Stored orbitals of the state (nPoints x nOrbsInState).
-      complex(R64), intent(in), contiguous :: orbs(:, :)
-      !> One-body reduced density matrix of the state (nOrbsSum x nOrbsSum,
-      !> rdm1(i, j) = <a+_j a_i>).
-      complex(R64), intent(in), contiguous :: rdm1(:, :)
-      !> Time of the state (interaction potentials).
-      real(R64), intent(in) :: time
-    end subroutine
-
-    !> dOrbs(:, i) += U orbs(:, i) with the frozen mean-field reference U of
-    !> the body type of orbital i (U = J0 - K0, K0 by its ACE vectors); with
-    !> h1_ also its matrix h1_(i, j) = <orbs_i|U orbs_j> (equal body types;
-    !> nOrbsSum x nOrbsSum, restricted: both spin blocks), the convention of
-    !> Method_Mb_OrbBased_FillH1 (Method_Mb_OrbBased_FillOneBodyMatrix); the
-    !> orbital form used by the MCTDHX nonlinear part. Error stop if the
-    !> reference is not built.
-    module subroutine Method_Mb_OrbBased_ApplyFieldFreeMeanField(dOrbs, orbs, h1_)
-      !> In/out: orbitals to accumulate into (nPoints x nOrbsInState).
-      complex(R64), intent(inout), contiguous :: dOrbs(:, :)
-      !> Input: orbitals the reference acts on (nPoints x nOrbsInState).
-      complex(R64), intent(in), contiguous :: orbs(:, :)
-      !> Optional output: matrix of U in the orbitals.
-      complex(R64), intent(out), allocatable, optional :: h1_(:, :)
-    end subroutine
-
-    !> Internal plumbing of the Cayley exact part (called only by
-    !> S_Method_Mb_OrbBased_FieldFreeCayley, not for programs): dOrb += U orb
-    !> with the frozen mean-field reference U of body type bt once it is built
-    !> and exactFieldFreeMeanFieldQ is set, a no-op otherwise; the per-vector
-    !> form used inside the Cayley step (its Arnoldi operator and true
-    !> residual). SysInteraction_AddMeanField: J0 orb is formed in scratch,
-    !> the ACE terms follow in one fused pass; reentrant.
-    module subroutine Method_Mb_OrbBased_ApplyFieldFreeMeanFieldOnOrb(dOrb, scratch, orb, bt)
-      !> In/out: vector to accumulate into (nPoints).
-      complex(R64), intent(inout), contiguous :: dOrb(:)
-      !> Work vector (nPoints), overwritten when U is applied.
-      complex(R64), intent(inout), contiguous :: scratch(:)
-      !> Input: vector the reference acts on (nPoints).
-      complex(R64), intent(in), contiguous :: orb(:)
-      !> Body type whose ACE vectors act on orb.
-      integer(I32), intent(in) :: bt
-    end subroutine
-
-    !> Whether the frozen mean-field reference is built (since the last
-    !> Method_Mb_OrbBased_SetupFieldFreeMeanField, which releases it).
-    module function Method_Mb_OrbBased_FieldFreeMeanFieldBuiltQ() result(res)
-      logical :: res
-    end function
-
     !> The frozen Hartree-Fock mean field U = J0 - K0 of rdm1 on the stored
     !> orbitals (fermions, body-type-independent interaction): J0 the
     !> Hartree potential of the density of rdm1 (one potential solve of the
@@ -278,8 +170,9 @@ module M_Method_Mb_OrbBased
     !> operator of rdm1 within every body type (restricted storage: the
     !> spin-up block for all stored orbitals), compressed by
     !> SysInteraction_FillExchangeAce (n(n+1)/2 pair potentials). For a single
-    !> determinant h0 + U is its Fock operator.
-    module subroutine Method_Mb_OrbBased_FillMeanField(mf, orbs, rdm1, time, nPairSolves_)
+    !> determinant h0 + U is its Fock operator
+    !> (S_Method_Mb_OrbBased_MeanField).
+    module subroutine Method_Mb_OrbBased_FillMeanField(mf, orbs, rdm1, time, nPairSolves_, exchangeOnlyQ_)
       !> Output: the mean field.
       type(T_Method_Mb_OrbBased_MeanField), intent(out) :: mf
       !> Stored orbitals (nPoints x nOrbsInState).
@@ -291,6 +184,8 @@ module M_Method_Mb_OrbBased
       real(R64), intent(in) :: time
       !> Optional output: number of pair potentials solved for K0.
       integer(I32), intent(out), optional :: nPairSolves_
+      !> Only the ACE vectors of K0, no Hartree potential (default: both).
+      logical, intent(in), optional :: exchangeOnlyQ_
     end subroutine
 
     !> w += U z with the mean field mf of body type bt
@@ -329,7 +224,7 @@ module M_Method_Mb_OrbBased
     !> dOrbs(:, i) += (1 - lambda(time)) U0 orbs(:, i) with the grid reference
     !> (moving orbitals); a no-op if it is not built or lambda = 1. Part of
     !> the one-body operator (Method_Mb_OrbBased_ApplySingleBodyOp and the
-    !> linear part with exactFieldFreeQ).
+    !> linear part with an exact field-free part).
     module subroutine Method_Mb_OrbBased_AddSwitchingReference(dOrbs, orbs, time)
       complex(R64), intent(inout), contiguous :: dOrbs(:, :)
       complex(R64), intent(in), contiguous :: orbs(:, :)
@@ -342,27 +237,6 @@ module M_Method_Mb_OrbBased
     module subroutine Method_Mb_OrbBased_AddSwitchingReferenceMatrix(h1, time)
       complex(R64), intent(inout), contiguous :: h1(:, :)
       real(R64), intent(in) :: time
-    end subroutine
-
-    !> Eigen variant of Method_Mb_OrbBased_ApplyFieldFreePhi (Ylm grids):
-    !> orbs = sum_m phi_m(-i h0 dt) orbsList(:, :, m), evaluated in the
-    !> h0 eigenbasis (kept eigenvectors only) (S_Method_Mb_OrbBased_FieldFreeEigen).
-    module subroutine Method_Mb_OrbBased_ApplyFieldFreePhiEigen(orbs, orbsList, dt)
-      !> Output: orbitals (nPoints x nOrbsInState).
-      complex(R64), intent(out), contiguous :: orbs(:, :)
-      !> Input: orbitals (nPoints x nOrbsInState x 0:K), slice m multiplies phi_m.
-      complex(R64), intent(in), contiguous :: orbsList(:, :, 0:)
-      !> Time step.
-      real(R64), intent(in) :: dt
-    end subroutine
-
-    !> Eigen variant of Method_Mb_OrbBased_ProjectBelowFieldFreeCut (Ylm
-    !> grids): projects orbitals (or orbital derivatives) onto the h0
-    !> eigenvectors below `Method_Mb_OrbBased_exactFieldFreeCut` (spectral
-    !> cut), per (l,m) block (S_Method_Mb_OrbBased_FieldFreeEigen).
-    module subroutine Method_Mb_OrbBased_ProjectBelowFieldFreeCutEigen(orbs)
-      !> Orbitals (nPoints x nOrbsInState), projected in place.
-      complex(R64), intent(inout), contiguous :: orbs(:, :)
     end subroutine
   end interface
 
@@ -626,130 +500,34 @@ module M_Method_Mb_OrbBased
     end subroutine
   end interface
 
-  !> If true (method.mb.orbBased.exactFieldFreeQ), the field-free one-body
-  !> Hamiltonian h0 = T + V_ext is propagated exactly by
-  !> `Method_PropagateExactPart` and the linear split-step integrator only
-  !> propagates the gauge coupling (`Method_Mb_OrbBased_ApplyLinOp`).
-  !> Implementation (bound in Method_Mb_OrbBased_Fabricate): on Ylm grids the
-  !> dense eigen-decomposition of the h0 blocks (*Eigen procedures), on other
-  !> grids whose kinetic backend binds SysKinetic_SolveShifted (grid.fem) the
-  !> Crank-Nicolson (Cayley) step (*Cayley procedures; no phi functions, no
-  !> spectral cut, no imaginary time).
-  logical :: Method_Mb_OrbBased_exactFieldFreeQ = .false.
-
-  !> If true (method.mb.orbBased.exactFieldFreeMeanFieldQ; Cayley exact part,
-  !> MCTDHX and TDKS), the exact part propagates h0 + U with a frozen
-  !> mean-field reference U (static, Hermitian; built once from the state,
-  !> Method_Mb_OrbBased_BuildFieldFreeMeanField): U = J0 - K0 for MCTDHX,
-  !> U = v_KS[rho0] - a K0 for TDKS (Method_Mb_OrbBased_kohnShamQ). The
-  !> nonlinear split-step part propagates the mean field minus U (MCTDHX:
-  !> orbitals -i Q (W - U) phi, CI coefficients (H2 - U^) C; TDKS: orbitals
-  !> -i (v_KS - a K - U) phi). The equations of motion are unchanged; the
-  !> split is that of the Fock (Kohn-Sham) operator of the reference and a
-  !> remainder that is small near it (A_Method.md, "Frozen mean-field
-  !> reference").
-  logical :: Method_Mb_OrbBased_exactFieldFreeMeanFieldQ = .false.
-
-  !> Whether the mean field of the method is the Kohn-Sham potential of a
-  !> density functional (method.mb.orbBased.tdks; set by its fabricate,
-  !> reset by Method_Mb_OrbBased_Fabricate): the frozen mean-field reference
-  !> is then U = v_KS[rho0] - a K0 (Method_Mb_OrbBased_Tdks_FillKohnShamPotential).
-  logical :: Method_Mb_OrbBased_kohnShamQ = .false.
-
-  !> Pointer to the setup of the exact field-free part (called by
-  !> Method_Mb_OrbBased_Setup if the method binds Method_PropagateExactPart):
-  !> Method_Mb_OrbBased_SetupFieldFreeEigen (Ylm) or
-  !> Method_Mb_OrbBased_SetupFieldFreeCayley; null without exactFieldFreeQ.
-  procedure(I_Method_Mb_OrbBased_SetupFieldFree), pointer :: Method_Mb_OrbBased_SetupFieldFree => null()
-  abstract interface
-    !> Prepares the exact field-free part (operators, caches, checks).
-    subroutine I_Method_Mb_OrbBased_SetupFieldFree
-    end subroutine
-  end interface
-
-  !> Pointer to the exact field-free propagation of the orbitals,
-  !> orbs <- U0(dt) orbs: exp(-i h0 dt) by the h0 eigen-decomposition (Ylm,
-  !> Method_Mb_OrbBased_PropagateFieldFreeEigen, also exp(-h0 dt) in imaginary
-  !> time) or the Cayley approximation (1 + i dt h0/2)^-1 (1 - i dt h0/2)
-  !> (Method_Mb_OrbBased_PropagateFieldFreeCayley, real time only); null
-  !> without exactFieldFreeQ.
-  procedure(I_Method_Mb_OrbBased_PropagateFieldFree), pointer :: Method_Mb_OrbBased_PropagateFieldFree => null()
-  abstract interface
-    !> Propagates the orbitals with the exact field-free part over dt.
-    subroutine I_Method_Mb_OrbBased_PropagateFieldFree(orbs, dt, imagTimeQ)
-      import :: R64
-      !> Orbitals (nPoints x nOrbsInState), propagated in place.
-      complex(R64), intent(inout), contiguous :: orbs(:, :)
-      !> Time step (may be negative).
-      real(R64), intent(in) :: dt
-      !> Imaginary-time propagation exp(-h0 dt).
-      logical, intent(in) :: imagTimeQ
-    end subroutine
-  end interface
-
-  !> Pointer to the phi functions of the exact field-free part,
-  !> orbs = sum_m phi_m(-i h0 dt) orbsList(:, :, m)
-  !> (Method_Mb_OrbBased_ApplyFieldFreePhiEigen, Ylm grids); null for the
-  !> Cayley part, which has none (MCTDHX then does not bind
-  !> Method_ApplyExactPartPhi, so propagator.exponential is unavailable).
-  procedure(I_Method_Mb_OrbBased_ApplyFieldFreePhi), pointer :: Method_Mb_OrbBased_ApplyFieldFreePhi => null()
-  abstract interface
-    !> Phi functions of h0 applied to a list of orbital sets.
-    subroutine I_Method_Mb_OrbBased_ApplyFieldFreePhi(orbs, orbsList, dt)
-      import :: R64
-      !> Output: orbitals (nPoints x nOrbsInState).
-      complex(R64), intent(out), contiguous :: orbs(:, :)
-      !> Input: orbitals (nPoints x nOrbsInState x 0:K), slice m multiplies phi_m.
-      complex(R64), intent(in), contiguous :: orbsList(:, :, 0:)
-      !> Time step.
-      real(R64), intent(in) :: dt
-    end subroutine
-  end interface
-
-  !> Diagnostics of the Cayley exact part (non-Ylm grids): number of GMRES
-  !> solves (one per orbital and exact substep), their total and largest
-  !> iteration counts (preconditioned matrix-vector products, all restarts)
-  !> since Method_Mb_OrbBased_SetupFieldFreeCayley.
-  integer(I64) :: Method_Mb_OrbBased_cayleyNSolves = 0
-  integer(I64) :: Method_Mb_OrbBased_cayleyNIterations = 0
-  integer(I32) :: Method_Mb_OrbBased_cayleyMaxIterations = 0
-
-  !> Spectral cut (method.mb.orbBased.exactFieldFreeCut, 0 = off): the
-  !> orbitals are restricted to the h0 eigenvectors with energy below this
-  !> value. The exact part drops the eigenvectors above it, and the linear and
-  !> nonlinear orbital derivatives are projected with
-  !> `Method_Mb_OrbBased_ApplySpectralCut` (MCTDHX, TDKS), so the unphysical
-  !> high-energy FEDVR states are never populated. For TDKS with a GGA it is
-  !> the stability condition of the split step: Ec * dt < pi.
-  real(R64) :: Method_Mb_OrbBased_exactFieldFreeCut = 0.0_R64
-
-  !> Pointer to the projection of orbital derivatives onto the h0 eigenvectors
-  !> below the spectral cut (`Method_Mb_OrbBased_ProjectBelowFieldFreeCut`),
-  !> or a no-op without cut.
-  procedure(I_Method_Mb_OrbBased_ApplySpectralCut), pointer :: Method_Mb_OrbBased_ApplySpectralCut
-  abstract interface
-    !> Projects the orbitals in place onto the space kept by the spectral cut.
-    subroutine I_Method_Mb_OrbBased_ApplySpectralCut(orbs)
-      import :: R64
-      !> In/out: orbitals (nPoints x nOrbsInState), projected in place.
-      complex(R64), intent(inout), contiguous :: orbs(:, :)
-    end subroutine
-  end interface
-
-  !> Pointer to the projection onto the h0 eigenvectors below the spectral
-  !> cut (Method_Mb_OrbBased_ProjectBelowFieldFreeCutEigen, Ylm grids); null
-  !> for the Cayley part (exactFieldFreeCut stops at fabricate on non-Ylm
-  !> grids).
-  procedure(I_Method_Mb_OrbBased_ApplySpectralCut), pointer :: Method_Mb_OrbBased_ProjectBelowFieldFreeCut => null()
+  !> Options that only some methods implement. The fabricate of a method sets
+  !> the flags of those it implements; Method_Mb_OrbBased_Fabricate resets
+  !> them before it dispatches and refuses a requested option afterwards if
+  !> its flag is unset:
+  !>   - the frozen mean-field reference of the exact part
+  !>     (fieldFree.cayley.meanFieldQ): the method subtracts U in its
+  !>     nonlinear part (FieldFree_ApplyMeanField);
+  !>   - the spectral cut (fieldFree.eigen.cut): the method projects its
+  !>     orbital derivatives with FieldFree_ProjectBelowCut;
+  !>   - the adiabatic switching (method.mb.orbBased.adiabaticSwitching): the
+  !>     method builds the reference at the end of its setup
+  !>     (Method_Mb_OrbBased_SetSwitchingReference).
+  !> The exact field-free part itself (a bound FieldFree_Propagate) is
+  !> declared by binding Method_PropagateExactPart.
+  logical :: Method_Mb_OrbBased_implementsMeanFieldReferenceQ = .false.
+  logical :: Method_Mb_OrbBased_implementsSpectralCutQ = .false.
+  logical :: Method_Mb_OrbBased_implementsSwitchingQ = .false.
 
   !> Pointer to the one-body operator propagated by the linear split-step
   !> integrator (`TimeDerivativeOrbsLin`): the full one-body Hamiltonian, or
-  !> only the gauge coupling if `Method_Mb_OrbBased_exactFieldFreeQ`.
+  !> only the gauge coupling with an exact field-free part (M_FieldFree, a
+  !> bound `FieldFree_Propagate`), which the methods then bind to
+  !> `Method_PropagateExactPart`.
   procedure(I_Method_Mb_OrbBased_ApplyLinOp), pointer :: Method_Mb_OrbBased_ApplyLinOp
   abstract interface
     !> Applies the one-body operator propagated by the linear split-step
-    !> integrator (full one-body Hamiltonian, or only the gauge coupling if
-    !> `Method_Mb_OrbBased_exactFieldFreeQ`) and accumulates the result in `dOrbs`.
+    !> integrator (full one-body Hamiltonian, or only the gauge coupling with
+    !> an exact field-free part) and accumulates the result in `dOrbs`.
     subroutine I_Method_Mb_OrbBased_ApplyLinOp(dOrbs, orbs, time)
       import :: R64
       !> In/out: where the result is added. Initialize before calling.

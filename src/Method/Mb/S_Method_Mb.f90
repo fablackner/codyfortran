@@ -50,11 +50,14 @@ contains
 
     Method_Mb_nBodyTypes = Json_Get("method.mb.nBodyTypes", 1)
 
-    allocate (Method_Mb_nBodies(Method_Mb_nBodyTypes))
     Method_Mb_nBodies = Json_Get("method.mb.nBodies", [(1, i=1, Method_Mb_nBodyTypes)])
 
     Method_Mb_nBodiesSum = sum(Method_Mb_nBodies)
 
+    ! A repeated fabricate replaces the index mappings of the earlier one
+    if (allocated(Method_Mb_nBodiesStart)) deallocate (Method_Mb_nBodiesStart)
+    if (allocated(Method_Mb_nBodiesEnd)) deallocate (Method_Mb_nBodiesEnd)
+    if (allocated(Method_Mb_bodyTypeOfBody)) deallocate (Method_Mb_bodyTypeOfBody)
     allocate (Method_Mb_nBodiesStart(Method_Mb_nBodyTypes))
     allocate (Method_Mb_nBodiesEnd(Method_Mb_nBodyTypes))
 

@@ -39,6 +39,14 @@
             }
         }
     },
+    "fieldFree": {
+        "cayley": {
+            "meanFieldQ": true,
+            "tolerance": 1e-12,
+            "krylovDim": 30,
+            "maxRestarts": 20
+        }
+    },
     "method": {
         "mb": {
             "nBodyTypes": 2,
@@ -46,11 +54,6 @@
             "bodyStatistics": [ "f", "f" ],
             "orbBased": {
                 "nOrbs": [ 1, 1 ],
-                "exactFieldFreeQ": true,
-                "exactFieldFreeMeanFieldQ": true,
-                "exactFieldFreeTol": 1e-12,
-                "exactFieldFreeKrylovDim": 30,
-                "exactFieldFreeMaxRestarts": 20,
                 "mctdhx": { }
             }
         }

@@ -4,6 +4,7 @@
 !> -20 < t < 0. Checks the energy at t = 0 against its reference value and
 !> its distance from the MCTDHF ground state (the reconstruction makes the
 !> TD-2RDM state differ slightly).
+!> Reads the MCTDHF ground state of T_He1d_04 (orb*.in).
 program T_He1d_15_AdiabaticSwitchingTd2rdm
   use M_Utils_Types
   use M_Utils_Say

@@ -1,9 +1,11 @@
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> 1D helium with soft-Coulomb interactions on the 21-point grid: exact
+!> diagonalization of the full two-particle grid basis (method.mb.gridBased.full),
+!> ground-state energy -2.4852443924542094.
 program T_He1d_01_ExactDiagGridBasedFullExpansion
-  use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
-  use M_Utils_Actions
-  use M_Utils_PrinterSpectrum
+  use M_Printer_Spectrum
   use M_Grid
   use M_SysKinetic
   use M_SysPotential
@@ -31,7 +33,7 @@ program T_He1d_01_ExactDiagGridBasedFullExpansion
   call SysPotential_Fabricate
   call SysInteraction_Fabricate
   call Method_Fabricate
-  DiagonalizerListInput(1) % ApplyMatOnVec => Actions_ApplyHamiltonian
+  DiagonalizerListInput(1) % ApplyMatOnVec => Method_ApplyHamiltonian
   DiagonalizerListInput(1) % dim = Grid_nPoints**2
   call DiagonalizerList_Fabricate(DiagonalizerListInput)
 
@@ -58,10 +60,10 @@ program T_He1d_01_ExactDiagGridBasedFullExpansion
   write (*, *) "groundstate energy: ", DiagonalizerList(1) % e % evals(1)
   write (*, *)
 
-  call PrinterSpectrum_DumpSpectrum("eigenspectrum.dat", .true.)
+  call Printer_Spectrum_DumpSpectrum("eigenspectrum.dat", .true.)
 
   call check(error, DiagonalizerList(1) % e % evals(1), -2.4852443924542094_R64, thr=1e-7_R64)
-  if (allocated(error)) error stop "T_He1d_ExactDiagFullExpansion failure"
+  if (allocated(error)) error stop "T_He1d_01_ExactDiagGridBasedFullExpansion failure"
 
   !==========================================
   call Say_Goodbye

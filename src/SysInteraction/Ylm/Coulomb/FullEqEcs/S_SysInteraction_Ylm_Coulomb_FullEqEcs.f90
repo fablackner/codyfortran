@@ -14,7 +14,6 @@ contains
   module subroutine SysInteraction_Ylm_Coulomb_FullEqEcs_Fabricate
     use M_Utils_Json
     use M_Utils_Say
-    use M_SysInteraction
     use M_SysInteraction_Ylm
 
     call Say_Fabricate("sysInteraction.ylm.coulomb.fullEqEcs")

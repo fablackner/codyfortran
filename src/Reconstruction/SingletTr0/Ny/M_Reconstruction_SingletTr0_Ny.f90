@@ -21,7 +21,7 @@ module M_Reconstruction_SingletTr0_Ny
   !=============================================================================
 
   interface
-    !> Bind the singletTr0 NY implementation at runtime.
+    !> Binds the closure Reconstruction_SingletTr0_FillRdm3aab.
     module subroutine Reconstruction_SingletTr0_Ny_Fabricate
     end subroutine
   end interface

@@ -21,7 +21,7 @@ contains
     use M_Utils_Say
     use M_Reconstruction_Singlet
 
-    call Say_Fabricate("reconstruction.singlet.singletNy")
+    call Say_Fabricate("reconstruction.singlet.ny")
 
     Reconstruction_Singlet_FillRdm3aab => FillRdm3aab
 

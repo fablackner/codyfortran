@@ -16,11 +16,14 @@
 !>
 !> | Key | Type | Default | Description |
 !> |-----|------|---------|-------------|
-!> | `functionals` | string(:) | required | Libxc names, e.g. ["lda_x", "lda_c_pw"], ["gga_x_pbe", "gga_c_pbe"], ["hyb_gga_xc_pbeh"] (case-insensitive, optional prefix xc_); may be empty (pure exact exchange) |
+!> | `functionals` | string(:) | required | Libxc names (case-insensitive, optional prefix xc_); may be empty |
 !> | `coefficients` | real(:) | 1 each | Weights c_i of the functionals |
 !> | `densityThreshold` | real | Libxc's | Densities below it count as zero (all functionals) |
 !> | `extParams.<name>` | real(:) | Libxc's | External parameters of functional <name> (e.g. lda_x_1d_soft: [beta]) |
 !> | `exactExchangeFraction` | real | Σ_i c_i a_i | Fraction of exact exchange (overrides the hybrids') |
+!>
+!> Examples of `functionals`: ["lda_x", "lda_c_pw"], ["gga_x_pbe", "gga_c_pbe"], ["hyb_gga_xc_pbeh"]; the list
+!> may be empty (pure exact exchange).
 !>
 !> Refused (error stop): meta-GGAs, range-separated hybrids (CAM, LC), VV10
 !> nonlocal correlation, kinetic functionals, functionals without energy or

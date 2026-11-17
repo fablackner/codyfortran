@@ -34,10 +34,9 @@ contains
     use M_Utils_Json
     use M_Utils_Say
     use M_Method
-    use M_Method_Mb
     use M_Method_Mb_GridBased_Full
 
-    call Say_Fabricate("method.gridBased")
+    call Say_Fabricate("method.mb.gridBased")
 
     !------------------------------------
     ! bind operator procedures

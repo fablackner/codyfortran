@@ -11,7 +11,8 @@ Key responsibilities:
 | **Inner product** | Metric-aware ⟨f\|g⟩ respecting quadrature weights / volume elements |
 | **Orthonormalization** | Gram–Schmidt with the correct metric |
 | **Subspace projection** | Remove components along an orthonormal basis (gauge constraints) |
-| **Coordinate access** | Back-end–specific arrays (xCoord, rCoord, weights, …) |
+| **Quadrature weights** | `Grid_weights(Grid_nPoints)`: the diagonal metric of the inner product, the same array on every back-end |
+| **Coordinate access** | Back-end–specific arrays (xCoord, rCoord, …) |
 
 ---
 
@@ -23,10 +24,10 @@ The Grid module follows the **Interface Module + Implementation Submodule** patt
 src/Grid/
 ├── M_Grid.f90                 # Public API: procedure pointers, Grid_nPoints
 ├── S_Grid.f90                 # Fabrication dispatcher + shared Gram–Schmidt
-├── AGENTS.md                  # This file
+├── A_Grid.md                  # This file
 │
 ├── Linear/                    # 1D Cartesian grids
-│   ├── M_Grid_Linear.f90      # Interface: xmin, xmax, xCoord, weights
+│   ├── M_Grid_Linear.f90      # Interface: xmin, xmax, xCoord
 │   ├── S_Grid_Linear.f90      # Dispatcher for Const / Fedvr
 │   ├── Const/                 # Uniform spacing
 │   │   ├── M_Grid_Linear_Const.f90
@@ -100,13 +101,13 @@ src/Grid/
 │  2. Probe JSON keys: grid.linear → grid.square → ... → grid.lattice         │
 │  3. Dispatch to family Fabricate (e.g., Grid_Linear_Fabricate)              │
 │     └─► Dispatch to variant Fabricate (e.g., Grid_Linear_Const_Fabricate)   │
-│  4. Bind: Grid_Setup → Setup, Grid_InnerProduct → InnerProduct              │
+│  4. Bind: Grid_Setup → Setup (Grid_InnerProduct: default in Grid_weights)   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            Grid_Setup                                        │
-│  1. Allocate weights(Grid_nPoints), xCoord(Grid_nPoints), ...               │
+│  1. Allocate Grid_weights(Grid_nPoints), xCoord(Grid_nPoints), ...          │
 │  2. Fill coordinate and quadrature arrays                                   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -116,7 +117,8 @@ src/Grid/
 │  - Call Grid_InnerProduct(fConjg, f) to compute overlaps                    │
 │  - Call Grid_Orthonormalize(orbSet) to enforce ⟨φ_i|φ_j⟩ = δ_ij            │
 │  - Call Grid_ProjectOnSubspace(dOrbs, orbs) to remove gauge components      │
-│  - Access coordinates/weights via M_Grid_Linear, M_Grid_Ylm, etc.           │
+│  - Use Grid_weights (M_Grid) as the metric of anything on the grid          │
+│  - Access coordinates via M_Grid_Linear, M_Grid_Ylm, etc.                   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -178,7 +180,7 @@ src/Grid/
       "rmax": 50.0,
       "fedvr": {
         "nElements": 20,
-        "order": 9
+        "nLocals": 10
       }
     }
   }
@@ -189,7 +191,7 @@ src/Grid/
 |------|------|---------|-------------|
 | `grid.ylm.lmax` | int | 1 | Maximum angular momentum |
 | `grid.ylm.mmax` | int | `lmax` | Maximum \|m\| of orbitals (clamped to `lmax`) |
-| `grid.ylm.rmax` | real | 20.0 | Radial box size |
+| `grid.ylm.rmax` | real | 20.0 | Radial box size. The FEDVR grids exclude r = 0 and keep the point at rmax: orbitals and potentials share the radial grid, and the radial Poisson solvers of SysInteraction (fullEq, blockEq, fullEqEcs) impose their Robin condition du/dr + (l + 1) u/r = 0 there. For orbitals rmax is therefore a free boundary (ψ′(rmax) = 0 in the weak form): bound levels whose tail reaches rmax come out below the free-space ones (H 3d at rmax 20: −0.0571 against −1/18), so choose rmax where the bound orbitals have decayed, or absorb before it |
 | `grid.ylm.fedvr.nElements` | int | 10 | Radial finite elements |
 | `grid.ylm.fedvr.nLocals` | int | 7 | Lobatto points per element |
 | `grid.ylm.fedvr.grading` | real | 1.0 | Ratio of consecutive element sizes (geometric, `Fedvr_CreateCtxGraded`); > 1 refines toward r = 0, 1 is the uniform grid (bitwise) |
@@ -224,7 +226,7 @@ cos θ (the sin^|m| θ factors pair up), so the quadrature is exact for total
 degree ≤ 4 lmax + 5. The table sizes are set by `Grid_Ylm_Fabricate`, the
 tables in `Grid_Ylm` Setup (`SetupQuadrature`, normalized associated Legendre
 recurrences) and are used by Method's `ApplyCorrelationOpYlmNodes` and
-`FillH2YlmNodes` (`S_Method_Mb_OrbBased.f90`, orbitals of declared m,
+`FillH2YlmNodes` (`S_Method_Mb_OrbBased_YlmNodes.f90`, orbitals of declared m,
 `method.mb.orbBased.mOfOrbs`).
 
 **Parity split.** The nodes are symmetrized exactly in Setup, x_{n+1−q} = −x_q
@@ -415,7 +417,7 @@ of the face-harmonics table).
 **Layout.** Fields are nodal values f(ix, iy, iz), flattened with x fastest,
 i = ix + nx(iy − 1) + nx·ny(iz − 1) (`Grid_Fem_Index`), and
 `Grid_InnerProduct(f, g)` = Σ_i conj(f_i) g_i w_i with the product weights
-w = wx(ix) wy(iy) wz(iz) (`Grid_Fem_weights`). The generic Gram–Schmidt and
+w = wx(ix) wy(iy) wz(iz) (`Grid_weights`). The generic Gram–Schmidt and
 subspace projection of `S_Grid.f90` apply unchanged.
 
 | Name | Kind | Contract |
@@ -424,7 +426,7 @@ subspace projection of `S_Grid.f90` apply unchanged.
 | `Grid_Fem_axes(3)` | type(T_Grid_Fem_Axis) | x, y, z axes |
 | `Grid_Fem_nLocals`, `Grid_Fem_nx`, `Grid_Fem_ny`, `Grid_Fem_nz` | integer | nodes per element edge; interior nodes per axis (Grid_nPoints = nx·ny·nz) |
 | `Grid_Fem_nCenters`, `Grid_Fem_centers(3, nCenters)`, `Grid_Fem_centerHMin(nCenters)` | integer, real | centers (nuclei) and their smallest element sizes |
-| `Grid_Fem_weights(Grid_nPoints)` | real(:) | 3D product weights |
+| `Grid_weights(Grid_nPoints)` (`M_Grid`) | real(:) | 3D product weights |
 | `Grid_Fem_multipoleLmax`, `Grid_Fem_multipoleCenter(3)` | integer, real | multipole boundary values of the Poisson solve |
 | `Grid_Fem_multipoleRadius` | real | convergence radius of those boundary values: distance from the expansion center to the nearest face node (set in `Grid_Setup`) |
 | `Grid_Fem_SetupAxes`, `Grid_Fem_SetupPoisson` | subroutines | steps of `Grid_Setup`, called by it only (not API): 1D operators of the axes; multipole tables and `Grid_Fem_multipoleRadius` |
@@ -469,8 +471,7 @@ none of them is public. This is standard Fortran 2008; gfortran compiles it,
 and CMake's Makefile generator builds the child after its parent from the
 `.smod` dependency, whatever the file names. `Grid_Fem_SetupAxes` and
 `Grid_Fem_SetupPoisson` are declared in `M_Grid_Fem` only so that
-`Grid_Setup` in the sibling `S_Grid_Fem` can call them (the pattern of the
-`Method_Mb_OrbBased_SetupFieldFree*` entry points).
+`Grid_Setup` in the sibling `S_Grid_Fem` can call them.
 
 **Numerics.**
 
@@ -489,8 +490,8 @@ and CMake's Makefile generator builds the child after its parent from the
   `Grid_Fem_ToEigenbasis` / `Grid_Fem_FromEigenbasis` remain for spectral
   analysis and tests. grid.fem deliberately has no exact kinetic propagation
   and no spectral cut: the dynamics propagates h0 = T + V_static by the
-  Cayley exact part (A_Method.md, "Exact Field-Free Part on grid.fem: Cayley
-  Step"), and `exactFieldFreeCut` stops at fabricate. The mode products split
+  Cayley exact part (src/FieldFree/A_FieldFree.md, "Cayley Variant"), and
+  `fieldFree.eigen` with its spectral cut stops at fabricate. The mode products split
   complex fields into real and imaginary parts (the imaginary transform is
   skipped when that part is identically zero) and use real DGEMMs: one along
   x on the (nx, ny·nz) matrix, nz along y on the (nx, ny) slices (OpenMP over
@@ -594,8 +595,8 @@ exact or HF-limit energies (H₂O by 0.34 Ha).
 
 Real-time TDHF on the mesh of T_Fem_03 (restricted MCTDHX with nOrbs =
 nBodies = [1, 1], orbital loaded from T_Fem_03, `propagator.splitStep.order2`
-with the Cayley exact part of `method.mb.orbBased.exactFieldFreeQ`, RK4,
-A_Method.md; T_Fem_10: MCTDHF on a coarser mesh):
+with the Cayley exact part `fieldFree.cayley`, RK4,
+src/FieldFree/A_FieldFree.md; T_Fem_10: MCTDHF on a coarser mesh):
 
 | Test | Run | Result |
 |------|-----|--------|
@@ -603,7 +604,7 @@ A_Method.md; T_Fem_10: MCTDHF on a coarser mesh):
 | `T_Fem_06_H2Kick` | kick e^(iκz), κ = 1e-3, dt = 0.02, 1 a.u. | d⟨z⟩/dt(0+) = Nκ (TRK) to −1.3e-6 on the grid, propagated slope to −1.5e-5 (second order in dt) |
 | `T_Fem_07_H2KickDouble` | κ = 2e-3 | dipole response linear: \|ratio − 2\| 2.1e-8 |
 | `T_Fem_08_ExponentialUnsupported` | `propagator.exponential` | refused at fabricate (no phi functions for the Cayley part) |
-| `T_Fem_09_H2KickMeanFieldReference` | frozen mean-field reference (`exactFieldFreeMeanFieldQ`): ground state at dt = 0.1, kick at dt = 0.02 | ground state stationary (\|ΔE\| 6e-13); dipole equal to the plain split of T_Fem_06 to 2.7e-7 of the response; second order (p = 2.00) |
+| `T_Fem_09_H2KickMeanFieldReference` | frozen mean-field reference (`fieldFree.cayley.meanFieldQ`): ground state at dt = 0.1, kick at dt = 0.02 | ground state stationary (\|ΔE\| 6e-13); dipole equal to the plain split of T_Fem_06 to 2.7e-7 of the response; second order (p = 2.00) |
 | `T_Fem_10_H2MctdhfMeanFieldReference` | MCTDHF, nOrbs = [2, 2], N = 15341, κ = 0.1, dt = 0.005 | the reference split follows the plain split to 1.6e-7 of the dipole response and 3.4e-7 Ha |
 
 Companion back-ends (`sysKinetic.fem.laplacian` with the exact shifted
@@ -648,8 +649,15 @@ For continuous grids, the inner product approximates the L² integral via quadra
 ```
 
 where `w_i` encodes the quadrature weight and any Jacobian factors (e.g., r² dr for radial grids).
+The weights are `Grid_weights(Grid_nPoints)` of `M_Grid`, filled by the `Setup` of the active
+back-end; `Grid_Fabricate` binds this product as the default `Grid_InnerProduct`. Consumers that need
+the metric (the `metricWeights` of integrators and diagonalizers, densities, sources of potentials)
+read `Grid_weights` and stay independent of the grid family.
 
-For lattice grids (discrete Hilbert space), the inner product is simply the dot product with unit weights.
+For lattice grids (discrete Hilbert space), the inner product is simply the dot product; `Grid_weights` is 1.
+
+On a c-product grid (`grid.ylm.fedvrEcs` with an active contour) the inner product is bilinear with
+complex weights of its own; `Grid_weights` then holds the real weights of the unrotated radial grid.
 
 ### Gram–Schmidt Orthonormalization
 
@@ -742,7 +750,6 @@ call Grid_ProjectOnSubspace(dOrbs, Orbs_orbs)
      end interface
 
      real(R64) :: Grid_Cylindrical_rmin, Grid_Cylindrical_rmax
-     real(R64), allocatable :: Grid_Cylindrical_weights(:)
      ! ... coordinates ...
    end module
    ```
@@ -754,15 +761,14 @@ call Grid_ProjectOnSubspace(dOrbs, Orbs_orbs)
      module subroutine Grid_Cylindrical_Fabricate
        use M_Utils_Json
        use M_Grid
-       ! Read JSON, set Grid_nPoints, bind Grid_InnerProduct => InnerProduct, etc.
+       ! Read JSON, set Grid_nPoints, bind Grid_Setup => Setup, etc.
      end subroutine
 
-     pure function InnerProduct(fConjg, f) result(res)
-       ! Implement with cylindrical metric weights
-     end function
-
      subroutine Setup
-       ! Allocate and fill coordinate/weight arrays
+       use M_Grid
+       ! Allocate and fill the coordinates and Grid_weights (quadrature weight
+       ! times Jacobian per point): the default Grid_InnerProduct uses them.
+       ! Rebind Grid_InnerProduct in Fabricate only for a non-diagonal metric.
      end subroutine
    end submodule
    ```
@@ -815,7 +821,7 @@ call Grid_ProjectOnSubspace(dOrbs, Orbs_orbs)
 
 ## Performance Notes
 
-- **Linear grids**: Inner product is O(N) with vectorized `sum()`.
+- **Default inner product** (Linear, Square, Polar, Spherical, Ylm, Prolate): O(N) with vectorized `sum()` over `Grid_weights`; Fem binds a plain loop without temporaries.
 - **Lattice grids**: Uses intrinsic `dot_product` (no weights needed), typically BLAS-optimized.
 - **Ylm spatial product**: O(l_max⁴ × N_radial) due to Gaunt coefficient loops; precompute where possible.
   A spherically symmetric first factor (`lMaxConjg_ = 0`, e.g. a central external

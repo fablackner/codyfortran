@@ -3,6 +3,7 @@
 !> kicked initial state as T_He1d_06_TimePropagationTd2rdmWeakOrbs. Checks the
 !> O(dt^2) energy drift and the final natural occupations against the RK4
 !> reference of the full time derivative. N = 2: no reconstruction.
+!> Reads the MCTDHF ground state of T_He1d_04 (orb*.in and rdm2Bt*.in).
 program T_He1d_06_TimePropagationTd2rdmWeakOrbsSplit
   use M_Utils_Types
   use M_Utils_Say

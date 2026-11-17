@@ -1,8 +1,10 @@
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!> 1D helium as in T_He1d_01: exact diagonalization of the full CI of 21 grid
+!> orbitals per spin (TDCI), the same ground-state energy as the full grid
+!> basis of T_He1d_01.
 program T_He1d_02_ExactDiagTdci
-  use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
-  use M_Utils_Actions
   use M_Grid
   use M_SysKinetic
   use M_SysPotential
@@ -39,7 +41,7 @@ program T_He1d_02_ExactDiagTdci
   call ConfigList_Fabricate
   call Coeffs_Fabricate
   call CoeffsInit_Fabricate
-  DiagonalizerListInput(1) % ApplyMatOnVec => Actions_ApplyHamiltonian
+  DiagonalizerListInput(1) % ApplyMatOnVec => Method_ApplyHamiltonian
   DiagonalizerListInput(1) % dim = Coeffs_nCoeffs
   call DiagonalizerList_Fabricate(DiagonalizerListInput)
 
@@ -72,7 +74,7 @@ program T_He1d_02_ExactDiagTdci
   write (*, *)
 
   call check(error, DiagonalizerList(1) % e % evals(1), -2.4852443924542094_R64, thr=1e-7_R64)
-  if (allocated(error)) error stop "T_He1d_ExactDiagTdci failure"
+  if (allocated(error)) error stop "T_He1d_02_ExactDiagTdci failure"
 
   !==========================================
   call Say_Goodbye

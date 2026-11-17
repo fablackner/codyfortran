@@ -11,7 +11,6 @@ program T_H3d_02_ImagTimePropagationTdksLsda
   use M_Utils_Types
   use M_Utils_Say
   use M_Utils_Json
-  use M_Utils_Actions
   use M_Grid
   use M_SysKinetic
   use M_SysPotential
@@ -50,7 +49,7 @@ program T_H3d_02_ImagTimePropagationTdksLsda
   call ConfigList_Fabricate
   call Coeffs_Fabricate
   call CoeffsInit_Fabricate
-  IntegratorListInput(1) % TimeDerivative => Actions_ImagTimeDerivative
+  IntegratorListInput(1) % TimeDerivative => Method_ImagTimeDerivative
   call IntegratorList_Fabricate(IntegratorListInput)
   call Propagator_Fabricate()
   convThresh = Json_Get("program.convThresh", 1e-11_R64)

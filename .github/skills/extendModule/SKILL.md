@@ -105,7 +105,7 @@ end if
 ```
 
 8. Add or update tests.
-- Copy a nearby `test/T_*.f90` and matching `test/*.json` input, then adapt minimal knobs.
+- Copy a nearby test (`test/componentTests/<Module>/.../T_*.f90` for one module, `test/simulationTests/<System>/T_*.f90` for a whole run) and its matching `T_*.json` input, then adapt minimal knobs.
 - Prefer small deterministic tests that verify fabrication wiring and one numerical sanity check.
 
 9. Build and run focused tests.

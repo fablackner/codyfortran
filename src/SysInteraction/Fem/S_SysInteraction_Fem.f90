@@ -57,7 +57,6 @@ contains
   subroutine FillInteractionSrc(src, orbConjg, orb)
 !$  use omp_lib, only: omp_in_parallel
     use M_Grid
-    use M_Grid_Fem
 
     complex(R64), intent(out), allocatable :: src(:)
     complex(R64), intent(in), contiguous   :: orbConjg(:)
@@ -73,7 +72,7 @@ contains
 
     !$omp parallel do default(shared) private(i) schedule(static) if (.not. omp_in_parallel())
     do i = 1, Grid_nPoints
-      src(i) = conjg(orbConjg(i)) * orb(i) * Grid_Fem_weights(i)
+      src(i) = conjg(orbConjg(i)) * orb(i) * Grid_weights(i)
     end do
     !$omp end parallel do
 

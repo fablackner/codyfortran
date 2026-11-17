@@ -146,6 +146,8 @@ A test that must stop with a specific error (for example an input check at fabri
 ```
 CMake then registers it with `PASS_REGULAR_EXPRESSION`: it passes if and only if its output matches, and its exit code is ignored. See `test/componentTests/OrbsInit/Load/T_OrbsInit_Load_WrongSymmetry.f90`.
 
+Tests that differ only in their input share one subroutine in an include file, included after `contains` of each test program, for example `test/simulationTests/ImagTimeGroundState.inc` (the imaginary-time ground states of He1d, Ne3d, H2 and the Hubbard lattices) or `test/componentTests/SysInteraction/Ylm/Coulomb/YlmCoulombManufactured.inc`. The test program passes its JSON file and reference values to that subroutine and stays a separate ctest entry. An include holds only procedures that every including test calls, because the debug build turns unused procedures into errors.
+
 CodyFortran's console output uses ANSI color escape codes and a few non-ASCII characters. If you prefer plain ASCII (for example when redirecting output to a file) or you don't like the styled output, disable the fancy printing by setting
 ```bash
 export CODY_PRETTY_PRINT="OFF"
@@ -156,7 +158,7 @@ Per default, `CODY_PRETTY_PRINT` is set to `"ON"` in `setCodyVars.sh`. You can c
 
 This section shows how to run provided executables and example programs, and how their JSON inputs are paired.
 
-All `.f90` files in the `app` folder are automatically compiled into executable files. When running an executable, you can provide the JSON configuration input file in two ways:
+All `.f90` files in the `app` folder are automatically compiled into executable files. A run folder that holds an input `P_X.json` but no `P_X.f90` gets its `P_X.exe` from the nearest `P_X.f90` in a parent folder, so a program shared by several runs exists once (see `app/README.md`). When running an executable, you can provide the JSON configuration input file in two ways:
 
 1. Explicit JSON file specification:
 
@@ -185,7 +187,7 @@ cody build app
 # Build only the tests in the test/ folder
 cody build test
 
-# Build a specific app or test (e.g., app/atoms/be/groundstate/mctdhf/P_GroundMctdhf.f90)
+# Build a specific app or test by the path of its executable without .exe
 cody build app/atoms/be/groundstate/mctdhf/P_GroundMctdhf
 
 # Clean the build directory
@@ -227,9 +229,9 @@ These examples serve as excellent starting points for understanding how to set u
     -   Real-time and imaginary-time propagation.
     -   Various Runge–Kutta/Crank-Nicholson integrators and interface to gsl odeiv2.
     -   Split-step propagation schemes using several integrators for different Hamiltonian parts.
-    -   Exactly propagated field-free one-body part: eigen-decomposition on Ylm grids; a unitary Cayley
+    -   Exactly propagated field-free one-body part (`fieldFree` block): eigen-decomposition on Ylm grids; a unitary Cayley
         (Crank–Nicolson, GMRES) step on `grid.fem`, optionally with a frozen Hartree–Fock mean field of the ground
-        state for molecules with heavy atoms (`exactFieldFreeMeanFieldQ`; H2O TDHF kick spectra in
+        state for molecules with heavy atoms (`fieldFree.cayley.meanFieldQ`; H2O TDHF kick spectra in
         `app/molecules/`).
     -   Ground-state search via ED, imaginary time propagation or iterative scf methods (dense, ARPACK or
         preconditioned block LOBPCG eigensolvers; adaptively compressed exchange for large grids), including
@@ -399,7 +401,7 @@ call Propagator_Propagate(Method_state, t, t + timeStep)
 
 This architecture makes adding new functionality straightforward. To add a new 1D potential:
 1.  **Create a new Subfolder**: Create a new folder `src/SysPotential/Linear/YourPotential` with two files inside: `M_SysPotential_Linear_YourPotential.f90` and `S_SysPotential_Linear_YourPotential.f90`. Most of the time, you can copy an existing potential implementation and modify it.
-2.  **Create an Implementation Submodule**: Inside `S_SysPotential_Linear_YourPotential.f90`, implement your logic and a `*_Fabricate` routine that reads JSON keys (e.g., `sysPotential.linear.yourPotential.strength`) and assigns the `SysPotential_Apply` procedure pointer.
+2.  **Create an Implementation Submodule**: Inside `S_SysPotential_Linear_YourPotential.f90`, implement your logic and a `*_Fabricate` routine that reads JSON keys (e.g., `sysPotential.linear.yourPotential.strength`) and assigns the `SysPotential_FillExternalPotential` procedure pointer.
 3.  **Register the New Type**: In `src/SysPotential/Linear/S_SysPotential_Linear.f90`, add an `if` block to its `*_Fabricate` routine to detect your new JSON object key and call your submodule's `*_Fabricate`.
 4.  **Use it in JSON**: You can now select your new potential with the structure:
     ```json

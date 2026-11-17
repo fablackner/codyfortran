@@ -6,7 +6,7 @@
 !> TDHF is restricted MCTDHX with nOrbs = nBodies = [1, 1], started from the
 !> RHF orbital of T_Fem_03 (orbsInit.load of orb01_01.in, same mesh, N =
 !> 130331) and the single configuration (coeffsInit.unary). Propagator:
-!> propagator.splitStep.order2 with method.mb.orbBased.exactFieldFreeQ, so
+!> propagator.splitStep.order2 with fieldFree.cayley, so
 !> every linear half step is Cayley(h0, dt/4) · RK4[gauge](dt/2) ·
 !> Cayley(h0, dt/4) (exactPartScheme strang; h0 = T + V_nuc, no sysGauge here,
 !> so the RK4 substep is the identity) and the interaction part is RK4;
@@ -38,6 +38,8 @@ program T_Fem_05_H2FieldFree
   use M_Utils_Json
   use M_Grid
   use M_Orbs
+  use M_FieldFree
+  use M_FieldFree_Cayley
   use M_Method
   use M_Method_Mb_OrbBased
   use M_Propagator
@@ -101,9 +103,9 @@ program T_Fem_05_H2FieldFree
   maxDipole = maxval(abs(dipole0))
   maxDipoleDrift = 0.0_R64
   minOverlap = 1.0_R64
-  Method_Mb_OrbBased_cayleyNSolves = 0
-  Method_Mb_OrbBased_cayleyNIterations = 0
-  Method_Mb_OrbBased_cayleyMaxIterations = 0
+  FieldFree_Cayley_nSolves = 0
+  FieldFree_Cayley_nIterations = 0
+  FieldFree_Cayley_maxIterations = 0
 
   time = 0.0_R64
   call system_clock(count0)
@@ -144,9 +146,9 @@ program T_Fem_05_H2FieldFree
   print *, "max |<r_a>(t) - <r_a>(0)|:  ", maxDipoleDrift
   print *, "min |<phi(0)|phi(t)>|:      ", minOverlap
   write (*, '(1X, A, I0, A, I0, A, F6.2, A, I0, A, I0)') "Cayley GMRES during the propagation: ", &
-    Method_Mb_OrbBased_cayleyNSolves, " solves, ", Method_Mb_OrbBased_cayleyNIterations, " iterations, mean ", &
-    real(Method_Mb_OrbBased_cayleyNIterations, R64) / real(max(Method_Mb_OrbBased_cayleyNSolves, 1_I64), R64), &
-    ", max ", Method_Mb_OrbBased_cayleyMaxIterations, ", bound ", MAX_ITERATIONS_PROPAGATION
+    FieldFree_Cayley_nSolves, " solves, ", FieldFree_Cayley_nIterations, " iterations, mean ", &
+    real(FieldFree_Cayley_nIterations, R64) / real(max(FieldFree_Cayley_nSolves, 1_I64), R64), &
+    ", max ", FieldFree_Cayley_maxIterations, ", bound ", MAX_ITERATIONS_PROPAGATION
   write (*, '(1X, A, I0, A, F8.2, A, F8.4, A)') "propagation: ", nSteps, " steps in ", seconds, " s, ", &
     seconds / nSteps, " s per step (observables every outputEvery steps included)"
 
@@ -177,7 +179,7 @@ program T_Fem_05_H2FieldFree
   call check(error, 1.0_R64 - minOverlap < 1e-6_R64)
   if (allocated(error)) error stop "T_Fem_05_H2FieldFree failure: ground state not stationary"
 
-  call check(error, Method_Mb_OrbBased_cayleyMaxIterations <= MAX_ITERATIONS_PROPAGATION)
+  call check(error, FieldFree_Cayley_maxIterations <= MAX_ITERATIONS_PROPAGATION)
   if (allocated(error)) error stop "T_Fem_05_H2FieldFree failure: too many GMRES iterations in the Cayley solves"
 
   !==========================================
@@ -208,10 +210,10 @@ contains
     allocate (work(size(phi), 1), h0Phi(size(phi)), h0New(size(phi)))
 
     work(:, 1) = phi(:)
-    iterationsBefore = Method_Mb_OrbBased_cayleyNIterations
+    iterationsBefore = FieldFree_Cayley_nIterations
     call system_clock(countStart)
-    call Method_Mb_OrbBased_PropagateFieldFree(work, dtCheck, .false.)
-    nIterations = int(Method_Mb_OrbBased_cayleyNIterations - iterationsBefore, I32)
+    call FieldFree_Propagate(work, dtCheck, .false.)
+    nIterations = int(FieldFree_Cayley_nIterations - iterationsBefore, I32)
     write (*, '(1X, A, F6.3, A, I0, A, F7.3, A)') "Cayley step dt = ", dtCheck, ": ", nIterations, &
       " GMRES iterations, ", ElapsedSeconds(countStart), " s"
 
@@ -222,7 +224,7 @@ contains
     normDev = abs(MetricNorm(work(:, 1))**2 - MetricNorm(phi)**2)
     energyDev = abs(real(Grid_InnerProduct(work(:, 1), h0New) - Grid_InnerProduct(phi, h0Phi), kind=R64))
 
-    call Method_Mb_OrbBased_PropagateFieldFree(work, -dtCheck, .false.)
+    call FieldFree_Propagate(work, -dtCheck, .false.)
     roundTrip = MetricNorm(work(:, 1) - phi) / MetricNorm(phi)
 
   end subroutine

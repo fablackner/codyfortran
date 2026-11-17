@@ -27,7 +27,9 @@ contains
     Grid_Ylm_Fedvr_grading = Json_Get("grid.ylm.fedvr.grading", 1.0_R64)
     if (.not. (Grid_Ylm_Fedvr_grading > 0.0_R64)) error stop "grid.ylm.fedvr.grading must be positive"
 
-    ! Calculate total grid points from FEDVR parameters (without rmin and rmax)
+    ! Radial points: all Lobatto points of the elements except r = 0; the
+    ! point at rmax is kept, where the radial Poisson solvers impose their
+    ! Robin condition (a free boundary for the orbitals, A_Grid.md)
     Grid_Ylm_nRadial = Grid_Ylm_Fedvr_nElements * (Grid_Ylm_Fedvr_nLocals - 1)
 
     ! Update total grid size to include the radial component
@@ -72,8 +74,8 @@ contains
     call DerivativeFedvr_CreateCtx(Grid_Ylm_Fedvr_derivativeCtx, Grid_Ylm_Fedvr_fedvrCtx)
 
     do iRad = 1, Grid_Ylm_nRadial
-      r = Grid_Ylm_Fedvr_fedvrCtx % points(iRad) ! exclude r=0 and rmax
-      w = Grid_Ylm_Fedvr_fedvrCtx % weights(iRad) ! exclude r=0 and rmax
+      r = Grid_Ylm_Fedvr_fedvrCtx % points(iRad) ! r = 0 excluded, rmax kept
+      w = Grid_Ylm_Fedvr_fedvrCtx % weights(iRad) ! r = 0 excluded, rmax kept
 
       Grid_Ylm_radialPoints(iRad) = r
       Grid_Ylm_radialWeights(iRad) = w * r * r

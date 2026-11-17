@@ -1,7 +1,7 @@
 !> ctest-requires: libxc
 !> Real-time TDKS with a GGA (PBE) on a Ylm FEDVR grid: split step of the
 !> exact field-free part and the Kohn-Sham potential at dt = 0.05 with the
-!> spectral cut exactFieldFreeCut = 40 (Ec dt = 2 < pi).
+!> spectral cut fieldFree.eigen.cut = 40 (Ec dt = 2 < pi).
 !>
 !> The splitting of h0 and a GGA potential is unstable once an h0 eigenvalue E
 !> of the propagated space has E dt > pi (resonances of the exact rotation with
@@ -15,6 +15,7 @@ program T_He3d_04_TimePropagationTdksPbeCut
   use M_Utils_Say
   use M_Utils_Json
   use M_Orbs
+  use M_FieldFree
   use M_Method
   use M_Method_Mb_OrbBased
   use M_IntegratorList
@@ -41,7 +42,7 @@ program T_He3d_04_TimePropagationTdksPbeCut
   call Propagator_Setup
 
   ! the SCF orbitals have weight above the cut: start below it
-  call Method_Mb_OrbBased_ApplySpectralCut(Orbs_orbs)
+  call FieldFree_ProjectBelowCut(Orbs_orbs)
   call Orbs_Orthonormalize(Orbs_orbs)
   energy0 = Method_GetEnergy(0.0_R64)
 
@@ -61,7 +62,7 @@ program T_He3d_04_TimePropagationTdksPbeCut
   end do
 
   orbsCut = Orbs_orbs
-  call Method_Mb_OrbBased_ApplySpectralCut(orbsCut)
+  call FieldFree_ProjectBelowCut(orbsCut)
 
   print *
   print '(1X, A, F16.10, A, ES10.2, A, ES10.2, A, ES10.2)', "He PBE: E_SCF = ", energyScf, &

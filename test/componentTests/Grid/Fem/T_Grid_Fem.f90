@@ -103,7 +103,7 @@ program T_Grid_Fem
 
   g = Gaussian(1.0_R64, [0.0_R64, 0.0_R64, 0.0_R64], 0.0_R64)
 
-  integral = sum(Grid_Fem_weights * real(g, kind=R64))
+  integral = sum(Grid_weights * real(g, kind=R64))
   call check(error, integral, PI**1.5_R64, thr=3.5e-8_R64)
   if (allocated(error)) error stop "T_Grid_Fem Gaussian quadrature failure"
 

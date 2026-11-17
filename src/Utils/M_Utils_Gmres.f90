@@ -47,8 +47,7 @@
 !>
 !> The vector passes are OpenMP parallel when the solve is called outside a
 !> parallel region (serial inside one). User: the Cayley step of the exact
-!> field-free part of Method on grid.fem
-!> (S_Method_Mb_OrbBased_FieldFreeCayley).
+!> field-free part on grid.fem (S_FieldFree_Cayley).
 module M_Utils_Gmres
   use M_Utils_Types
 

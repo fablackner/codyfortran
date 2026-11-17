@@ -131,25 +131,85 @@ of Be-like Ne6+, 34 of 100 configurations, against the full space).
 
 ### 2. Hubbard (`coeffs.hubbard`)
 
-**Use case:** Fermi-Hubbard model on lattice grids
+CI of two fermion species (spin up and spin down, body types 1 and 2) in the
+same n orbitals, for a two-body Hamiltonian that is an on-site interaction
+Σ_s U_s n_{s↑} n_{s↓} in the orbital basis: the Fermi-Hubbard model with
+the lattice sites as orbitals (`orbsInit.lattice.onSite`) and static
+orbitals (`method.mb.orbBased.tdci`). Bosons and other interactions use
+`coeffs.generic`. No `configList` is needed.
 
-**Basis construction:**
-- Bit-encoded Fock states: bit j=1 means site j occupied
-- Separate encoding for spin-up and spin-down
-- Three spin-symmetry variants reduce state space
+**Basis:** a configuration of one spin is a bit pattern (bit o − 1 for
+orbital o, at most 62 orbitals). The configurations are numbered in
+increasing order of the pattern, so the index of a pattern is one plus its
+colex rank Σ_t binom(position of the t-th set bit, t), without a lookup
+table. The CI vector is the matrix c(iUp, iDn), up index fastest. An
+operator on orbital o picks up (−1)^(occupied orbitals below o).
+
+**Setup:** `Coeffs_Setup` tabulates the single excitations
+a†_c a_d |i⟩ = ±|t⟩ of every configuration i of each spin (d occupied, c
+empty or c = d), N(n − N) + N entries per configuration. The tables do not
+depend on the Hamiltonian.
+
+**H1** comes from the `h1_` of each call and acts on the rows (up) and the
+columns (down) of c(iUp, iDn). Each call sums the diagonal entries of a
+configuration into one element and keeps only the nonzero off-diagonal ones
+(the hops of the lattice). A time-dependent
+h1, the mean-field reference of MCTDHX or the basis change of
+`Method_Mb_OrbBased_OrthonormalizeKeepingState` act like any other h1.
+
+**H2** is diagonal, with U_s read from `h2_` on every call (adiabatic
+switching scales it). U_s is the combination of h2 elements that
+`coeffs.generic` uses for two body types, at a = b = g = d = s. The call
+stops if that combination does not vanish for every other (a, b, g, d), or
+if the antisymmetrized interaction within one spin does not vanish:
+orbitals that are not the sites, moving orbitals or a nearest-neighbour
+interaction.
+
+**RDMs** come from chains of single excitations, in the conventions of
+`coeffs.generic`, including the antisymmetry under the exchange of an up and
+a down index (`FillRdm2FromRdm2Lin`).
 
 **Spin symmetry variants:**
 
-| Variant | Dimension | Physical meaning |
-|---------|-----------|------------------|
-| `noSpinSym` | n_up × n_dn | Full product space |
-| `plusSpinSym` | n(n+1)/2 | Symmetric under spin exchange (triplet-like) |
-| `minusSpinSym` | n(n-1)/2 | Antisymmetric under spin exchange (singlet-like) |
+| Variant | Coefficients | Stored vector |
+|---------|--------------|---------------|
+| `noSpinSym` | n_up n_dn | c(iUp, iDn) |
+| `plusSpinSym` | n(n+1)/2 | (\|i,k⟩ + \|k,i⟩)/√2 for i < k, and \|i,i⟩ |
+| `minusSpinSym` | n(n−1)/2 | (\|i,k⟩ − \|k,i⟩)/√2 for i < k |
 
-**Key features:**
-- Precomputed hopping graphs for O(1) kinetic term lookup
-- Bit operations (`popcnt`, `btest`) for O(1) sign computation
-- Diagonal interaction: `interactionValues` indexed by `bitcodesUP AND bitcodesDN`
+The sectors are the eigenspaces of the exchange of the two spins. They need
+equal particle numbers and an h1 that is the same for both spins (checked at
+every call). Their bases are orthonormal, so norms, inner products,
+diagonalizers and propagators act on the stored vectors as on the states.
+H and the RDMs of a sector vector are computed on the product space and
+projected back. A sector has no excitations of one spin:
+`Coeffs_ApplyExcitation`, `coeffsInit.excited` and the transition RDMs
+stop. For 1 + 1 particles the plus sector holds the singlets (symmetric
+spatial part).
+
+**Cost** (open chain at half filling, release build, one thread of an
+i7-8565U; H1 + H2 is one TDCI time derivative):
+
+| Sites | Coefficients | Backend | Setup | H1 + H2 | 2-RDM |
+|-------|--------------|---------|-------|---------|-------|
+| 8 | 4 900 | generic | 15 ms | 11.6 ms | 9.8 ms |
+| 8 | 4 900 | hubbard | 0.07 ms | 0.13 ms | 9.9 ms |
+| 10 | 63 504 | generic | 137 ms | 323 ms | 308 ms |
+| 10 | 63 504 | hubbard | 0.2 ms | 1.4 ms | 274 ms |
+| 12 | 853 776 | generic | 1.1 s | 10.3 s | 10.2 s |
+| 12 | 853 776 | hubbard | 1 ms | 23 ms | 7.7 s |
+
+The 2-RDM runs over pairs of single excitations in both backends. A sector
+stores half the vector, and one application costs about twice that of the
+product space (expansion and projection; 48 ms at 12 sites).
+
+**Tests:** `test/componentTests/Coeffs/Hubbard` compares noSpinSym with
+coeffs.generic on random Hamiltonians (spectrum, ground-state RDMs,
+excitation-based 2-RDM blocks), the sectors with the product space, and
+checks the refusal of an off-site interaction.
+`test/simulationTests/FermiHubbard/T_FermiHubbard_07` to `_12` run exact
+diagonalization, imaginary time and real time on lattices against the
+coeffs.generic values, real time also in the plus sector.
 
 ---
 
@@ -229,7 +289,8 @@ uses the full space.
 }
 ```
 
-Replace `noSpinSym` with `plusSpinSym` or `minusSpinSym` for symmetry-adapted bases.
+Replace `noSpinSym` with `plusSpinSym` or `minusSpinSym` for the spin-exchange
+sectors. No `configList` block.
 
 ---
 
@@ -266,12 +327,11 @@ call Coeffs_Normalize(coeffs)
 
 | Variable | Description |
 |----------|-------------|
-| `bitcodesUP(:)` | Bit patterns for spin-up configurations |
-| `bitcodesDN(:)` | Bit patterns for spin-down configurations |
-| `hoppUP(k,i)` | Target config index for k-th hop from config i |
-| `weightUP(k,i)` | Matrix element (including fermionic sign) |
-| `nConnectedUP(i)` | Number of valid hops from config i |
-| `interactionValues(:)` | Precomputed U·n↑n↓ for each (up,dn) pair |
+| `Coeffs_Hubbard_nSites` | Orbitals of each spin |
+| `Coeffs_Hubbard_nCoeffsUP`, `_nCoeffsDN` | Configurations of each spin, binom(n, N) |
+| `Coeffs_Hubbard_parity` | 0 product space, +1 / −1 spin-exchange sector (set by the variant) |
+| `Coeffs_Hubbard_bitcodesUP(:)`, `_bitcodesDN(:)` | Bit patterns of the configurations, increasing |
+| `Coeffs_Hubbard_singlesUP`, `_singlesDN` | Single excitations by source configuration: `first(i)`, `target`, `create`, `destroy`, `factor` (±1) |
 
 ---
 
@@ -284,7 +344,7 @@ call Coeffs_Normalize(coeffs)
    for cache-friendly access during Hamiltonian application.
 
 3. **Symmetry exploitation:** 
-   - Hubbard backends reduce state space by 2× with spin symmetry
+   - The Hubbard spin-exchange sectors halve the CI dimension
    - Generic backend uses precomputed sparse connectivity graphs
 
 4. **Buffer reuse:** Generic `ApplyExcitation` uses a module-level `coeffsBuffer`
@@ -301,7 +361,7 @@ call Coeffs_Normalize(coeffs)
 | `Generic/M_Coeffs_Generic.f90` | Generic backend interface |
 | `Generic/S_Coeffs_Generic.f90` | Generic backend implementation |
 | `Hubbard/M_Coeffs_Hubbard.f90` | Hubbard backend interface + module data |
-| `Hubbard/S_Coeffs_Hubbard.f90` | Hubbard setup, bit operations, excitations |
+| `Hubbard/S_Coeffs_Hubbard.f90` | Hubbard setup, Hamiltonian application, RDMs, sector maps, bit operations |
 | `Hubbard/NoSpinSym/*.f90` | Full product space (n_up × n_dn) |
 | `Hubbard/PlusSpinSym/*.f90` | Symmetric sector n(n+1)/2 |
 | `Hubbard/MinusSpinSym/*.f90` | Antisymmetric sector n(n-1)/2 |
@@ -358,4 +418,3 @@ state for `twoRdmInit.load`) via `Method_Mb_OrbBased_SaveRdm2Blocks`.
 | `M_Method_Mb_OrbBased` | Orbital indexing (nOrbs, orbital ranges) |
 | `M_Utils_BlasLib` | BLAS wrappers for normalization |
 | `M_Utils_Json` | JSON configuration parsing |
-| `M_Grid` / `M_Grid_Lattice` | Spatial grid (Hubbard backend) |

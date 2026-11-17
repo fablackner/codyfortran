@@ -45,12 +45,6 @@ contains
     call Say_Fabricate("twoRdm")
 
     !------------------------------------
-    ! set values and procedure pointers
-    !------------------------------------
-
-    TwoRdm_SaveTwoRdmState => SaveTwoRdmState
-
-    !------------------------------------
     ! branch on particle statistics
     !------------------------------------
 
@@ -59,23 +53,6 @@ contains
     else
       error stop "twoRdm is missing one of: fermionic"
     end if
-
-  end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> @brief Persist the linearized 2-RDM state to disk.
-!>
-!> @details
-!> Writes the 2-RDM state vector to `twoRdmState.dat` in binary format.
-!> The file can be used for checkpointing or post-processing analysis.
-!>
-!> @param[in] twoRdmState  Linearized 2-RDM vector to save
-  subroutine SaveTwoRdmState(twoRdmState)
-    use M_Utils_DataStorage
-
-    complex(R64), intent(in), contiguous  :: twoRdmState(:)
-
-    call SaveData(twoRdmState, 'twoRdmState.dat', storage_size(twoRdmState))
 
   end subroutine
 

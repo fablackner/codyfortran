@@ -20,7 +20,7 @@ The Absorber follows the **Interface Module + Implementation Submodule** pattern
 src/Absorber/
 ├── M_Absorber.f90              # Public interface (procedure pointers)
 ├── S_Absorber.f90              # Top-level fabrication dispatcher
-├── AGENTS.md                   # This file
+├── A_Absorber.md               # This file
 ├── Linear/
 │   ├── M_Absorber_Linear.f90   # Linear-grid family interface
 │   ├── S_Absorber_Linear.f90   # Linear-grid variant dispatcher

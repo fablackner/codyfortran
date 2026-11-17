@@ -12,7 +12,6 @@
 subroutine RunKsScfYlm(energy, eps, nScf, jsonFileName, maxScfIterations)
   use M_Utils_Json
   use M_Grid
-  use M_Grid_Ylm, only: Grid_Ylm_weights
   use M_SysKinetic
   use M_SysPotential
   use M_SysInteraction
@@ -22,6 +21,7 @@ subroutine RunKsScfYlm(energy, eps, nScf, jsonFileName, maxScfIterations)
   use M_ConfigList
   use M_Coeffs
   use M_CoeffsInit
+  use M_FieldFree
   use M_Method
   use M_Method_Mb_OrbBased_Tdks
   use M_DiagonalizerList
@@ -47,6 +47,7 @@ subroutine RunKsScfYlm(energy, eps, nScf, jsonFileName, maxScfIterations)
   call SysPotential_Fabricate
   call SysInteraction_Fabricate
   call SysXc_Fabricate
+  call FieldFree_Fabricate
   call Method_Fabricate
   call Orbs_Fabricate
   call OrbsInit_Fabricate
@@ -71,12 +72,13 @@ subroutine RunKsScfYlm(energy, eps, nScf, jsonFileName, maxScfIterations)
   call ConfigList_Setup
   call Coeffs_Setup
   call CoeffsInit_Setup
+  call FieldFree_Setup
   call Method_Setup
   call GroundSolver_Setup
   call DiagonalizerList_Setup
 
   ! LOBPCG in the Ylm metric; OrbsInit only normalizes
-  DiagonalizerList(1) % e % metricWeights = Grid_Ylm_weights
+  DiagonalizerList(1) % e % metricWeights = Grid_weights
   call Orbs_Orthonormalize(Orbs_orbs)
 
   energy = huge(1.0_R64)

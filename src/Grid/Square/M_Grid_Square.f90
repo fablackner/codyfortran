@@ -38,10 +38,6 @@ module M_Grid_Square
   !> Maximum y-coordinate (top boundary of the domain).
   real(R64)  ::   Grid_Square_ymax
 
-  !> Total integration weights for each (x,y) grid point in flattened order.
-  !> Combines per-dimension quadrature as used by the inner product.
-  real(R64), allocatable :: Grid_Square_weights(:)
-
   !> Component-wise Cartesian coordinates for each grid point (flattened order).
   real(R64), allocatable :: Grid_Square_xCoord(:)
   real(R64), allocatable :: Grid_Square_yCoord(:)

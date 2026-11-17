@@ -24,15 +24,15 @@ contains
     use M_Utils_Say
     use M_Grid
 
-    call Say_Fabricate("grid.linear.fedvr1d")
+    call Say_Fabricate("grid.linear.fedvr")
 
     !------------------------------------
     ! set values and procedure pointers
     !------------------------------------
 
     ! Get configuration parameters from JSON
-    Grid_Linear_Fedvr_nElements = Json_Get("grid.spatial.fedvr1d.nElements", 10)
-    Grid_Linear_Fedvr_order = Json_Get("grid.spatial.fedvr1d.order", 8)
+    Grid_Linear_Fedvr_nElements = Json_Get("grid.linear.fedvr.nElements", 10)
+    Grid_Linear_Fedvr_order = Json_Get("grid.linear.fedvr.order", 8)
 
     ! Set total grid size based on elements and order
     ! Each element has (order+1) points, but adjacent elements share points
@@ -65,12 +65,12 @@ contains
 
     ! Allocate grid arrays
     allocate (Grid_Linear_xCoord(Grid_nPoints))  ! Store 1D coordinates
-    allocate (Grid_Linear_weights(Grid_nPoints))
+    allocate (Grid_weights(Grid_nPoints))
 
     ! Set grid coordinates and weights
     do i = 1, Grid_nPoints
       Grid_Linear_xCoord(i) = fedvrCtx % points(i)
-      Grid_Linear_weights(i) = fedvrCtx % weights(i)
+      Grid_weights(i) = fedvrCtx % weights(i)
     end do
 
   end subroutine

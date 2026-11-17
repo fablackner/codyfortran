@@ -15,7 +15,6 @@ contains
   module subroutine Grid_Linear_Fabricate
     use M_Utils_Json
     use M_Utils_Say
-    use M_Grid
     use M_Grid_Linear_Const
     use M_Grid_Linear_Fedvr
 
@@ -30,7 +29,6 @@ contains
     Grid_Linear_xmax = Json_Get("grid.linear.xmax", 10.0_R64)
 
     ! Set procedure pointers
-    Grid_InnerProduct => InnerProduct
 
     !------------------------------------
     ! branch
@@ -47,17 +45,5 @@ contains
     end if
 
   end subroutine
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-!> Computes the inner product of two fields
-  pure function InnerProduct(fConjg, f) result(res)
-
-    complex(R64), intent(in), contiguous, dimension(:) :: fConjg
-    complex(R64), intent(in), contiguous, dimension(:) :: f
-    complex(R64) :: res
-
-    res = sum(conjg(fConjg(:)) * f(:) * Grid_Linear_weights(:))
-
-  end function
 
 end submodule

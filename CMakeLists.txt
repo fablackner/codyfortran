@@ -23,7 +23,7 @@ set(THIRD_PARTY_INCLUDE "${THIRD_PARTY_DIR}/include")
 # Added CONFIGURE_DEPENDS so CMake re-runs if files are added/removed
 file(GLOB_RECURSE sources CONFIGURE_DEPENDS "src/*.f90")
 
-# Optional cuBLAS backend (M_Utils_CublasLib, method.mb.orbBased.exactFieldFreeGpuQ):
+# Optional cuBLAS backend (M_Utils_CublasLib, fieldFree.eigen.gpuQ):
 # compile exactly one implementation submodule of M_Utils_CublasLib
 option(CODY_USE_CUDA "Build the cuBLAS GPU backend (needs the CUDA toolkit, no CUDA compiler)" OFF)
 if(CODY_USE_CUDA)
@@ -103,33 +103,74 @@ endif()
 add_custom_target(apps)
 add_custom_target(tests)
 
-# === Function to compile Fortran programs ===
+# === Functions to compile Fortran programs ===
+
+# One executable of the program `source`, written to `exe_dir` as <name>.exe.
+# The target is named after the path of the executable (app/a/b/P_X ->
+# app_a_b_P_X), so `cody build app/a/b/P_X` builds it.
+function(add_program source exe_dir extra_libs umbrella_target)
+    get_filename_component(exe_name "${source}" NAME_WE)
+    file(RELATIVE_PATH rel_dir "${CMAKE_SOURCE_DIR}" "${exe_dir}")
+    string(REPLACE "/" "_" target_name "${rel_dir}/${exe_name}")
+
+    add_executable("${target_name}" "${source}")
+    set_target_properties("${target_name}" PROPERTIES
+        OUTPUT_NAME "${exe_name}.exe"
+        RUNTIME_OUTPUT_DIRECTORY "${exe_dir}"
+    )
+
+    # Link CodyFortran and any extra libraries (like test-drive)
+    target_link_libraries("${target_name}" PRIVATE CodyFortran ${extra_libs})
+
+    # Add to umbrella target
+    add_dependencies(${umbrella_target} "${target_name}")
+endfunction()
+
+# Every program source <name>.f90 below `dir` becomes an executable next to
+# it. A program shared by several runs lies once in a common parent folder of
+# their run folders: a folder that holds an input P_X.json but no P_X.f90
+# gets P_X.exe from the nearest P_X.f90 above it (a program reads the JSON
+# next to its executable), and such a shared source gets no executable of its
+# own. Inputs in runs/ folders (generated, passed as argument) do not count.
 function(create_executables_from_dir dir extra_libs umbrella_target)
     file(GLOB_RECURSE programs CONFIGURE_DEPENDS "${dir}/*.f90")
+    file(GLOB_RECURSE inputs CONFIGURE_DEPENDS "${dir}/P_*.json")
+    set(top_dir "${CMAKE_SOURCE_DIR}/${dir}")
+
+    set(shared_programs "")
+    foreach(input ${inputs})
+        if(input MATCHES "/runs/")
+            continue()
+        endif()
+        get_filename_component(run_dir "${input}" DIRECTORY)
+        get_filename_component(name "${input}" NAME_WE)
+        if(EXISTS "${run_dir}/${name}.f90")
+            continue()
+        endif()
+
+        # Nearest program of that name in a parent folder
+        set(source "")
+        set(search_dir "${run_dir}")
+        while(NOT source AND NOT search_dir STREQUAL top_dir)
+            get_filename_component(search_dir "${search_dir}" DIRECTORY)
+            if(EXISTS "${search_dir}/${name}.f90")
+                set(source "${search_dir}/${name}.f90")
+            endif()
+        endwhile()
+        if(NOT source)
+            message(FATAL_ERROR "${input}: no program ${name}.f90 in this folder or a parent folder up to ${dir}/")
+        endif()
+
+        add_program("${source}" "${run_dir}" "${extra_libs}" ${umbrella_target})
+        list(APPEND shared_programs "${source}")
+    endforeach()
+
     foreach(file ${programs})
-        # Generate unique target name based on relative path
-        file(RELATIVE_PATH rel_path "${CMAKE_SOURCE_DIR}" "${file}")
-        string(REPLACE "/" "_" target_name "${rel_path}")
-        string(REPLACE ".f90" "" target_name "${target_name}")
-
-        get_filename_component(exe_name "${file}" NAME_WE)
+        if(file IN_LIST shared_programs)
+            continue()
+        endif()
         get_filename_component(src_dir "${file}" DIRECTORY)
-        
-        # Calculate output directory to mirror source structure in build dir
-        file(RELATIVE_PATH rel_dir "${CMAKE_SOURCE_DIR}" "${src_dir}")
-        set(output_dir "${CMAKE_BINARY_DIR}/${rel_dir}")
-
-        add_executable("${target_name}" "${file}")
-        set_target_properties("${target_name}" PROPERTIES 
-            OUTPUT_NAME "${exe_name}.exe"
-            RUNTIME_OUTPUT_DIRECTORY "${src_dir}"
-        )
-        
-        # Link CodyFortran and any extra libraries (like test-drive)
-        target_link_libraries("${target_name}" PRIVATE CodyFortran ${extra_libs})
-
-        # Add to umbrella target
-        add_dependencies(${umbrella_target} "${target_name}")
+        add_program("${file}" "${src_dir}" "${extra_libs}" ${umbrella_target})
     endforeach()
 endfunction()
 

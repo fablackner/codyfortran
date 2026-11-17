@@ -3,14 +3,13 @@
 ! T_He1d_11 and T_He1d_13 (included after `contains`):
 !
 ! - RunTdksImagTime: fabricate and set up the run of a JSON file (sysXc.linear),
-!   propagate in imaginary time (Actions_ImagTimeDerivative, orthonormalized
+!   propagate in imaginary time (Method_ImagTimeDerivative, orthonormalized
 !   after every step) until the Kohn-Sham energy changes by less than
 !   program.convThresh per output step
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 subroutine RunTdksImagTime(energy, jsonFileName)
   use M_Utils_Json
-  use M_Utils_Actions
   use M_Grid
   use M_SysKinetic
   use M_SysPotential
@@ -45,7 +44,7 @@ subroutine RunTdksImagTime(energy, jsonFileName)
   call ConfigList_Fabricate
   call Coeffs_Fabricate
   call CoeffsInit_Fabricate
-  IntegratorListInput(1) % TimeDerivative => Actions_ImagTimeDerivative
+  IntegratorListInput(1) % TimeDerivative => Method_ImagTimeDerivative
   call IntegratorList_Fabricate(IntegratorListInput)
   call Propagator_Fabricate()
   convThresh = Json_Get("program.convThresh", 1e-12_R64)

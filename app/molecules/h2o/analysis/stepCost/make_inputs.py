@@ -41,5 +41,5 @@ for n in map(int, sys.argv[1:]):
     d['method'] = {'mb': dict(mb, orbBased={'nOrbs': [n, n], 'td2rdm': {}})}
     d['twoRdm'] = {'fermionic': {'singlet': {}}}
     d['twoRdmInit'] = {'excited': {}}
-    d['reconstruction'] = {'singlet': {'singletNy': {'ccQ': True}}}
+    d['reconstruction'] = {'singlet': {'ny': {'ccQ': True}}}
     json.dump(d, open('runs/td2rdm_%02d.json' % n, 'w'), indent=1)

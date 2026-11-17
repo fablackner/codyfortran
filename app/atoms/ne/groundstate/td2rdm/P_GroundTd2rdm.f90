@@ -27,7 +27,9 @@ program P_GroundTd2rdm
   use M_OrbsInit
   use M_TwoRdm
   use M_TwoRdmInit
+  use M_FieldFree
   use M_Method
+  use M_Method_Mb
   use M_Method_Mb_OrbBased
   use M_Method_Mb_OrbBased_Td2rdm
   use M_IntegratorList
@@ -53,6 +55,7 @@ program P_GroundTd2rdm
   call SysKinetic_Fabricate
   call SysPotential_Fabricate
   call SysInteraction_Fabricate
+  call FieldFree_Fabricate
   call Method_Fabricate
   call TwoRdm_Fabricate
   call TwoRdmInit_Fabricate
@@ -79,6 +82,7 @@ program P_GroundTd2rdm
   call TwoRdmInit_Setup
   call Orbs_Setup
   call OrbsInit_Setup
+  call FieldFree_Setup
   call Method_Setup
   call IntegratorList_Setup
   call Propagator_Setup
@@ -92,7 +96,7 @@ program P_GroundTd2rdm
   call Method_Mb_OrbBased_SetSwitchingReference
 
   ! the one-body operator is self-adjoint only in the FEDVR-weighted metric
-  integratorList(1) % e % metricWeights = MetricWeights(TwoRdm_nElements)
+  call Method_Mb_OrbBased_FillStateWeights(integratorList(1) % e % metricWeights)
 
   !==========================================
   call Say_Section("adiabatic switching and relaxation")
@@ -145,7 +149,7 @@ contains
     call TwoRdm_FillRdm2FromTwoRdmState(rdm2, TwoRdm_twoRdmState)
     call RdmDiagonalize_Rdm1(natOcc, natOrbs, rdm1(1:n, 1:n))
     call RdmTrace_FillRdm2abFromRdm2(rdm2ab, rdm2, n, n)
-    call RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2ab)
+    call RdmHole_MinEigenvaluesDQab(minD, minQ, rdm2ab, Method_Mb_nBodies(1), Method_Mb_nBodies(2))
     energy = Method_GetEnergy(t)
 
     write (io, '(F10.4, F8.4, F24.14, 2ES13.4, *(ES15.7))') t, Method_Mb_OrbBased_SwitchFactor(t), energy, &
@@ -155,24 +159,5 @@ contains
       "  energy =", energy, "  min D, Q:", minD, minQ
 
   end subroutine
-
-  !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  !> FEDVR metric weights of a packed state [many-body part (nHead entries,
-  !> unit weights) | orbitals (Grid_Ylm_weights each)] for the SIL integrator.
-  function MetricWeights(nHead) result(res)
-    use M_Grid_Ylm
-
-    integer(I32), intent(in) :: nHead
-    real(R64), allocatable :: res(:)
-
-    integer(I32) :: iOrb
-
-    allocate (res(nHead + Grid_nPoints * Orbs_nOrbsInState))
-    res(1:nHead) = 1.0_R64
-    do iOrb = 1, Orbs_nOrbsInState
-      res(nHead + (iOrb - 1) * Grid_nPoints + 1:nHead + iOrb * Grid_nPoints) = Grid_Ylm_weights(:)
-    end do
-
-  end function
 
 end program

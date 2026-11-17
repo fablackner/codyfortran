@@ -3,7 +3,7 @@
 !> TDHF, propagator, dt = 0.02 and end time 1.0; one run per JSON keeps each
 !> test well under a minute) and the linearity of the dipole response: reads
 !> the dipole of T_Fem_06 (dipoleKick.dat, written by
-!> PrinterObservableFem_DumpDipole; run T_Fem_06 first, as ctest does) and
+!> Printer_Observable_Fem_DumpDipole; run T_Fem_06 first, as ctest does) and
 !> requires <z>_2kappa(t) - <z>(0) = 2 (<z>_kappa(t) - <z>(0)) at every step
 !> (relative 1e-3; TDHF is nonlinear, but the even orders of the response
 !> vanish by symmetry, so the deviation is O(kappa^2)).
@@ -23,6 +23,7 @@ program T_Fem_07_H2KickDouble
   use M_Utils_Say
   use M_Utils_Json
   use M_Grid
+  use M_FieldFree_Cayley
   use M_Method_Mb_OrbBased
   use testdrive, only: check, error_type
 
@@ -109,9 +110,9 @@ program T_Fem_07_H2KickDouble
   print *, "max |N(t) - 2|:                       ", maxNormDev
   print *, "max |<x>|, |<y>|:                     ", maxTransverse
   write (*, '(1X, A, I0, A, I0, A, F6.2, A, I0)') "Cayley GMRES during the propagation: ", &
-    Method_Mb_OrbBased_cayleyNSolves, " solves, ", Method_Mb_OrbBased_cayleyNIterations, " iterations, mean ", &
-    real(Method_Mb_OrbBased_cayleyNIterations, R64) / real(max(Method_Mb_OrbBased_cayleyNSolves, 1_I64), R64), &
-    ", max ", Method_Mb_OrbBased_cayleyMaxIterations
+    FieldFree_Cayley_nSolves, " solves, ", FieldFree_Cayley_nIterations, " iterations, mean ", &
+    real(FieldFree_Cayley_nIterations, R64) / real(max(FieldFree_Cayley_nSolves, 1_I64), R64), &
+    ", max ", FieldFree_Cayley_maxIterations
   write (*, '(1X, A, I0, A, F8.4, A)') "propagation: ", size(times) - 1, " steps, ", secondsPerStep, " s per step"
 
   call check(error, maxTimeDev < 1e-12_R64)

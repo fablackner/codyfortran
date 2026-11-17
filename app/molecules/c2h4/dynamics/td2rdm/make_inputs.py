@@ -195,7 +195,7 @@ def main():
     d['twoRdm'] = {'fermionic': {opt['twoRdm']: {}}}
     d['twoRdmInit'] = {'excited': {}}
     if opt['twoRdm'] == 'singlet':
-        d['reconstruction'] = {'singlet': {'singletNy': {'ccQ': True}}}
+        d['reconstruction'] = {'singlet': {'ny': {'ccQ': True}}}
     else:                                                      # explicit 1-RDM, trace-free 2-RDM
         d['reconstruction'] = {'singletTr0': {'ny': {}}}
     d['integratorList'] = {'rk': {'o4Expl': {}}}

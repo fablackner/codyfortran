@@ -9,6 +9,10 @@ submodule(M_Method) S_Method
   ! The fabricate routine inspects the JSON tree and delegates to either:
   !   - Sb (single-body): external potential only, no interactions
   !   - Mb (many-body):   multi-particle with body types and statistics
+  !
+  ! Also the two views of Method_TimeDerivative that diagonalizers and
+  ! imaginary-time integrators take as callbacks: Method_ApplyHamiltonian
+  ! and Method_ImagTimeDerivative.
   !-----------------------------------------------------------------------------
 
   implicit none
@@ -43,13 +47,12 @@ contains
     ! binding of an earlier fabricate or of a test survives)
     nullify (Method_PropagateExactPart, Method_ApplyExactPartPhi)
 
+    ! Set by a Kohn-Sham method only
+    Method_kohnShamQ = .false.
+
     !------------------------------------
     ! branch: single-body vs many-body
     !------------------------------------
-
-    ! A density functional (sysXc) is only used by method.mb.orbBased.tdks
-    if (Json_GetExistence("sysXc") .and. .not. Json_GetExistence("method.mb.orbBased")) &
-      error stop "sysXc (an exchange-correlation functional) is only used by method.mb.orbBased.tdks"
 
     if (Json_GetExistence("method.sb")) then
       call Method_Sb_Fabricate
@@ -61,8 +64,38 @@ contains
       error stop "method is missing one of: sb, mb"
     end if
 
+    ! A density functional (sysXc) replaces the exchange and correlation of
+    ! the interaction: only a Kohn-Sham method uses it (with a correlated
+    ! wavefunction it would count correlation twice)
+    if (Json_GetExistence("sysXc") .and. .not. Method_kohnShamQ) &
+      error stop "sysXc (an exchange-correlation functional) is only used by a Kohn-Sham method (method.mb.orbBased.tdks)"
+
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_ApplyHamiltonian(dState, state, time)
+    use M_Utils_Constants
+
+    complex(R64), intent(out), contiguous, target :: dState(:)
+    complex(R64), intent(in), contiguous, target  :: state(:)
+    real(R64), intent(in) :: time
+
+    call Method_TimeDerivative(dState, state, time)
+    dState(:) = IU * dState(:)
+
+  end subroutine
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  module subroutine Method_ImagTimeDerivative(dState, state, time)
+    use M_Utils_Constants
+
+    complex(R64), intent(out), contiguous, target :: dState(:)
+    complex(R64), intent(in), contiguous, target  :: state(:)
+    real(R64), intent(in) :: time
+
+    call Method_TimeDerivative(dState, state, time)
+    dState(:) = -IU * dState(:)
+
+  end subroutine
 
 end submodule

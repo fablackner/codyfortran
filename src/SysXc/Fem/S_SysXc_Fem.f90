@@ -51,14 +51,13 @@ contains
   subroutine Setup
     use M_Utils_Say
     use M_Grid
-    use M_Grid_Fem
     use M_SysXc
 
     call Say_Setup("sysXc.fem")
 
-    if (.not. allocated(Grid_Fem_weights)) error stop "sysXc.fem: call Grid_Setup before SysXc_Setup"
+    if (.not. allocated(Grid_weights)) error stop "sysXc.fem: call Grid_Setup before SysXc_Setup"
     SysXc_nPoints = Grid_nPoints
-    SysXc_weights = Grid_Fem_weights
+    SysXc_weights = Grid_weights
 
   end subroutine
 

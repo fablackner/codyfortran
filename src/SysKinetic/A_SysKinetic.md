@@ -64,8 +64,8 @@ SysKinetic/
 │   ├── M_SysKinetic_Lattice.f90
 │   ├── S_SysKinetic_Lattice.f90
 │   └── NearestNeighbor/      # −t Σ (|i⟩⟨j| + h.c.) hopping
-│       ├── M_SysKinetic_Linear_NearestNeighbor.f90
-│       └── S_SysKinetic_Linear_NearestNeighbor.f90
+│       ├── M_SysKinetic_Lattice_NearestNeighbor.f90
+│       └── S_SysKinetic_Lattice_NearestNeighbor.f90
 │
 ├── Linear/                   # 1D Cartesian uniform grid
 │   ├── M_SysKinetic_Linear.f90
@@ -326,8 +326,7 @@ eigenvalue of T̂) (stop otherwise); a shift with nonzero imaginary part is
 always invertible. Uses: the preconditioner (T̂ + σ)⁻¹ of the orbital
 eigenproblems (GroundSolver) and the preconditioner of the Crank–Nicolson /
 Cayley step of the exact field-free part h0 = T̂ + V_static (shift −2i/dt,
-`S_Method_Mb_OrbBased_FieldFreeCayley`; its presence selects the Cayley
-exact part on non-Ylm grids).
+`S_FieldFree_Cayley`; `fieldFree.cayley` requires it).
 
 **Flags and masses.** `SysKinetic_timeIndependentQ = .true.`;
 `SysKinetic_bodyTypeIndependentQ = .true.` only if all masses are equal,

@@ -1,0 +1,23 @@
+{
+    "grid": {
+        "lattice": {
+            "xSize": 3
+        }
+    },
+    "method": {
+        "mb": {
+            "nBodyTypes": 2,
+            "nBodies": [ 2, 1 ],
+            "bodyStatistics": [ "f", "f" ],
+            "orbBased": {
+                "nOrbs": [ 3, 3 ],
+                "tdci": { }
+            }
+        }
+    },
+    "coeffs": {
+        "hubbard": {
+            "noSpinSym": { }
+        }
+    }
+}

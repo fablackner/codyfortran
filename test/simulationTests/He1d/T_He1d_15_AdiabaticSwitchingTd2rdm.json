@@ -92,7 +92,7 @@
     },
     "reconstruction": {
         "singlet": {
-            "singletNy": {
+            "ny": {
                 "ccQ": false
             }
         }

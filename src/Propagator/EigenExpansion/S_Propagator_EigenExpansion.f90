@@ -35,7 +35,6 @@ contains
 !> - `Propagator_Propagate` → Propagate (applies phase factors)
   module subroutine Propagator_EigenExpansion_Fabricate
     use M_Utils_Say
-    use M_Utils_Json
     use M_Propagator
 
     call Say_Fabricate("propagator.eigenExpansion")
