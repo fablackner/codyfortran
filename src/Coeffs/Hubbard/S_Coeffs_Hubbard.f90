@@ -511,7 +511,7 @@ contains
     complex(R64), intent(out), allocatable :: rdm1(:, :)
     complex(R64), intent(in), contiguous :: c(:)
 
-    complex(R64), allocatable :: block(:, :)
+    complex(R64), allocatable :: blk(:, :)
     integer(I32) :: n, oUp, oDn
 
     n = Coeffs_Hubbard_nSites
@@ -521,46 +521,46 @@ contains
     allocate (rdm1(Method_Mb_OrbBased_nOrbsSum, Method_Mb_OrbBased_nOrbsSum))
     rdm1(:, :) = 0.0_R64
 
-    call FillRdm1Block(block, c, 1, Coeffs_Hubbard_singlesUP)
-    rdm1(oUp + 1:oUp + n, oUp + 1:oUp + n) = block
-    call FillRdm1Block(block, c, 2, Coeffs_Hubbard_singlesDN)
-    rdm1(oDn + 1:oDn + n, oDn + 1:oDn + n) = block
+    call FillRdm1Block(blk, c, 1, Coeffs_Hubbard_singlesUP)
+    rdm1(oUp + 1:oUp + n, oUp + 1:oUp + n) = blk
+    call FillRdm1Block(blk, c, 2, Coeffs_Hubbard_singlesDN)
+    rdm1(oDn + 1:oDn + n, oDn + 1:oDn + n) = blk
 
   end subroutine
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !> The 1-RDM block of spin bt (orbital indices of that spin) from its single
 !> excitations.
-  subroutine FillRdm1Block(block, c, bt, singles)
-    complex(R64), intent(out), allocatable :: block(:, :)
+  subroutine FillRdm1Block(blk, c, bt, singles)
+    complex(R64), intent(out), allocatable :: blk(:, :)
     complex(R64), intent(in), contiguous :: c(:)
     integer(I32), intent(in) :: bt
     type(T_Coeffs_Hubbard_Singles), intent(in) :: singles
 
-    complex(R64), allocatable :: strings(:, :), blockThread(:, :)
+    complex(R64), allocatable :: strings(:, :), blkThread(:, :)
     integer(I32) :: n, i, k, cr, de
 
     n = Coeffs_Hubbard_nSites
     call FillStrings(strings, c, bt)
 
-    allocate (block(n, n))
-    block(:, :) = 0.0_R64
+    allocate (blk(n, n))
+    blk(:, :) = 0.0_R64
 
-    !$omp parallel default(shared) private(i, k, cr, de, blockThread)
-    allocate (blockThread(n, n))
-    blockThread(:, :) = 0.0_R64
+    !$omp parallel default(shared) private(i, k, cr, de, blkThread)
+    allocate (blkThread(n, n))
+    blkThread(:, :) = 0.0_R64
     !$omp do schedule(static)
     do i = 1, size(strings, 2)
       do k = singles % first(i), singles % first(i + 1) - 1
         cr = singles % create(k)
         de = singles % destroy(k)
-        blockThread(de, cr) = blockThread(de, cr) &
-                              + singles % factor(k) * dot_product(strings(:, singles % target(k)), strings(:, i))
+        blkThread(de, cr) = blkThread(de, cr) &
+                            + singles % factor(k) * dot_product(strings(:, singles % target(k)), strings(:, i))
       end do
     end do
     !$omp end do
     !$omp critical
-    block = block + blockThread
+    blk = blk + blkThread
     !$omp end critical
     !$omp end parallel
 
